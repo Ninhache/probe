@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import { runChecks } from "../checkers/run";
 import { DEFAULT_TIMEOUT_SECONDS, EXIT_DOWN } from "../constants";
 import { formatCheckResults } from "../ui/report";
-import { openProject, secondsToMs, stdoutColors } from "./shared";
+import { openProject, secondsToMs, stdoutTerminal } from "./shared";
 
 export default defineCommand({
   meta: { name: "check", description: "Check that services respond (all of them by default)" },
@@ -24,7 +24,7 @@ export default defineCommand({
     } else if (results.length === 0) {
       console.log("No services yet. Add one: probe add api -p 3000");
     } else {
-      console.log(formatCheckResults(results, stdoutColors()));
+      console.log(formatCheckResults(results, stdoutTerminal()));
     }
     if (results.some((result) => !result.ok)) process.exitCode = EXIT_DOWN;
   },

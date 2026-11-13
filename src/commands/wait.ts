@@ -11,7 +11,7 @@ import {
 } from "../constants";
 import { ProbeError } from "../errors";
 import { formatCheckResults } from "../ui/report";
-import { openProject, secondsToMs, stdoutColors } from "./shared";
+import { openProject, secondsToMs, stdoutTerminal } from "./shared";
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
@@ -88,7 +88,7 @@ export default defineCommand({
     } else if (results.length === 0) {
       console.log("No services yet. Add one: probe add api -p 3000");
     } else {
-      console.log(formatCheckResults(results, stdoutColors()));
+      console.log(formatCheckResults(results, stdoutTerminal()));
     }
     if (timedOut) {
       const down = results.filter((result) => !result.ok).map((result) => result.name);
