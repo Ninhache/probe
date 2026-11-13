@@ -19,7 +19,7 @@ $ echo $?
 
 ```sh
 brew install ninhache/tap/probe     # macOS, Linux
-npm install -g @ninhache/probe      # anywhere with Node >= 20
+npm install -g @ninhache/probe      # anywhere with Node >= 22
 npx @ninhache/probe check           # no install
 ```
 
