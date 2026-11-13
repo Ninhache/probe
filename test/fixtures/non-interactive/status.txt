@@ -1,0 +1,6 @@
+exit code: 0
+--- stdout
+migration  none pending
+makefile   in sync
+update     check disabled (VERSION)
+--- stderr

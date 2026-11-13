@@ -1,0 +1,21 @@
+exit code: 1
+--- stdout
+[
+  {
+    "name": "api",
+    "type": "http",
+    "target": "http://127.0.0.1:UP_PORT/health",
+    "ok": true,
+    "status": 200,
+    "latencyMs": N
+  },
+  {
+    "name": "db",
+    "type": "http",
+    "target": "http://127.0.0.1:DOWN_PORT/",
+    "ok": false,
+    "latencyMs": N,
+    "error": "connection refused"
+  }
+]
+--- stderr
