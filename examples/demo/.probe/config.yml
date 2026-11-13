@@ -1,0 +1,5 @@
+# probe - local services to health-check. Edit by hand or with `probe add`.
+schemaVersion: 1
+services:
+  api: { port: 4101, host: 127.0.0.1, path: /health }
+  front: { port: 4102, host: 127.0.0.1 }

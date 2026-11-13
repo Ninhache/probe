@@ -1,0 +1,8 @@
+# Services of the demo project
+schemaVersion: 2
+services:
+  # main API
+  api: { host: localhost, port: 3000, path: /health, type: http } # keep in sync with docker-compose
+  front:
+    port: 3001 # vite dev server
+    type: http

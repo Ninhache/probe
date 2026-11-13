@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC): no token secret
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Tag must match package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      # Trusted publishing needs npm >= 11.5.1. Provenance is attached automatically.
+      - run: npm install -g npm@latest
+      - run: npm publish --access public
+
+  # Bumps url + sha256 of the formula in ninhache/homebrew-tap.
+  # To enable:
+  #   1. Create the repo ninhache/homebrew-tap with Formula/probe.rb (copy packaging/homebrew/probe.rb).
+  #   2. Add the secret HOMEBREW_TAP_TOKEN: a fine-grained token with "Contents: read and write" on the tap.
+  #   3. Uncomment the job.
+  #
+  # homebrew:
+  #   needs: publish
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #       with:
+  #         repository: ninhache/homebrew-tap
+  #         token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+  #     - name: Update the formula
+  #       run: |
+  #         version="${GITHUB_REF_NAME#v}"
+  #         url="https://registry.npmjs.org/@ninhache/probe/-/probe-$version.tgz"
+  #         sha="$(curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors "$url" | sha256sum | cut -d' ' -f1)"
+  #         sed -i -e "s|^  url .*|  url \"$url\"|" -e "s|^  sha256 .*|  sha256 \"$sha\"|" Formula/probe.rb
+  #         git config user.name "github-actions[bot]"
+  #         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  #         git commit -am "chore(probe): bump to $version"
+  #         git push
