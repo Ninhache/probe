@@ -290,6 +290,26 @@ describe("probe status / sync", () => {
     expect((await probe(root, "sync")).stdout).toContain("already in sync");
   });
 
+  it("keeps a hand-edited block when a service is added or removed", async () => {
+    const root = await project();
+    await addApi(root);
+    const makefile = join(root, "Makefile");
+    const edited = (await readFile(makefile, "utf8")).replace("@$(PROBE) check api", "@echo mine");
+    await writeFile(makefile, edited);
+
+    const added = await addDown(root);
+
+    expect(added).toMatchObject({ code: 0, stderr: expect.stringContaining("edited by hand") });
+    expect(await readFile(makefile, "utf8")).toBe(edited);
+    expect((await probe(root, "ls")).stdout).toContain("down");
+
+    expect((await probe(root, "rm", "down")).stderr).toContain("probe sync");
+    expect(await readFile(makefile, "utf8")).toBe(edited);
+
+    await probe(root, "sync");
+    expect(await readFile(makefile, "utf8")).toContain("@$(PROBE) check api");
+  });
+
   it("reports a config edited by hand as out of date", async () => {
     const root = await project();
     const config = join(root, ".probe", "config.yml");
