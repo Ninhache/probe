@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-latest ships GNU Make 3.81: the oldest make the generated block must support.
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Demo through make
+        working-directory: examples/demo
+        env:
+          PROBE_NO_UPDATE_CHECK: "1"
+        run: |
+          make --version | head -n 1
+          node server.mjs &
+          sleep 2
+          make help PROBE="node ../../dist/cli.js"
+          make check PROBE="node ../../dist/cli.js"
