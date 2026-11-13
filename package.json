@@ -10,7 +10,7 @@
   },
   "type": "module",
   "bin": {
-    "probe": "./dist/cli.js"
+    "probe": "dist/cli.js"
   },
   "files": [
     "dist"
