@@ -101,6 +101,12 @@ describe("http checker", () => {
     expect(await check({ path: "/moved" })).toMatchObject({ ok: true, status: 200 });
   });
 
+  it("does not follow a redirect when a 3xx is expected", async () => {
+    expect(await check({ path: "/moved", expect: 302 })).toMatchObject({ ok: true, status: 302 });
+    expect(await check({ path: "/moved", expect: [200, 302] })).toMatchObject({ status: 302 });
+    expect(await check({ expect: [200, 302] })).toMatchObject({ ok: true, status: 200 });
+  });
+
   it("gives up after the timeout", async () => {
     const result = await check({ path: "/slow" }, 100);
 

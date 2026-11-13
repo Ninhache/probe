@@ -20,6 +20,10 @@ function isExpected(expect: Service["expect"], status: number): boolean {
   return Array.isArray(expect) ? expect.includes(status) : expect === status;
 }
 
+function expectsRedirect(expect: Service["expect"]): boolean {
+  return [expect ?? []].flat().some((status) => status >= 300 && status < 400);
+}
+
 function describeExpected(expect: Service["expect"]): string {
   if (expect === undefined) return "2xx";
   return Array.isArray(expect) ? expect.join(" or ") : String(expect);
@@ -44,7 +48,11 @@ export const httpChecker: Checker = {
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);
     try {
-      const response = await fetch(target, { signal: AbortSignal.timeout(timeoutMs) });
+      const response = await fetch(target, {
+        signal: AbortSignal.timeout(timeoutMs),
+        // Following a redirect hides its status: an expected 3xx could never match.
+        redirect: expectsRedirect(service.expect) ? "manual" : "follow",
+      });
       const latencyMs = elapsed();
       await response.body?.cancel();
       const { status } = response;
