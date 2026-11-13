@@ -68,6 +68,9 @@ services:
 | `path`   | `/`         | Path requested with `GET`              |
 | `expect` | any 2xx     | Expected status, or a list of statuses |
 
+Redirects are followed and the final status is judged, unless `expect` contains a 3xx: then the first response
+is judged as is.
+
 Files in `.probe/`:
 
 - `config.yml`: services. Commit it.
@@ -90,7 +93,8 @@ never touched.
 Targets: `help`, `check`, `status` and one `check-<name>` per service. The block uses `probe` when it is in
 your `PATH`, else `npx -y @ninhache/probe@latest`. It works with GNU Make 3.81 (the macOS default).
 
-Edited the block by hand? `probe status` says so, `probe sync` restores it.
+Edited the block by hand? `probe status` says so and `probe add` / `probe rm` leave it alone. `probe sync`
+restores it.
 
 ## Migrations
 
