@@ -10,15 +10,15 @@ function width(values: string[]): number {
   return Math.max(0, ...values.map((value) => value.length));
 }
 
-/** Width left to the name column when a line has to be cut: half the terminal, never under 4. */
-function nameBudget(nameWidth: number, columns: number): number {
-  return Math.min(nameWidth, Math.max(4, Math.floor(columns / 2)));
+/** Width left to the name column when a line has to be cut: half of what the other columns leave. */
+function nameBudget(nameWidth: number, columns: number, reserved: number): number {
+  return Math.max(1, Math.min(nameWidth, Math.floor((columns - reserved) / 2)));
 }
 
 /**
  * Renders one line per check result.
  * On a terminal too narrow for the widest line, the target column is dropped and the rest is cut
- * to the width (9 columns at least); off a terminal (unknown width) lines are never cut.
+ * to the width (6 columns at least); off a terminal (unknown width) lines are never cut.
  */
 export function formatCheckResults(results: CheckResult[], terminal: Terminal): string {
   const colors = createColors(terminal.color);
@@ -30,7 +30,7 @@ export function formatCheckResults(results: CheckResult[], terminal: Terminal): 
   const fullWidth = 2 + nameWidth + GAP.length + targetWidth + GAP.length + width(outcomes);
   const { columns } = terminal;
   const compact = columns !== undefined && fullWidth > columns;
-  const nameMax = compact ? nameBudget(nameWidth, columns) : nameWidth;
+  const nameMax = compact ? nameBudget(nameWidth, columns, 2 + GAP.length) : nameWidth;
   const outcomeMax = compact ? Math.max(1, columns - 2 - nameMax - GAP.length) : undefined;
 
   return results
@@ -67,7 +67,7 @@ export function formatServices(config: Config, terminal: Terminal): string {
   const fullWidth = width(rows.map((row) => " ".repeat(nameWidth) + GAP + row.url + row.expect));
   const { columns } = terminal;
   const compact = columns !== undefined && fullWidth > columns;
-  const nameMax = compact ? nameBudget(nameWidth, columns) : nameWidth;
+  const nameMax = compact ? nameBudget(nameWidth, columns, GAP.length) : nameWidth;
   const urlMax = compact ? Math.max(1, columns - nameMax - GAP.length) : undefined;
 
   return rows

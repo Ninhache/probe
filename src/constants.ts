@@ -29,6 +29,3 @@ export const REFRESH_COMMAND = "__refresh-update-cache";
 export const EXIT_OK = 0;
 export const EXIT_DOWN = 1;
 export const EXIT_ERROR = 2;
-
-/** Under this known terminal width, reports drop a column instead of wrapping. */
-export const NARROW_COLUMNS = 60;

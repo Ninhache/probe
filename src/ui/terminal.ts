@@ -1,5 +1,3 @@
-import { NARROW_COLUMNS } from "../constants";
-
 export interface TerminalStream {
   isTTY?: boolean;
   columns?: number;
@@ -12,8 +10,6 @@ export interface Terminal {
   color: boolean;
   /** Width in columns; undefined when unknown (not a terminal), in which case nothing is cut. */
   columns: number | undefined;
-  /** Known width under NARROW_COLUMNS: renderers switch to their compact layout. */
-  narrow: boolean;
   /** OSC 8 hyperlinks are known to be rendered, not printed as garbage. */
   hyperlinks: boolean;
   /** Characters outside ASCII (box drawing, arrows) can be drawn. */
@@ -65,7 +61,6 @@ export function detectTerminal(stream: TerminalStream, env: NodeJS.ProcessEnv): 
     isTTY,
     color: capable && !env.NO_COLOR,
     columns,
-    narrow: columns !== undefined && columns < NARROW_COLUMNS,
     hyperlinks: capable && supportsHyperlinks(env),
     unicode: capable && supportsUnicode(env),
   };
@@ -85,10 +80,14 @@ export function isInteractive(
 
 const ELLIPSIS = "…";
 
-/** Cuts plain text (no escape sequence) to `max` columns, ending with an ellipsis when cut. */
+/**
+ * Cuts plain text (no escape sequence) to `max` characters, ending with an ellipsis when cut.
+ * Counts code points: a double-width character (CJK, emoji) still takes two columns on screen.
+ */
 export function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return max <= 1 ? ELLIPSIS : `${text.slice(0, max - 1)}${ELLIPSIS}`;
+  const characters = Array.from(text);
+  if (characters.length <= max) return text;
+  return max <= 1 ? ELLIPSIS : `${characters.slice(0, max - 1).join("")}${ELLIPSIS}`;
 }
 
 const SGR_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");

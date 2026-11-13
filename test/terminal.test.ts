@@ -15,7 +15,6 @@ describe("detectTerminal", () => {
       isTTY: false,
       color: false,
       columns: undefined,
-      narrow: false,
       hyperlinks: false,
       unicode: false,
     });
@@ -38,12 +37,9 @@ describe("detectTerminal", () => {
   });
 
   it("reports the width only when it is known", () => {
-    expect(detectTerminal(tty, {})).toMatchObject({ columns: 120, narrow: false });
-    expect(detectTerminal({ isTTY: true, columns: 59 }, {})).toMatchObject({ narrow: true });
-    expect(detectTerminal({ isTTY: true, columns: 60 }, {})).toMatchObject({ narrow: false });
+    expect(detectTerminal(tty, {}).columns).toBe(120);
     expect(detectTerminal({ isTTY: true }, {})).toMatchObject({
       columns: undefined,
-      narrow: false,
     });
     expect(detectTerminal({ isTTY: true, columns: 0 }, {}).columns).toBeUndefined();
   });
@@ -91,6 +87,7 @@ describe("truncate and stripStyles", () => {
     expect(truncate("abcdef", 6)).toBe("abcdef");
     expect(truncate("abcdef", 4)).toBe("abc…");
     expect(truncate("abcdef", 1)).toBe("…");
+    expect(truncate("a😀bcd", 3)).toBe("a😀…");
   });
 
   it("removes colour sequences", () => {
@@ -158,26 +155,34 @@ describe("reports", () => {
     expect(formatServices(config, wide)).toBe(formatServices(config, plain));
   });
 
-  it.each([100, 59, 40, 20, 9, 1])("fit in %i columns without cutting a sequence", (columns) => {
+  it.each([100, 59, 40, 20, 9, 6, 1])("fit in %i columns without cutting a sequence", (columns) => {
     const terminal = detectTerminal({ isTTY: true, columns }, {});
     for (const text of [formatCheckResults(results, terminal), formatServices(config, terminal)]) {
       for (const line of text.split("\n")) {
         const visible = stripStyles(line);
         expect(visible).not.toContain(ESC);
-        if (columns >= 9) expect(visible.length).toBeLessThanOrEqual(columns);
+        if (columns >= 6) expect(visible.length).toBeLessThanOrEqual(columns);
         // every sequence that opens is closed on the same line
         expect(line.split(`${ESC}[`).length % 2).toBe(1);
       }
     }
   });
 
+  it("render nothing for an empty list", () => {
+    const narrow = detectTerminal({ isTTY: true, columns: 20 }, {});
+    expect(formatCheckResults([], narrow)).toBe("");
+    expect(formatServices(configSchemaV1.parse({ schemaVersion: 1, services: {} }), narrow)).toBe(
+      "",
+    );
+  });
+
   it("drop the target and cut the reason on a narrow terminal", () => {
     const narrow = detectTerminal({ isTTY: true, columns: 40 }, { NO_COLOR: "1" });
     expect(formatCheckResults(results, narrow)).toBe(
-      ["✓ api                   200  47ms", "✗ a-rather-long-servi…  connection refu…"].join("\n"),
+      ["✓ api                 200  47ms", "✗ a-rather-long-ser…  connection refuse…"].join("\n"),
     );
     expect(formatServices(config, narrow)).toBe(
-      ["api                   http://127.0.0.1:…", "a-rather-long-servi…  http://localhost:…"].join(
+      ["api                  http://127.0.0.1:4…", "a-rather-long-serv…  http://localhost:3…"].join(
         "\n",
       ),
     );
