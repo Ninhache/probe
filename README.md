@@ -124,7 +124,8 @@ make check PROBE="node ../../dist/cli.js"
 
 Release: bump `version` in `package.json`, merge, then push a `v<version>` tag. The Release workflow publishes
 to npm through trusted publishing: no token, the package trusts this repo's `release.yml` (set on npmjs.com,
-package Settings, Trusted Publisher).
+package Settings, Trusted Publisher). It then opens a PR on `ninhache/homebrew-tap` with the new `url` and
+`sha256` (secret `HOMEBREW_TAP_TOKEN`): merge it once the tap's CI is green.
 
 ## License
 
