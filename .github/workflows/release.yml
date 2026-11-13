@@ -37,7 +37,7 @@ jobs:
       - run: npm install -g npm@latest
       - run: npm publish --access public
 
-  # Opens a PR on the tap with the new url + sha256. The tap's CI installs the formula before it is merged.
+  # Opens a PR on the tap with the new url + sha256. It merges itself once the tap's CI has installed the formula.
   # Needs the secret HOMEBREW_TAP_TOKEN: a fine-grained token on ninhache/homebrew-tap
   # with "Contents" and "Pull requests" set to read and write.
   homebrew:
@@ -73,7 +73,9 @@ jobs:
             echo "## Action"
             echo "Update \`url\` and \`sha256\` in \`Formula/probe.rb\`."
             echo "## Result"
-            echo "Merge once CI has installed, tested and audited the formula."
+            echo "Merges automatically once CI has installed, tested and audited the formula."
           } > "$RUNNER_TEMP/body.md"
           gh pr create --base main --head "$branch" \
             --title "chore(probe): bump to $version" --body-file "$RUNNER_TEMP/body.md"
+          # Needs "Allow auto-merge" and required status checks on the tap's main.
+          gh pr merge "$branch" --auto --merge
