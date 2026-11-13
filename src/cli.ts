@@ -17,9 +17,11 @@ import { stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
 import wait from "./commands/wait";
+import { findProbeDir } from "./config/discovery";
+import { loadConfig } from "./config/loader";
 import { EXIT_ERROR, REFRESH_COMMAND } from "./constants";
 import { ProbeError } from "./errors";
-import { detectTerminal, stripStyles } from "./ui/terminal";
+import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
   cacheDir,
   refreshCache,
@@ -62,6 +64,22 @@ function notifyUpdate(rawArgs: string[]): void {
   if (notice) console.error(`\n${notice}`);
 }
 
+/**
+ * Bare `probe` on a terminal, inside a project with services, opens the dashboard.
+ * The interactive libraries are imported here only, so every other path starts without them.
+ */
+async function openedDashboard(rawArgs: string[]): Promise<boolean> {
+  if (rawArgs.length > 0 || !isInteractive(process.stdin, process.stdout, process.env))
+    return false;
+  const paths = findProbeDir(process.cwd());
+  if (!paths) return false;
+  const { config } = await loadConfig(paths);
+  if (Object.keys(config.services).length === 0) return false;
+  const { openDashboard } = await import("./dashboard/open");
+  await openDashboard(config, stdoutTerminal());
+  return true;
+}
+
 async function run(rawArgs: string[]): Promise<void> {
   if (rawArgs[0] === REFRESH_COMMAND) return refreshCache(cacheDir());
 
@@ -69,8 +87,10 @@ async function run(rawArgs: string[]): Promise<void> {
   const wantsVersion = rawArgs.length === 1 && ["--version", "-v"].includes(rawArgs[0] as string);
   if (wantsHelp || wantsVersion) return runMain(main, { rawArgs, showUsage: printUsage });
 
+  let dashboard = false;
   try {
-    await runCommand(main, { rawArgs });
+    dashboard = await openedDashboard(rawArgs);
+    if (!dashboard) await runCommand(main, { rawArgs });
   } catch (error) {
     process.exitCode = EXIT_ERROR;
     if (error instanceof ProbeError) {
@@ -85,6 +105,8 @@ async function run(rawArgs: string[]): Promise<void> {
     }
   }
   notifyUpdate(rawArgs);
+  // A check cut short can leave a socket connecting for seconds: do not wait for it.
+  if (dashboard) process.exit();
 }
 
 await run(process.argv.slice(2));

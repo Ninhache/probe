@@ -2,6 +2,8 @@ import type { Service } from "../config/schema";
 
 export interface CheckContext {
   timeoutMs: number;
+  /** Cancels the checks still running, e.g. when the dashboard closes. */
+  signal?: AbortSignal;
 }
 
 export interface CheckResult {
