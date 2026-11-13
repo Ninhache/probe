@@ -8,6 +8,7 @@ import migrate from "./commands/migrate";
 import rm from "./commands/rm";
 import status from "./commands/status";
 import sync from "./commands/sync";
+import wait from "./commands/wait";
 import { EXIT_ERROR, REFRESH_COMMAND } from "./constants";
 import { ProbeError } from "./errors";
 import {
@@ -25,7 +26,7 @@ const main = defineCommand({
     version: CLI_VERSION,
     description: "Health checks for your local dev services",
   },
-  subCommands: { init, add, rm, ls, check, status, sync, migrate },
+  subCommands: { init, add, rm, ls, check, wait, status, sync, migrate },
 });
 
 function notifyUpdate(rawArgs: string[]): void {

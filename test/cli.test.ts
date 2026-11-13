@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -54,6 +54,14 @@ beforeAll(async () => {
 });
 
 afterAll(() => server.close());
+
+async function freePort(): Promise<number> {
+  const holder = createServer();
+  await new Promise<void>((done) => holder.listen(0, "127.0.0.1", done));
+  const free = (holder.address() as AddressInfo).port;
+  await new Promise((done) => holder.close(done));
+  return free;
+}
 
 async function project(): Promise<string> {
   const root = await tempDir();
@@ -260,6 +268,121 @@ describe("probe check", () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain("Run `probe init`");
+  });
+});
+
+describe("probe wait", () => {
+  it("exits 0 as soon as a service that starts late is up", async () => {
+    const root = await project();
+    const latePort = await freePort();
+    const late = createServer((_request, response) => response.writeHead(200).end());
+    await probe(root, "add", "late", "-p", String(latePort), "--host", "127.0.0.1");
+
+    // The server starts only once `wait` has seen it down, whatever the machine's load.
+    const child = spawn(process.execPath, [CLI, "wait", "--timeout", "15", "--interval", "0.2"], {
+      cwd: root,
+      env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1" },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+      if (stderr.includes("waiting for late") && !late.listening)
+        late.listen(latePort, "127.0.0.1");
+    });
+
+    try {
+      const code = await new Promise((done) => child.on("close", done));
+
+      expect(code).toBe(0);
+      expect(stdout).toMatch(/^✓ late .* 200 {2}\d+ms\n$/);
+      expect(stderr).toMatch(/^waiting for late\nlate up after \d+\.\ds\n$/);
+    } finally {
+      child.kill();
+      if (late.listening) await new Promise((done) => late.close(done));
+    }
+  });
+
+  it("exits 1 after the total timeout and names the services still down", async () => {
+    const root = await project();
+    await addApi(root);
+    await addDown(root);
+
+    const result = await probe(root, "wait", "--timeout", "1", "--interval", "0.2");
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toMatch(/✗ down .*connection refused/);
+    expect(result.stderr).toContain("probe: still down after 1s: down");
+  });
+
+  it("chains in a shell script and keeps stdout for the report", async () => {
+    const root = await project();
+    await addApi(root);
+    const node = JSON.stringify(process.execPath);
+
+    const up = await exec("sh", ["-c", `${node} "${CLI}" wait && echo chained`], root);
+    await addDown(root);
+    const down = await exec(
+      "sh",
+      ["-c", `${node} "${CLI}" wait --timeout 0.5 && echo chained`],
+      root,
+    );
+
+    expect(up.stdout).toMatch(/^✓ api .*\nchained\n$/);
+    expect(up.stderr).toBe("");
+    expect(down.stdout).not.toContain("chained");
+  });
+
+  it("prints only the final JSON on stdout with --json, also on a timeout", async () => {
+    const root = await project();
+    await addApi(root);
+
+    const up = await probe(root, "wait", "--json");
+    await addDown(root);
+    const down = await probe(root, "wait", "--json", "--timeout", "0.5");
+
+    expect(up.code).toBe(0);
+    expect(JSON.parse(up.stdout)).toMatchObject([{ name: "api", ok: true, status: 200 }]);
+    expect(down.code).toBe(1);
+    expect(JSON.parse(down.stdout)).toMatchObject([{ name: "api" }, { name: "down", ok: false }]);
+  });
+
+  it("waits only for the named services", async () => {
+    const root = await project();
+    await addApi(root);
+    await addDown(root);
+
+    expect(await probe(root, "wait", "api", "--timeout", "5")).toMatchObject({
+      code: 0,
+      stderr: "",
+    });
+  });
+
+  it("exits 2 at once on an unknown service or a bad option", async () => {
+    const root = await project();
+    await addApi(root);
+
+    expect(await probe(root, "wait", "nope")).toMatchObject({
+      code: 2,
+      stderr: expect.stringContaining("unknown service: nope"),
+    });
+    expect((await probe(root, "wait", "--timeout", "0")).code).toBe(2);
+    expect((await probe(root, "wait", "--interval", "abc")).code).toBe(2);
+    expect((await probe(root, "wait", "--max-interval", "-1")).code).toBe(2);
+    expect(await probe(root, "wait", "--interval", "10", "--max-interval", "1")).toMatchObject({
+      code: 2,
+      stderr: expect.stringContaining("cannot be longer than --max-interval"),
+    });
+  });
+
+  it("does not wait when no service is declared", async () => {
+    const result = await probe(await project(), "wait");
+
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain("No services yet");
   });
 });
 
