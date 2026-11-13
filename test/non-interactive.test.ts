@@ -118,6 +118,8 @@ describe("off a terminal", () => {
     [["ls"]],
     [["status"]],
     [["wait", "--timeout", "1"]],
+    // Bare `probe` is the dashboard's entry: off a terminal it must stop before the import.
+    [[]],
   ])("probe %s loads no interactive library", async (args) => {
     const cwd = await project();
     const modules = join(cwd, "modules.txt");
