@@ -1,5 +1,10 @@
 # probe
 
+[![npm](https://img.shields.io/npm/v/@ninhache/probe)](https://www.npmjs.com/package/@ninhache/probe)
+[![Homebrew](https://img.shields.io/badge/homebrew-ninhache%2Ftap-orange)](https://github.com/Ninhache/homebrew-tap)
+[![CI](https://github.com/Ninhache/probe/actions/workflows/ci.yml/badge.svg)](https://github.com/Ninhache/probe/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/npm/l/@ninhache/probe)](LICENSE)
+
 Declare your project's local services once. Check they are up with one command, or with `make check`.
 
 ```console
