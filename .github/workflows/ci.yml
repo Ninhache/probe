@@ -15,8 +15,10 @@ jobs:
       matrix:
         # macos-latest ships GNU Make 3.81: the oldest make the generated block must support.
         os: [ubuntu-latest, macos-latest]
-        node: [20, 24]
+        node: [22, 24]
     runs-on: ${{ matrix.os }}
+    env:
+      PROBE_NO_UPDATE_CHECK: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -29,11 +31,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - name: Demo through make
+      # vitest and tsup need Node 22+. Users only need Node 20: run the built CLI on it.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: Demo through make, on Node 20
         working-directory: examples/demo
-        env:
-          PROBE_NO_UPDATE_CHECK: "1"
         run: |
+          node --version
           make --version | head -n 1
           node server.mjs &
           sleep 2
