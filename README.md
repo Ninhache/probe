@@ -50,7 +50,8 @@ Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 
 `probe wait` is for scripts: `probe wait && pnpm test`. It checks at once, then again after 0.5 s, 1 s, 2 s, 4 s
 and every 5 s, for 60 s in total. `--timeout` sets the total, `--interval` the first pause, `--max-interval` the
-longest one. Progress goes to stderr, the final report to stdout; exit code `1` names the services still down.
+longest one. Unlike `check --timeout`, which is the time given to each service, `wait --timeout` covers the whole
+wait; each check inside it still gets 3 s. Progress goes to stderr, the final report to stdout; exit code `1` names the services still down.
 
 `probe` works from any sub-directory: it walks up to the nearest `.probe/`.
 

@@ -9,6 +9,7 @@ import {
   DEFAULT_WAIT_TIMEOUT_SECONDS,
   EXIT_DOWN,
 } from "../constants";
+import { ProbeError } from "../errors";
 import { formatCheckResults } from "../ui/report";
 import { openProject, secondsToMs, stdoutColors } from "./shared";
 
@@ -42,7 +43,7 @@ export default defineCommand({
     json: { type: "boolean", description: "Print the final results as JSON" },
     timeout: {
       type: "string",
-      description: "Seconds to wait in total before giving up",
+      description: "Seconds to wait in total, all checks included, before giving up",
       default: String(DEFAULT_WAIT_TIMEOUT_SECONDS),
     },
     interval: {
@@ -60,6 +61,12 @@ export default defineCommand({
     const deadlineMs = secondsToMs("--timeout", args.timeout);
     const intervalMs = secondsToMs("--interval", args.interval);
     const maxIntervalMs = secondsToMs("--max-interval", args["max-interval"]);
+    if (intervalMs > maxIntervalMs) {
+      throw new ProbeError(
+        "USAGE",
+        `--interval (${args.interval}s) cannot be longer than --max-interval (${args["max-interval"]}s).`,
+      );
+    }
     const { config } = await openProject();
     const report = progressReporter();
 
@@ -85,7 +92,7 @@ export default defineCommand({
     }
     if (timedOut) {
       const down = results.filter((result) => !result.ok).map((result) => result.name);
-      console.error(`probe: still down after ${Number(args.timeout)}s: ${down.join(", ")}`);
+      console.error(`probe: still down after ${deadlineMs / 1000}s: ${down.join(", ")}`);
       process.exitCode = EXIT_DOWN;
     }
   },

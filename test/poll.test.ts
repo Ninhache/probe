@@ -92,20 +92,33 @@ describe("pollUntilUp", () => {
     expect(outcome.results).toEqual([result("api", false)]);
   });
 
-  it("starts no pass once the deadline is reached", async () => {
+  it("runs one last pass shortly before the deadline instead of a pause that would cross it", async () => {
     const time = fakeTime();
-    let passes = 0;
     const outcome = await pollUntilUp(
-      async () => {
-        passes += 1;
+      async (timeoutMs) => {
+        time.pass(timeoutMs);
         return [result("api", false)];
       },
       { ...base, deadlineMs: 1_000, now: time.now, sleep: time.sleep },
     );
 
-    expect(time.sleeps).toEqual([500, 500]);
-    expect(passes).toBe(2);
-    expect(outcome.timedOut).toBe(true);
+    expect(time.sleeps).toEqual([500, 250]);
+    expect(time.timeouts).toEqual([1_000, 500, 250]);
+    expect(outcome).toMatchObject({ timedOut: true, elapsedMs: 750 });
+  });
+
+  it("succeeds when the service comes up in time for the last pass", async () => {
+    const time = fakeTime();
+    let passes = 0;
+    const outcome = await pollUntilUp(
+      async () => {
+        passes += 1;
+        return [result("api", passes === 3)];
+      },
+      { ...base, deadlineMs: 1_000, now: time.now, sleep: time.sleep },
+    );
+
+    expect(outcome).toMatchObject({ timedOut: false, results: [result("api", true)] });
   });
 
   it("does not retry when the check throws", async () => {

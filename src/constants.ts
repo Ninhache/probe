@@ -17,6 +17,8 @@ export const DEFAULT_WAIT_TIMEOUT_SECONDS = 60;
 export const DEFAULT_WAIT_INTERVAL_SECONDS = 0.5;
 export const DEFAULT_WAIT_MAX_INTERVAL_SECONDS = 5;
 export const WAIT_BACKOFF_FACTOR = 2;
+// Time kept before the deadline for one last check, so the final report is not a pause old.
+export const WAIT_LAST_PASS_MS = 1_000;
 
 export const REGISTRY_LATEST_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
 export const REGISTRY_TIMEOUT_MS = 5_000;
