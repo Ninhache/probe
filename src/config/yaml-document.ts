@@ -32,7 +32,7 @@ function keyOf(key: unknown): string {
 
 function reconcileMap(doc: Document, map: YAMLMap, value: PlainObject): void {
   for (const pair of [...map.items]) {
-    if (!(keyOf(pair.key) in value)) map.delete(pair.key);
+    if (!Object.hasOwn(value, keyOf(pair.key))) map.delete(pair.key);
   }
   // An inline `{}` that gains entries would otherwise stay on one line forever.
   if (map.items.length === 0) map.flow = false;

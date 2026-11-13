@@ -10,7 +10,8 @@ const REASONS: Record<string, string> = {
 };
 
 export function targetUrl(service: Service): string {
-  const host = service.host.includes(":") ? `[${service.host}]` : service.host;
+  const bareIpv6 = service.host.includes(":") && !service.host.startsWith("[");
+  const host = bareIpv6 ? `[${service.host}]` : service.host;
   return `http://${host}:${service.port}${service.path}`;
 }
 

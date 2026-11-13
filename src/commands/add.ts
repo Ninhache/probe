@@ -27,7 +27,7 @@ export default defineCommand({
   async run({ args }) {
     const loaded = await openProject();
     const services = rawServices(loaded);
-    if (args.name in services) {
+    if (Object.hasOwn(services, args.name)) {
       throw new ProbeError(
         "SERVICE_EXISTS",
         `service "${args.name}" already exists. Remove it first: probe rm ${args.name}`,

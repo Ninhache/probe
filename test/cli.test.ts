@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
@@ -141,6 +141,30 @@ describe("probe add / rm / ls", () => {
     expect((await probe(root, "add", "x")).code).toBe(2);
   });
 
+  it("handles names that exist on Object.prototype", async () => {
+    const root = await project();
+
+    expect((await probe(root, "rm", "constructor")).code).toBe(2);
+    expect((await probe(root, "add", "constructor", "-p", "3000")).code).toBe(0);
+    expect((await probe(root, "add", "toString", "-p", "3001")).code).toBe(0);
+    expect((await probe(root, "rm", "constructor")).code).toBe(0);
+
+    const config = await readFile(join(root, ".probe", "config.yml"), "utf8");
+    expect(config).not.toContain("constructor");
+    expect(config).toContain("toString: { port: 3001 }");
+  });
+
+  it("exits 2 without a stack trace on a file system error", async () => {
+    const root = await project();
+    await chmod(join(root, "Makefile"), 0o444);
+
+    const result = await probe(root, "add", "api", "-p", "3000");
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/^probe: .*EACCES/);
+    expect(result.stderr).not.toContain("    at ");
+  });
+
   it("removes a service from the config and from the Makefile", async () => {
     const root = await project();
     await addApi(root);
@@ -213,6 +237,13 @@ describe("probe check", () => {
   it("rejects a bad --timeout", async () => {
     const root = await project();
     expect((await probe(root, "check", "--timeout", "0")).code).toBe(2);
+    expect((await probe(root, "check", "--timeout", "3000000")).code).toBe(2);
+  });
+
+  it("accepts a fractional --timeout", async () => {
+    const root = await project();
+    await addApi(root);
+    expect((await probe(root, "check", "--timeout", "0.1234")).code).toBe(0);
   });
 
   it("works from a sub-directory", async () => {

@@ -56,7 +56,8 @@ async function run(rawArgs: string[]): Promise<void> {
       if (rawArgs.length === 0) await showUsage(main);
       console.error(`probe: ${error.message.replace(/\.$/, "")}. See: probe --help`);
     } else {
-      throw error;
+      // No rethrow: an uncaught error exits 1, which callers read as "a service is down".
+      console.error(`probe: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   notifyUpdate(rawArgs);

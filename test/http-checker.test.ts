@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { httpChecker } from "../src/checkers/http";
+import { httpChecker, targetUrl } from "../src/checkers/http";
 import { runChecks } from "../src/checkers/run";
 import type { Config, Service } from "../src/config/schema";
 
@@ -45,6 +45,14 @@ const service = (overrides: Partial<Service> = {}): Service => ({
 
 const check = (overrides: Partial<Service> = {}, timeoutMs = 1_000) =>
   httpChecker.check("api", service(overrides), { timeoutMs });
+
+describe("targetUrl", () => {
+  it("wraps a bare IPv6 host, not an already bracketed one", () => {
+    const service = { port: 80, path: "/" };
+    expect(targetUrl({ ...service, host: "::1" })).toBe("http://[::1]:80/");
+    expect(targetUrl({ ...service, host: "[::1]" })).toBe("http://[::1]:80/");
+  });
+});
 
 describe("http checker", () => {
   it("reports a 2xx service as up, with status and latency", async () => {

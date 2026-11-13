@@ -9,10 +9,11 @@ export default defineCommand({
   },
   async run({ args }) {
     const loaded = await openProject();
-    const { [args.name]: removed, ...rest } = rawServices(loaded);
-    if (!removed) {
+    const services = rawServices(loaded);
+    if (!Object.hasOwn(services, args.name)) {
       throw new ProbeError("SERVICE_UNKNOWN", `unknown service "${args.name}". See: probe ls`);
     }
+    const { [args.name]: _removed, ...rest } = services;
     await saveServices(loaded, rest);
     console.log(`Removed ${args.name}.`);
   },

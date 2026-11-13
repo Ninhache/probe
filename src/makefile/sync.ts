@@ -22,8 +22,10 @@ export function makefilePath(paths: ProbePaths): string {
 async function readMakefile(paths: ProbePaths): Promise<string | null> {
   try {
     return await readFile(makefilePath(paths), "utf8");
-  } catch {
-    return null;
+  } catch (error) {
+    // Any other error (EACCES, EISDIR) must not look like "no Makefile": sync would overwrite it.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
   }
 }
 

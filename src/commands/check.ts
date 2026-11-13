@@ -5,6 +5,9 @@ import { ProbeError } from "../errors";
 import { formatCheckResults } from "../ui/report";
 import { openProject, stdoutColors } from "./shared";
 
+// setTimeout overflows above 2^31 ms and then fires at once.
+const MAX_TIMEOUT_SECONDS = 2_147_483;
+
 export default defineCommand({
   meta: { name: "check", description: "Check that services respond (all of them by default)" },
   args: {
@@ -17,11 +20,14 @@ export default defineCommand({
   },
   async run({ args }) {
     const seconds = Number(args.timeout);
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      throw new ProbeError("USAGE", `--timeout expects seconds > 0, got "${args.timeout}".`);
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds > MAX_TIMEOUT_SECONDS) {
+      throw new ProbeError(
+        "USAGE",
+        `--timeout expects seconds between 0 and ${MAX_TIMEOUT_SECONDS}, got "${args.timeout}".`,
+      );
     }
     const { config } = await openProject();
-    const results = await runChecks(config, args._, { timeoutMs: seconds * 1000 });
+    const results = await runChecks(config, args._, { timeoutMs: Math.ceil(seconds * 1000) });
 
     if (args.json) {
       console.log(JSON.stringify(results, null, 2));
