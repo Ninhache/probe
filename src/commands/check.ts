@@ -1,12 +1,8 @@
 import { defineCommand } from "citty";
 import { runChecks } from "../checkers/run";
 import { DEFAULT_TIMEOUT_SECONDS, EXIT_DOWN } from "../constants";
-import { ProbeError } from "../errors";
 import { formatCheckResults } from "../ui/report";
-import { openProject, stdoutColors } from "./shared";
-
-// setTimeout overflows above 2^31 ms and then fires at once.
-const MAX_TIMEOUT_SECONDS = 2_147_483;
+import { openProject, secondsToMs, stdoutColors } from "./shared";
 
 export default defineCommand({
   meta: { name: "check", description: "Check that services respond (all of them by default)" },
@@ -19,15 +15,9 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const seconds = Number(args.timeout);
-    if (!Number.isFinite(seconds) || seconds <= 0 || seconds > MAX_TIMEOUT_SECONDS) {
-      throw new ProbeError(
-        "USAGE",
-        `--timeout expects seconds between 0 and ${MAX_TIMEOUT_SECONDS}, got "${args.timeout}".`,
-      );
-    }
+    const timeoutMs = secondsToMs("--timeout", args.timeout);
     const { config } = await openProject();
-    const results = await runChecks(config, args._, { timeoutMs: Math.ceil(seconds * 1000) });
+    const results = await runChecks(config, args._, { timeoutMs });
 
     if (args.json) {
       console.log(JSON.stringify(results, null, 2));

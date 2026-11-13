@@ -41,11 +41,16 @@ Use the full name with `npx`: `npx probe` is another package.
 | `probe rm <name>`                                         | Remove a service                                                       |
 | `probe ls`                                                | List services                                                          |
 | `probe check [name...] [--json] [--timeout <seconds>]`    | Check all services, or the named ones                                  |
+| `probe wait [name...] [--json] [--timeout <seconds>]`     | Check again until every service is up, or give up after the timeout    |
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
 | `probe sync`                                              | Regenerate the Makefile block                                          |
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
 
 Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
+
+`probe wait` is for scripts: `probe wait && pnpm test`. It checks at once, then again after 0.5 s, 1 s, 2 s, 4 s
+and every 5 s, for 60 s in total. `--timeout` sets the total, `--interval` the first pause, `--max-interval` the
+longest one. Progress goes to stderr, the final report to stdout; exit code `1` names the services still down.
 
 `probe` works from any sub-directory: it walks up to the nearest `.probe/`.
 

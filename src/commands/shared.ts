@@ -1,6 +1,8 @@
 import { requireProbeDir } from "../config/discovery";
 import { type LoadedConfig, loadConfig, saveConfig } from "../config/loader";
 import type { RawConfig } from "../config/migrations";
+import { MAX_TIMEOUT_SECONDS } from "../constants";
+import { ProbeError } from "../errors";
 import { blockState, syncMakefile } from "../makefile/sync";
 import { type Colors, colorEnabled, createColors } from "../ui/colors";
 
@@ -10,6 +12,18 @@ export function openProject(): Promise<LoadedConfig> {
 
 export function stdoutColors(): Colors {
   return createColors(colorEnabled(process.stdout, process.env));
+}
+
+/** Reads a duration option given in seconds; throws a usage error when it is not a usable delay. */
+export function secondsToMs(option: string, value: string): number {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > MAX_TIMEOUT_SECONDS) {
+    throw new ProbeError(
+      "USAGE",
+      `${option} expects seconds between 0 and ${MAX_TIMEOUT_SECONDS}, got "${value}".`,
+    );
+  }
+  return Math.ceil(seconds * 1000);
 }
 
 export function rawServices(loaded: LoadedConfig): Record<string, RawConfig> {
