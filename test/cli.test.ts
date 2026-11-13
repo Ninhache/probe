@@ -470,6 +470,29 @@ describe("probe (top level)", () => {
     expect(result).toMatchObject({ code: 0, stdout: `${version}\n` });
   });
 
+  it("writes no escape sequence off a terminal, usage included", async () => {
+    const cwd = await project();
+    await probe(cwd, "add", "api", "-p", String(port), "--path", "/health");
+    // citty drops its own colours under these variables: unset them to see what a shell pipe gets.
+    const env = { CI: "", TEST: "", NO_COLOR: "", TERM: "xterm-256color" };
+    const runs = [[], ["--help"], ["check", "--help"], ["check"], ["ls"], ["status"], ["wait"]];
+    runs.push(
+      ["check", "--json"],
+      ["sync"],
+      ["migrate"],
+      ["rm", "nope"],
+      ["add", "api", "-p", "1"],
+    );
+
+    for (const args of runs) {
+      const result = await exec(process.execPath, [CLI, ...args], cwd, env);
+      expect(result.stdout + result.stderr, args.join(" ")).not.toContain("\u001b");
+    }
+    const usage = await exec(process.execPath, [CLI], cwd, env);
+    expect(usage.code).toBe(2);
+    expect(usage.stdout).toContain("USAGE probe init|add|rm|ls|check|wait|status|sync|migrate");
+  });
+
   it("exits 2 on an unknown command", async () => {
     expect((await probe(await tempDir(), "nope")).code).toBe(2);
   });

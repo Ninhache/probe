@@ -4,14 +4,19 @@ import type { RawConfig } from "../config/migrations";
 import { MAX_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
 import { blockState, syncMakefile } from "../makefile/sync";
-import { type Colors, colorEnabled, createColors } from "../ui/colors";
+import { type Colors, createColors } from "../ui/colors";
+import { detectTerminal, type Terminal } from "../ui/terminal";
 
 export function openProject(): Promise<LoadedConfig> {
   return loadConfig(requireProbeDir(process.cwd()));
 }
 
+export function stdoutTerminal(): Terminal {
+  return detectTerminal(process.stdout, process.env);
+}
+
 export function stdoutColors(): Colors {
-  return createColors(colorEnabled(process.stdout, process.env));
+  return createColors(stdoutTerminal().color);
 }
 
 /** Reads a duration option given in seconds; throws a usage error when it is not a usable delay. */

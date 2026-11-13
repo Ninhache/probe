@@ -6,10 +6,6 @@ export interface Colors {
   bold(text: string): string;
 }
 
-export function colorEnabled(stream: { isTTY?: boolean }, env: NodeJS.ProcessEnv): boolean {
-  return Boolean(stream.isTTY) && !env.NO_COLOR;
-}
-
 export function createColors(enabled: boolean): Colors {
   const wrap = (open: number, close: number) => (text: string) =>
     enabled ? `\u001b[${open}m${text}\u001b[${close}m` : text;

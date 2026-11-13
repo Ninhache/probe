@@ -1,35 +1,80 @@
 import { targetUrl } from "../checkers/http";
 import type { CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
-import type { Colors } from "./colors";
+import { createColors } from "./colors";
+import { type Terminal, truncate } from "./terminal";
+
+const GAP = "  ";
 
 function width(values: string[]): number {
   return Math.max(0, ...values.map((value) => value.length));
 }
 
-export function formatCheckResults(results: CheckResult[], colors: Colors): string {
+/** Width left to the name column when a line has to be cut: half of what the other columns leave. */
+function nameBudget(nameWidth: number, columns: number, reserved: number): number {
+  return Math.max(1, Math.min(nameWidth, Math.floor((columns - reserved) / 2)));
+}
+
+/**
+ * Renders one line per check result.
+ * On a terminal too narrow for the widest line, the target column is dropped and the rest is cut
+ * to the width (6 columns at least); off a terminal (unknown width) lines are never cut.
+ */
+export function formatCheckResults(results: CheckResult[], terminal: Terminal): string {
+  const colors = createColors(terminal.color);
   const nameWidth = width(results.map((result) => result.name));
   const targetWidth = width(results.map((result) => result.target));
+  const outcomes = results.map((result) =>
+    result.ok ? `${result.status}${GAP}${result.latencyMs}ms` : (result.error ?? "down"),
+  );
+  const fullWidth = 2 + nameWidth + GAP.length + targetWidth + GAP.length + width(outcomes);
+  const { columns } = terminal;
+  const compact = columns !== undefined && fullWidth > columns;
+  const nameMax = compact ? nameBudget(nameWidth, columns, 2 + GAP.length) : nameWidth;
+  const outcomeMax = compact ? Math.max(1, columns - 2 - nameMax - GAP.length) : undefined;
+
   return results
-    .map((result) => {
+    .map((result, index) => {
       const mark = result.ok ? colors.green("✓") : colors.red("✗");
-      const name = colors.bold(result.name.padEnd(nameWidth));
-      const target = colors.dim(result.target.padEnd(targetWidth));
-      const outcome = result.ok
-        ? `${colors.green(String(result.status))}  ${colors.dim(`${result.latencyMs}ms`)}`
-        : colors.red(result.error ?? "down");
-      return `${mark} ${name}  ${target}  ${outcome}`;
+      const name = colors.bold(truncate(result.name, nameMax).padEnd(nameMax));
+      const target = compact ? "" : `${colors.dim(result.target.padEnd(targetWidth))}${GAP}`;
+      const plain = outcomes[index] as string;
+      let outcome: string;
+      if (!result.ok) {
+        outcome = colors.red(outcomeMax === undefined ? plain : truncate(plain, outcomeMax));
+      } else if (outcomeMax !== undefined && plain.length > outcomeMax) {
+        outcome = colors.green(truncate(String(result.status), outcomeMax));
+      } else {
+        outcome = `${colors.green(String(result.status))}${GAP}${colors.dim(`${result.latencyMs}ms`)}`;
+      }
+      return `${mark} ${name}${GAP}${target}${outcome}`;
     })
     .join("\n");
 }
 
-export function formatServices(config: Config, colors: Colors): string {
-  const entries = Object.entries(config.services);
-  const nameWidth = width(entries.map(([name]) => name));
-  return entries
-    .map(([name, service]) => {
-      const expect = service.expect === undefined ? "" : colors.dim(`  expect ${service.expect}`);
-      return `${colors.bold(name.padEnd(nameWidth))}  ${targetUrl(service)}${expect}`;
+/**
+ * Renders one line per declared service.
+ * On a terminal too narrow for the widest line, `expect` is dropped and the URL is cut to the width.
+ */
+export function formatServices(config: Config, terminal: Terminal): string {
+  const colors = createColors(terminal.color);
+  const rows = Object.entries(config.services).map(([name, service]) => ({
+    name,
+    url: targetUrl(service),
+    expect: service.expect === undefined ? "" : `${GAP}expect ${service.expect}`,
+  }));
+  const nameWidth = width(rows.map((row) => row.name));
+  const fullWidth = width(rows.map((row) => " ".repeat(nameWidth) + GAP + row.url + row.expect));
+  const { columns } = terminal;
+  const compact = columns !== undefined && fullWidth > columns;
+  const nameMax = compact ? nameBudget(nameWidth, columns, GAP.length) : nameWidth;
+  const urlMax = compact ? Math.max(1, columns - nameMax - GAP.length) : undefined;
+
+  return rows
+    .map((row) => {
+      const name = colors.bold(truncate(row.name, nameMax).padEnd(nameMax));
+      const url = urlMax === undefined ? row.url : truncate(row.url, urlMax);
+      return `${name}${GAP}${url}${compact || !row.expect ? "" : colors.dim(row.expect)}`;
     })
     .join("\n");
 }

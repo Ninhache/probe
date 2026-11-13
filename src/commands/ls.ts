@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { formatServices } from "../ui/report";
-import { openProject, stdoutColors } from "./shared";
+import { openProject, stdoutTerminal } from "./shared";
 
 export default defineCommand({
   meta: { name: "ls", description: "List services" },
@@ -10,6 +10,6 @@ export default defineCommand({
       console.log("No services yet. Add one: probe add api -p 3000");
       return;
     }
-    console.log(formatServices(config, stdoutColors()));
+    console.log(formatServices(config, stdoutTerminal()));
   },
 });
