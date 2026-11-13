@@ -123,7 +123,8 @@ make check PROBE="node ../../dist/cli.js"
 ```
 
 Release: bump `version` in `package.json`, merge, then push a `v<version>` tag. The Release workflow publishes
-to npm. It needs the `NPM_TOKEN` secret.
+to npm through trusted publishing: no token, the package trusts this repo's `release.yml` (set on npmjs.com,
+package Settings, Trusted Publisher).
 
 ## License
 
