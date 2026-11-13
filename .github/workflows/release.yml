@@ -37,27 +37,43 @@ jobs:
       - run: npm install -g npm@latest
       - run: npm publish --access public
 
-  # Bumps url + sha256 of the formula in ninhache/homebrew-tap.
-  # To enable:
-  #   1. Create the repo ninhache/homebrew-tap with Formula/probe.rb (copy packaging/homebrew/probe.rb).
-  #   2. Add the secret HOMEBREW_TAP_TOKEN: a fine-grained token with "Contents: read and write" on the tap.
-  #   3. Uncomment the job.
-  #
-  # homebrew:
-  #   needs: publish
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v7
-  #       with:
-  #         repository: ninhache/homebrew-tap
-  #         token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-  #     - name: Update the formula
-  #       run: |
-  #         version="${GITHUB_REF_NAME#v}"
-  #         url="https://registry.npmjs.org/@ninhache/probe/-/probe-$version.tgz"
-  #         sha="$(curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors "$url" | sha256sum | cut -d' ' -f1)"
-  #         sed -i -e "s|^  url .*|  url \"$url\"|" -e "s|^  sha256 .*|  sha256 \"$sha\"|" Formula/probe.rb
-  #         git config user.name "github-actions[bot]"
-  #         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-  #         git commit -am "chore(probe): bump to $version"
-  #         git push
+  # Opens a PR on the tap with the new url + sha256. The tap's CI installs the formula before it is merged.
+  # Needs the secret HOMEBREW_TAP_TOKEN: a fine-grained token on ninhache/homebrew-tap
+  # with "Contents" and "Pull requests" set to read and write.
+  homebrew:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ninhache/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Open the bump PR
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          branch="chore/probe-$version"
+          url="https://registry.npmjs.org/@ninhache/probe/-/probe-$version.tgz"
+          # A fresh version can take a few minutes to reach the registry CDN.
+          curl -fsSL --retry 10 --retry-delay 30 --retry-all-errors -o probe.tgz "$url"
+          sha="$(sha256sum probe.tgz | cut -d' ' -f1)"
+          rm probe.tgz
+          sed -i -e "s|^  url .*|  url \"$url\"|" -e "s|^  sha256 .*|  sha256 \"$sha\"|" Formula/probe.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "chore(probe): bump to $version"
+          git push origin "$branch"
+          {
+            echo "## Situation"
+            echo "\`@ninhache/probe@$version\` was published to npm."
+            echo "## Task"
+            echo "Point the formula at the new tarball."
+            echo "## Action"
+            echo "Update \`url\` and \`sha256\` in \`Formula/probe.rb\`."
+            echo "## Result"
+            echo "Merge once CI has installed, tested and audited the formula."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base main --head "$branch" \
+            --title "chore(probe): bump to $version" --body-file "$RUNNER_TEMP/body.md"
