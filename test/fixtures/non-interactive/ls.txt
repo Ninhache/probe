@@ -1,0 +1,5 @@
+exit code: 0
+--- stdout
+api  http://127.0.0.1:UP_PORT/health
+db   http://127.0.0.1:DOWN_PORT/  expect 200,204
+--- stderr

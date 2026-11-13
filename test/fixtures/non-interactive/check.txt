@@ -1,0 +1,5 @@
+exit code: 1
+--- stdout
+✓ api  http://127.0.0.1:UP_PORT/health  200  Nms
+✗ db   http://127.0.0.1:DOWN_PORT/        connection refused
+--- stderr
