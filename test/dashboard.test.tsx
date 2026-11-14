@@ -401,6 +401,22 @@ describe("dashboard", () => {
     await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
   });
 
+  it("moves down twice when the keys arrive while the list is being drawn", async () => {
+    const cache: CheckResult = { ...api, name: "cache" };
+    const { lastFrame, stdin, stdout } = open({ check: async () => [api, db, cache] });
+    // Typing from inside the write of the frame: the render that drew it has not settled yet.
+    const write = stdout.write;
+    let typed = false;
+    stdout.write = (frame: string) => {
+      write(frame);
+      if (typed || !frame.includes("cache")) return;
+      typed = true;
+      stdin.write("jj");
+    };
+
+    await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
+  });
+
   it("handles keys read together in order: open the panel, change twice, close", async () => {
     const changes: [string, number | undefined][] = [];
     const { lastFrame, stdin } = open({
