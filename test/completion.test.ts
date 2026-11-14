@@ -5,7 +5,8 @@ import { delimiter, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import add from "../src/commands/add";
 import check from "../src/commands/check";
-import { completionSpec, SERVICE_COMMANDS } from "../src/completion/spec";
+import { fishScript } from "../src/completion/fish";
+import { completionSpec, SERVICE_COMMANDS, SHELLS } from "../src/completion/spec";
 import { zshScript } from "../src/completion/zsh";
 import { tempDir } from "./helpers";
 
@@ -22,6 +23,7 @@ function onPath(binary: string): string | undefined {
 }
 
 const ZSH = onPath("zsh");
+const FISH = onPath("fish");
 // zsh ships with macOS: there the tests must run. Elsewhere they run when zsh is installed.
 const withoutZsh = !ZSH && process.platform !== "darwin";
 
@@ -130,6 +132,16 @@ describe("zshScript", () => {
   });
 });
 
+describe("fishScript", () => {
+  it("escapes a quote in a description", () => {
+    const script = fishScript([
+      { name: "x", description: "it's", options: [], words: [], services: false },
+    ]);
+
+    expect(script).toContain("-a x -d 'it\\'s'");
+  });
+});
+
 describe("probe __complete services", () => {
   it("prints one service name per line", async () => {
     expect(await probe(await project(), "__complete", "services")).toEqual({
@@ -182,13 +194,13 @@ describe("probe __complete services", () => {
 });
 
 describe("probe completion", () => {
-  it.each(["zsh", "bash"])(
+  it.each(SHELLS)(
     "prints the %s script outside a project, with nothing on stderr",
     async (shell) => {
       const run = await probe(await tempDir(), "completion", shell);
 
       expect(run).toMatchObject({ code: 0, stderr: "" });
-      expect(run.stdout).toContain("_probe()");
+      expect(run.stdout).toContain(`# ${shell} completion for probe`);
     },
   );
 
@@ -196,7 +208,7 @@ describe("probe completion", () => {
     expect(await probe(await tempDir(), "completion", "tcsh")).toEqual({
       code: 2,
       stdout: "",
-      stderr: 'probe: no completion for the shell "tcsh". Supported: zsh, bash.\n',
+      stderr: 'probe: no completion for the shell "tcsh". Supported: zsh, bash, fish.\n',
     });
   });
 
@@ -244,7 +256,7 @@ describe("bash completion", () => {
   it("completes the shells after completion, and nothing after a command without arguments", async () => {
     const root = await project();
 
-    expect(await bashCompletions(root, "probe", "completion", "")).toEqual(["zsh", "bash"]);
+    expect(await bashCompletions(root, "probe", "completion", "")).toEqual(["zsh", "bash", "fish"]);
     expect(await bashCompletions(root, "probe", "ls", "")).toEqual([]);
   });
 
@@ -281,7 +293,7 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
     const offered = await zshCompletions(await project(), "probe", "");
 
     expect(offered).toContain("check:Check that services respond (all of them by default)");
-    expect(offered).toContain("completion:Print the shell completion script (zsh, bash)");
+    expect(offered).toContain("completion:Print the shell completion script (zsh, bash, fish)");
   });
 
   it.each(SERVICE_COMMANDS)("offers the service names after %s", async (command) => {
@@ -296,7 +308,82 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
       "--timeout",
       "--help",
     ]);
-    expect(await zshCompletions(root, "probe", "completion", "")).toEqual(["zsh", "bash"]);
+    expect(await zshCompletions(root, "probe", "completion", "")).toEqual(["zsh", "bash", "fish"]);
     expect(await zshCompletions(root, "probe", "ls", "")).toEqual([]);
+  });
+});
+
+/** What fish offers for a command line, descriptions left out. */
+async function fishCompletions(cwd: string, line: string): Promise<string[]> {
+  const script = `probe completion fish | source; complete -C '${line}'`;
+  const run = await exec(FISH as string, ["--no-config", "-c", script], cwd, {
+    PATH: await pathWithProbe(),
+  });
+  expect(run).toMatchObject({ code: 0, stderr: "" });
+  return run.stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((candidate) => candidate.split("\t")[0] as string);
+}
+
+// fish ships with no system: these run where it is installed (the Linux jobs of the CI install it).
+describe.skipIf(!FISH)("fish completion", () => {
+  it("is valid fish", async () => {
+    const root = await tempDir();
+    await writeFile(join(root, "probe.fish"), (await probe(root, "completion", "fish")).stdout);
+
+    expect(await exec(FISH as string, ["--no-execute", "probe.fish"], root)).toMatchObject({
+      code: 0,
+      stderr: "",
+    });
+  });
+
+  it("completes a command, with its description", async () => {
+    const root = await project();
+    const run = await exec(
+      FISH as string,
+      ["--no-config", "-c", "probe completion fish | source; complete -C 'probe ch'"],
+      root,
+      { PATH: await pathWithProbe() },
+    );
+
+    expect(run.stdout).toBe("check\tCheck that services respond (all of them by default)\n");
+  });
+
+  it("offers every command and no file name before a command", async () => {
+    const root = await project();
+    await writeFile(join(root, "some-file"), "");
+
+    const offered = await fishCompletions(root, "probe ");
+
+    expect(offered).toContain("completion");
+    expect(offered).not.toContain("some-file");
+  });
+
+  it.each(SERVICE_COMMANDS)("offers the service names after %s", async (command) => {
+    const root = await project();
+
+    expect((await fishCompletions(root, `probe ${command} `)).sort()).toEqual(["api", "front"]);
+    expect(await fishCompletions(root, `probe ${command} f`)).toEqual(["front"]);
+  });
+
+  it("offers the options of a command, and the shells after completion", async () => {
+    const root = await project();
+
+    expect((await fishCompletions(root, "probe check --")).sort()).toEqual([
+      "--help",
+      "--json",
+      "--timeout",
+    ]);
+    expect((await fishCompletions(root, "probe completion ")).sort()).toEqual([
+      "bash",
+      "fish",
+      "zsh",
+    ]);
+    expect(await fishCompletions(root, "probe ls ")).toEqual([]);
+  });
+
+  it("offers no service outside a project", async () => {
+    expect(await fishCompletions(await tempDir(), "probe check ")).toEqual([]);
   });
 });
