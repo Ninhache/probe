@@ -4,6 +4,7 @@ import type { CheckResult } from "../checkers/types";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
+import { helpBar, helpLines } from "./keymap";
 import { type Keystroke, splitKeys } from "./keys";
 import type { Saved } from "./saves";
 import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
@@ -52,7 +53,7 @@ const seconds = (ms: number) => `${ms / 1000}s`;
 
 /**
  * Live list of the services, checked again `intervalMs` after each pass ends; `o` opens the options,
- * enter the settings of the selected service.
+ * enter the settings of the selected service, `?` the list of every key.
  * Colours come from `terminal`, never from ink props: ink does not honour `NO_COLOR`.
  */
 export function Dashboard({
@@ -73,6 +74,7 @@ export function Dashboard({
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set(initiallySkipped));
   const [timeouts, setTimeouts] = useState(initialTimeouts);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [help, setHelp] = useState(false);
   const [unsaved, setUnsaved] = useState<string>();
   const skipPause = useRef(() => {});
   // A change stays in effect for this run even when saving it failed: the failure is shown instead.
@@ -139,6 +141,9 @@ export function Dashboard({
     const enter = key === "return";
     const selectedName = latest?.[current]?.name;
     if (input === "q") exit();
+    else if (help) {
+      if (input === "?" || key === "escape") setHelp(false);
+    } else if (input === "?") setHelp(true);
     else if (panel === null) {
       if (input === "r") skipPause.current();
       else if (input === "o") setPanel({ kind: "options", row: 0 });
@@ -190,6 +195,17 @@ export function Dashboard({
   const marker = unicode ? "› " : "> ";
   const cut = (text: string) => truncate(text, Math.max(1, columns));
 
+  if (help)
+    return (
+      <Box flexDirection="column">
+        <Text>{colors.bold(cut(`probe ${dot} keys`))}</Text>
+        {helpLines(unicode).map(({ id, text, heading }) => (
+          <Text key={id}>{heading ? colors.bold(cut(text)) : cut(text)}</Text>
+        ))}
+        <Text>{colors.dim(cut(helpBar("help", unicode, columns)))}</Text>
+      </Box>
+    );
+
   if (!latest) return <Text>{cut("probe: checking…")}</Text>;
 
   // A service just set aside is shown as such at once, not when the pass that skips it ends.
@@ -227,10 +243,7 @@ export function Dashboard({
           ]
         : [];
   const labelWidth = Math.max(0, ...panelRows.map(([label]) => label.length));
-  const hint =
-    panel === null
-      ? `${unicode ? "↑↓ jk" : "jk"} move ${dot} r refresh ${dot} ${unicode ? "↵" : "enter"} service ${dot} o options ${dot} q quit`
-      : `${unicode ? "↑↓ jk" : "jk"} move ${dot} ${unicode ? "←→ hl" : "hl"} change ${dot} esc close`;
+  const hint = helpBar(panel === null ? "list" : "panel", unicode, columns);
 
   return (
     <Box flexDirection="column">

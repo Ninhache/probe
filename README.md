@@ -115,6 +115,7 @@ of macOS.
 | `r`             | Check now                              |
 | `Enter`         | Open the panel of the selected service |
 | `o`             | Options: interval and timeout          |
+| `?`             | Every key; `?` or `Esc` closes         |
 | `q`             | Quit                                   |
 
 What you change there is saved in `.probe/local.yml`, for your machine only:
