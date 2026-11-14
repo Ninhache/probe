@@ -217,6 +217,7 @@ describe("probe add / rm / ls", () => {
     expect((await probe(root, "add", "x", "-p", "70000")).code).toBe(2);
     expect((await probe(root, "add", "bad name", "-p", "3000")).code).toBe(2);
     expect((await probe(root, "add", "x")).code).toBe(2);
+    expect((await probe(root, "add")).code).toBe(2);
   });
 
   it("handles names that exist on Object.prototype", async () => {
