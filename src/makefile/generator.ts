@@ -21,13 +21,15 @@ export function renderBlock(serviceNames: string[]): string {
   return [
     BLOCK_START,
     `PROBE ?= $(shell command -v probe >/dev/null 2>&1 && echo probe || echo "${fallback}")`,
-    `.PHONY: ${["help", "check", "status", ...targets].join(" ")}`,
+    `.PHONY: ${["help", "check", "status", "probe", ...targets].join(" ")}`,
     "help: ## List available targets",
     `\t${HELP_RECIPE}`,
     "check: ## Check that every service responds",
     "\t@$(PROBE) check",
     "status: ## Show probe status",
     "\t@$(PROBE) status",
+    "probe: ## Open the dashboard",
+    "\t@$(PROBE)",
     ...serviceNames.flatMap((name) => [
       `check-${name}: ## Check ${name}`,
       `\t@$(PROBE) check ${name}`,
