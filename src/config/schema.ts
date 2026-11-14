@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_TIMEOUT_SECONDS } from "../constants";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -11,6 +12,8 @@ export const serviceSchemaV1 = z.strictObject({
   port: z.number().int().min(1).max(65535),
   path: z.string().startsWith("/").default("/"),
   expect: z.union([statusCode, z.array(statusCode).min(1)]).optional(),
+  /** Seconds given to this service to answer, instead of the default. */
+  timeout: z.number().positive().max(MAX_TIMEOUT_SECONDS).optional(),
 });
 
 export const configSchemaV1 = z.strictObject({

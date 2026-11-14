@@ -36,13 +36,17 @@ function exec(
 
 const probe = (cwd: string, ...args: string[]) => exec(process.execPath, [CLI, ...args], cwd);
 
+/** Delay of the `/slow` route: longer than the short timeouts below, far below the default. */
+const SLOW_MS = 500;
+
 let server: Server;
 let port: number;
 let closedPort: number;
 
 beforeAll(async () => {
   server = createServer((request, response) => {
-    response.writeHead(request.url === "/health" ? 200 : 404).end();
+    if (request.url === "/slow") setTimeout(() => response.writeHead(200).end(), SLOW_MS);
+    else response.writeHead(request.url === "/health" ? 200 : 404).end();
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
@@ -78,6 +82,19 @@ async function makefileProject(): Promise<string> {
 
 const addApi = (root: string) =>
   probe(root, "add", "api", "-p", String(port), "--host", "127.0.0.1", "--path", "/health");
+const addSlow = (root: string, ...options: string[]) =>
+  probe(
+    root,
+    "add",
+    "slow",
+    "-p",
+    String(port),
+    "--host",
+    "127.0.0.1",
+    "--path",
+    "/slow",
+    ...options,
+  );
 const addDown = (root: string) =>
   probe(root, "add", "down", "-p", String(closedPort), "--host", "127.0.0.1");
 
@@ -155,6 +172,29 @@ describe("probe add / rm / ls", () => {
     const config = await readFile(join(root, ".probe", "config.yml"), "utf8");
     expect(config).toContain("one: { port: 3000, expect: 204 }");
     expect(config).toContain("many: { port: 3001, expect: [ 200, 204 ] }");
+  });
+
+  it("stores --timeout in seconds, fractions included, and lists it", async () => {
+    const root = await project();
+    await probe(root, "add", "db", "-p", "5432", "--timeout", "10");
+    await probe(root, "add", "cache", "-p", "6379", "--timeout", "0.5");
+
+    const config = await readFile(join(root, ".probe", "config.yml"), "utf8");
+    expect(config).toContain("db: { port: 5432, timeout: 10 }");
+    expect(config).toContain("cache: { port: 6379, timeout: 0.5 }");
+    expect((await probe(root, "ls")).stdout).toMatch(
+      /^db {5}http:\/\/localhost:5432\/ {2}timeout 10s$/m,
+    );
+  });
+
+  it.each(["0", "-1", "soon"])("rejects --timeout %s with exit code 2", async (value) => {
+    const root = await project();
+
+    const result = await probe(root, "add", "db", "-p", "5432", `--timeout=${value}`);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--timeout expects seconds");
+    expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).not.toContain("db");
   });
 
   it("rejects a duplicate, a bad port and a bad name with exit code 2", async () => {
@@ -292,6 +332,64 @@ describe("probe check", () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain("Run `probe init`");
+  });
+});
+
+describe("a service with its own timeout", () => {
+  it("is given that time by probe check, not the default", async () => {
+    const root = await project();
+    await addSlow(root, "--timeout", "0.1");
+
+    const result = await probe(root, "check");
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("timeout after 0.1s");
+  });
+
+  it("gives way to --timeout when it is passed", async () => {
+    const root = await project();
+    await addSlow(root, "--timeout", "0.1");
+
+    const longer = await probe(root, "check", "--timeout", "5");
+    await probe(root, "rm", "slow");
+    await addSlow(root, "--timeout", "5");
+    const shorter = await probe(root, "check", "--timeout", "0.1");
+
+    expect(longer.code).toBe(0);
+    expect(shorter.code).toBe(1);
+    expect(shorter.stdout).toContain("timeout after 0.1s");
+  });
+
+  it("is given that time by each check of probe wait", async () => {
+    const root = await project();
+    await addSlow(root, "--timeout", "0.1");
+
+    const result = await probe(root, "wait", "--timeout", "1.5", "--interval", "0.2");
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("timeout after 0.1s");
+  });
+
+  it.each(["0", "-2", "soon"])("exits 2 with a readable message on timeout: %s", async (value) => {
+    const root = await project();
+    await writeFile(
+      join(root, ".probe", "config.yml"),
+      `schemaVersion: 1\nservices:\n  api: { port: 3000, timeout: ${value} }\n`,
+    );
+
+    const result = await probe(root, "check");
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/^probe: /);
+    expect(result.stderr).toContain("services.api.timeout");
+    expect(result.stderr).not.toContain("    at ");
+  });
+
+  it("leaves the Makefile block in sync", async () => {
+    const root = await makefileProject();
+    await addSlow(root, "--timeout", "4");
+
+    expect((await probe(root, "status")).stdout).toContain("makefile   in sync");
   });
 });
 

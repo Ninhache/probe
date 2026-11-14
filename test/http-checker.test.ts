@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { httpChecker, targetUrl } from "../src/checkers/http";
-import { runChecks } from "../src/checkers/run";
+import { resolveTimeoutMs, runChecks } from "../src/checkers/run";
 import type { Config, Service } from "../src/config/schema";
 
 let server: Server;
@@ -151,5 +151,51 @@ describe("runChecks", () => {
     await expect(runChecks(config(), ["nope"], { timeoutMs: 1_000 })).rejects.toThrowError(
       /unknown service: nope\. Known: api, broken/,
     );
+  });
+
+  it("gives a service its own timeout instead of the default", async () => {
+    const slow: Config = {
+      schemaVersion: 1,
+      services: { slow: service({ path: "/slow", timeout: 0.1 }) },
+    };
+
+    const [result] = await runChecks(slow, [], { timeoutMs: 10_000 });
+
+    expect(result).toMatchObject({ ok: false, error: "timeout after 0.1s" });
+  });
+
+  it("lets a forced timeout replace the service's own", async () => {
+    const slow: Config = {
+      schemaVersion: 1,
+      services: { slow: service({ path: "/slow", timeout: 10 }) },
+    };
+
+    const [result] = await runChecks(slow, [], { timeoutMs: 100, forceTimeout: true });
+
+    expect(result).toMatchObject({ ok: false, error: "timeout after 0.1s" });
+  });
+});
+
+describe("resolveTimeoutMs", () => {
+  it.each([
+    ["the default without a timeout of its own", {}, { timeoutMs: 3_000 }, 3_000],
+    ["its own timeout over the default", { timeout: 10 }, { timeoutMs: 3_000 }, 10_000],
+    ["a fraction of a second", { timeout: 0.25 }, { timeoutMs: 3_000 }, 250],
+    ["the forced value", { timeout: 10 }, { timeoutMs: 500, forceTimeout: true }, 500],
+    [
+      "the bound when its own is longer",
+      { timeout: 10 },
+      { timeoutMs: 3_000, maxTimeoutMs: 1_200 },
+      1_200,
+    ],
+    ["the bound when the default is longer", {}, { timeoutMs: 3_000, maxTimeoutMs: 800 }, 800],
+    [
+      "its own when the bound is longer",
+      { timeout: 1 },
+      { timeoutMs: 3_000, maxTimeoutMs: 5_000 },
+      1_000,
+    ],
+  ])("gives %s", (_label, overrides, options, expected) => {
+    expect(resolveTimeoutMs(service(overrides), options)).toBe(expected);
   });
 });

@@ -4,7 +4,7 @@ import type { CheckResult } from "../checkers/types";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
-import { type DashboardSettings, SETTING_ROWS, stepChoice } from "./settings";
+import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
 
 export interface DashboardProps {
   terminal: Terminal;
@@ -12,25 +12,34 @@ export interface DashboardProps {
   settings: DashboardSettings;
   /** Services set aside when the dashboard opens; the service panel changes them while it runs. */
   skipped?: Iterable<string>;
+  /** Timeout of the services that set their own, in seconds; the service panel changes them. */
+  timeouts?: ServiceTimeouts;
   /**
-   * Runs one pass of checks, leaving the `skipped` services unchecked; the signal aborts when the
-   * dashboard closes or a setting changes.
+   * Runs one pass of checks, leaving the `skipped` services unchecked. `timeoutMs` is for the
+   * services absent from `timeouts`. The signal aborts when the dashboard closes or a setting changes.
    */
   check: (
     signal: AbortSignal,
     timeoutMs: number,
     skipped: ReadonlySet<string>,
+    timeouts: ServiceTimeouts,
   ) => Promise<CheckResult[]>;
+  /** Called each time the service panel sets a timeout, in seconds; `undefined`: back to the default. */
+  onTimeoutChange?: (name: string, seconds: number | undefined) => void;
   /** Called with the new settings each time the options panel changes one. */
   onSettingsChange?: (settings: DashboardSettings) => void;
   /** Called each time the service panel sets a service aside or brings it back. */
   onSkipChange?: (name: string, skip: boolean) => void;
 }
 
+export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
+
 /** The panel open under the list: the options, or the settings of one service. */
 type Panel = { kind: "options"; row: number } | { kind: "service"; name: string; row: number };
 
-const SERVICE_ROWS = ["Skip"];
+const SERVICE_ROWS = ["Skip", "Timeout"];
+const TIMEOUT_ROW = SERVICE_ROWS.indexOf("Timeout");
+const NO_TIMEOUTS: ServiceTimeouts = {};
 
 const MARKER_WIDTH = 2;
 const PANEL_WIDTH = 30;
@@ -48,9 +57,11 @@ export function Dashboard({
   terminal,
   settings: initial,
   skipped: initiallySkipped,
+  timeouts: initialTimeouts = NO_TIMEOUTS,
   check,
   onSettingsChange,
   onSkipChange,
+  onTimeoutChange,
 }: DashboardProps) {
   const { exit } = useApp();
   const { columns } = useWindowSize();
@@ -58,6 +69,7 @@ export function Dashboard({
   const [selected, setSelected] = useState(0);
   const [settings, setSettings] = useState(initial);
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set(initiallySkipped));
+  const [timeouts, setTimeouts] = useState(initialTimeouts);
   const [panel, setPanel] = useState<Panel | null>(null);
   const skipPause = useRef(() => {});
   const { intervalMs, timeoutMs } = settings;
@@ -67,7 +79,7 @@ export function Dashboard({
     const { signal } = controller;
     const loop = async () => {
       while (!signal.aborted) {
-        const next = await check(signal, timeoutMs, skipped);
+        const next = await check(signal, timeoutMs, skipped, timeouts);
         if (signal.aborted) return;
         setLatest(next);
         await new Promise<void>((resolve) => {
@@ -82,7 +94,7 @@ export function Dashboard({
     };
     void loop();
     return () => controller.abort();
-  }, [check, intervalMs, timeoutMs, skipped]);
+  }, [check, intervalMs, timeoutMs, skipped, timeouts]);
 
   const last = (latest?.length ?? 1) - 1;
   const current = Math.min(selected, last);
@@ -103,6 +115,13 @@ export function Dashboard({
     if (skip) next.add(name);
     setSkipped(next);
     onSkipChange?.(name, skip);
+  };
+
+  const changeTimeout = (name: string, direction: 1 | -1) => {
+    const value = stepServiceTimeout(timeouts[name], direction);
+    if (value === timeouts[name]) return;
+    setTimeouts({ ...timeouts, [name]: value });
+    onTimeoutChange?.(name, value);
   };
 
   useInput((input, key) => {
@@ -126,6 +145,7 @@ export function Dashboard({
       setPanel({ ...panel, row: Math.max(0, Math.min(lastRow, panel.row + (down ? 1 : -1))) });
     } else if (left || right) {
       if (panel.kind === "options") change(panel.row, right ? 1 : -1);
+      else if (panel.row === TIMEOUT_ROW) changeTimeout(panel.name, right ? 1 : -1);
       else toggleSkip(panel.name);
     }
   });
@@ -164,7 +184,13 @@ export function Dashboard({
     panel?.kind === "options"
       ? SETTING_ROWS.map((row) => [row.label, seconds(settings[row.key])])
       : panel
-        ? SERVICE_ROWS.map((label) => [label, skipped.has(panel.name) ? "yes" : "no"])
+        ? [
+            ["Skip", skipped.has(panel.name) ? "yes" : "no"],
+            [
+              "Timeout",
+              timeouts[panel.name] === undefined ? "default" : `${timeouts[panel.name]}s`,
+            ],
+          ]
         : [];
   const labelWidth = Math.max(0, ...panelRows.map(([label]) => label.length));
   const hint =

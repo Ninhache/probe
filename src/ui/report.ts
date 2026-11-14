@@ -76,6 +76,7 @@ export function formatServices(
     url: targetUrl(service),
     notes:
       (service.expect === undefined ? "" : `${GAP}expect ${service.expect}`) +
+      (service.timeout === undefined ? "" : `${GAP}timeout ${service.timeout}s`) +
       (skipped.has(name) ? `${GAP}${SKIPPED}` : ""),
   }));
   const nameWidth = width(rows.map((row) => row.name));
