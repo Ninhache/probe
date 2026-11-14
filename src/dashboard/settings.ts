@@ -25,6 +25,20 @@ export const SETTING_ROWS: SettingRow[] = [
 ];
 
 /**
+ * Steps the timeout of one service, in seconds: `undefined` (the default) sits below the lowest choice.
+ * A value that is not a choice (set by hand) moves to its neighbour.
+ */
+export function stepServiceTimeout(
+  current: number | undefined,
+  direction: 1 | -1,
+): number | undefined {
+  const choices = DASHBOARD_TIMEOUT_CHOICES_SECONDS;
+  if (current === undefined) return direction === 1 ? choices[0] : undefined;
+  if (direction === 1) return choices.find((choice) => choice > current) ?? current;
+  return choices.findLast((choice) => choice < current);
+}
+
+/**
  * Returns the choice next to `current` (`direction` 1: the first one above, -1: the last one below).
  * `current` need not be a choice (`--interval 7`); at either end it is returned unchanged.
  */

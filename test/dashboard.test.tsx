@@ -3,7 +3,7 @@ import { render as inkRender } from "ink";
 import { render } from "ink-testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
-import { Dashboard } from "../src/dashboard/Dashboard";
+import { Dashboard, type DashboardProps, type ServiceTimeouts } from "../src/dashboard/Dashboard";
 import type { DashboardSettings } from "../src/dashboard/settings";
 import type { Terminal } from "../src/ui/terminal";
 
@@ -35,11 +35,7 @@ const db: CheckResult = {
 const ESCAPE = String.fromCharCode(27);
 const ENTER = "\r";
 /** Checks like the real runner: a skipped service is reported, not checked. */
-const checkUnlessSkipped = async (
-  _signal: AbortSignal,
-  _timeoutMs: number,
-  skipped: ReadonlySet<string>,
-): Promise<CheckResult[]> =>
+const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, skipped) =>
   [api, db].map((result) =>
     skipped.has(result.name)
       ? {
@@ -61,11 +57,9 @@ function open(options: {
   terminal?: Terminal;
   intervalMs?: number;
   skipped?: string[];
-  check?: (
-    signal: AbortSignal,
-    timeoutMs: number,
-    skipped: ReadonlySet<string>,
-  ) => Promise<CheckResult[]>;
+  timeouts?: ServiceTimeouts;
+  check?: DashboardProps["check"];
+  onTimeoutChange?: (name: string, seconds: number | undefined) => void;
   onSettingsChange?: (settings: DashboardSettings) => void;
   onSkipChange?: (name: string, skip: boolean) => void;
 }) {
@@ -75,6 +69,8 @@ function open(options: {
       settings={{ intervalMs: options.intervalMs ?? 60_000, timeoutMs: 3_000 }}
       check={options.check ?? (async () => [api, db])}
       skipped={options.skipped}
+      timeouts={options.timeouts}
+      onTimeoutChange={options.onTimeoutChange}
       onSettingsChange={options.onSettingsChange}
       onSkipChange={options.onSkipChange}
     />,
@@ -282,7 +278,8 @@ describe("dashboard", () => {
         "http://localhost:5432/ · connection refused",
         "┌────────────────────────────┐",
         "│ db                         │",
-        "│ › Skip  ‹ no ›             │",
+        "│ › Skip     ‹ no ›          │",
+        "│   Timeout  ‹ default ›     │",
         "└────────────────────────────┘",
         "↑↓ jk move · ←→ hl change · esc close",
       ].join("\n"),
@@ -307,7 +304,7 @@ describe("dashboard", () => {
     await tick();
     expect(lastFrame()).toContain("probe · 1/1 up · 1 skipped · every 60s");
     expect(lastFrame()).toContain("› - db   http://localhost:5432/        skipped");
-    expect(lastFrame()).toContain("› Skip  ‹ yes ›");
+    expect(lastFrame()).toContain("› Skip     ‹ yes ›");
     stdin.write("h");
     await tick();
     expect(lastFrame()).toContain("probe · 1/2 up · every 60s");
@@ -315,6 +312,62 @@ describe("dashboard", () => {
       ["db", true],
       ["db", false],
     ]);
+  });
+
+  it("sets the timeout of a service from its panel, down to the default again", async () => {
+    const changes: [string, number | undefined][] = [];
+    const passes: ServiceTimeouts[] = [];
+    const { lastFrame, stdin } = open({
+      check: async (_signal, _timeoutMs, _skipped, timeouts) => {
+        passes.push(timeouts);
+        return [api, db];
+      },
+      onTimeoutChange: (name, seconds) => changes.push([name, seconds]),
+    });
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write("l");
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(lastFrame()).toContain("› Timeout  ‹ 2s ›");
+    expect(lastFrame()).toContain("  Skip     ‹ no ›");
+    expect(passes.at(-1)).toEqual({ api: 2 });
+    stdin.write("h");
+    await tick();
+    stdin.write("h");
+    await tick();
+    stdin.write("h");
+    await tick();
+    expect(lastFrame()).toContain("› Timeout  ‹ default ›");
+    expect(passes.at(-1)).toEqual({ api: undefined });
+    expect(changes).toEqual([
+      ["api", 1],
+      ["api", 2],
+      ["api", 1],
+      ["api", undefined],
+    ]);
+  });
+
+  it("starts with the timeouts the services already have, and steps from a value set by hand", async () => {
+    const changes: [string, number | undefined][] = [];
+    const { lastFrame, stdin } = open({
+      timeouts: { api: 7 },
+      onTimeoutChange: (name, seconds) => changes.push([name, seconds]),
+    });
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    expect(lastFrame()).toContain("Timeout  ‹ 7s ›");
+    stdin.write("j");
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(lastFrame()).toContain("› Timeout  ‹ 10s ›");
+    expect(changes).toEqual([["api", 10]]);
   });
 
   it("shows a service as skipped before the pass that skips it ends", async () => {

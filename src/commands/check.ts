@@ -11,15 +11,16 @@ export default defineCommand({
     json: { type: "boolean", description: "Print results as JSON" },
     timeout: {
       type: "string",
-      description: "Seconds to wait for each service",
-      default: String(DEFAULT_TIMEOUT_SECONDS),
+      // No citty default: a value given here must be told apart from none, it beats the services' own.
+      description: `Seconds to wait for each service (default: its own timeout, else ${DEFAULT_TIMEOUT_SECONDS})`,
     },
   },
   async run({ args }) {
-    const timeoutMs = secondsToMs("--timeout", args.timeout);
+    const forceTimeout = args.timeout !== undefined;
+    const timeoutMs = secondsToMs("--timeout", args.timeout ?? String(DEFAULT_TIMEOUT_SECONDS));
     const { config, paths } = await openProject();
     const skipped = await readSkippedServices(paths);
-    const results = await runChecks(config, args._, { timeoutMs }, skipped);
+    const results = await runChecks(config, args._, { timeoutMs, forceTimeout }, skipped);
 
     if (args.json) {
       console.log(JSON.stringify(results, null, 2));

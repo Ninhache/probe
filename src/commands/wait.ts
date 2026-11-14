@@ -73,7 +73,14 @@ export default defineCommand({
     const report = progressReporter();
 
     const { results, timedOut } = await pollUntilUp(
-      (timeoutMs) => runChecks(config, args._, { timeoutMs }, skipped),
+      // A service with its own timeout keeps it here, within what is left of the total.
+      (_passMs, remainingMs) =>
+        runChecks(
+          config,
+          args._,
+          { timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000, maxTimeoutMs: remainingMs },
+          skipped,
+        ),
       {
         deadlineMs,
         attemptTimeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000,

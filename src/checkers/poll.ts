@@ -23,12 +23,13 @@ export interface PollOutcome {
 
 /**
  * Runs `check` until every result of one pass is ok, or until the deadline.
+ * `check` receives the time allowed for the pass and what is left before the deadline.
  * The first pass starts at once. When the next pause would cross the deadline, one last pass runs
  * shortly before it instead, and its results are the ones returned.
  * An error thrown by `check` is not retried.
  */
 export async function pollUntilUp(
-  check: (timeoutMs: number) => Promise<CheckResult[]>,
+  check: (timeoutMs: number, remainingMs: number) => Promise<CheckResult[]>,
   options: PollOptions,
 ): Promise<PollOutcome> {
   const { deadlineMs, attemptTimeoutMs, maxIntervalMs, onPass } = options;
@@ -41,16 +42,17 @@ export async function pollUntilUp(
 
   while (true) {
     // A late timer can leave a fraction of a millisecond: still a whole, positive delay for the pass.
-    const results = await check(Math.max(1, Math.ceil(Math.min(attemptTimeoutMs, remaining()))));
+    const left = Math.max(1, Math.ceil(remaining()));
+    const results = await check(Math.min(attemptTimeoutMs, left), left);
     const elapsedMs = Math.round(now() - started);
     onPass?.(results, elapsedMs);
     if (results.every((result) => result.ok)) return { results, elapsedMs, timedOut: false };
 
-    const left = remaining();
-    if (lastPass || left <= 0) return { results, elapsedMs, timedOut: true };
-    if (pause >= left) {
+    const rest = remaining();
+    if (lastPass || rest <= 0) return { results, elapsedMs, timedOut: true };
+    if (pause >= rest) {
       lastPass = true;
-      await sleep(left - Math.min(WAIT_LAST_PASS_MS, left / 2));
+      await sleep(rest - Math.min(WAIT_LAST_PASS_MS, rest / 2));
     } else {
       await sleep(pause);
       pause = Math.min(pause * WAIT_BACKOFF_FACTOR, maxIntervalMs);

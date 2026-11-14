@@ -111,3 +111,22 @@ export async function saveConfig(
   await writeFile(loaded.paths.config, loaded.doc.toString());
   return { ...loaded, config, raw };
 }
+
+/**
+ * Sets the `timeout` of one service in `config.yml`, in seconds; `undefined` removes it.
+ * The file is read again first, so an edit made since the caller loaded it is kept.
+ * Returns false when the service is no longer there.
+ */
+export async function writeServiceTimeout(
+  paths: ProbePaths,
+  name: string,
+  seconds: number | undefined,
+): Promise<boolean> {
+  const loaded = await loadConfig(paths);
+  const services = (loaded.raw.services ?? {}) as Record<string, RawConfig>;
+  if (!Object.hasOwn(services, name)) return false;
+  const { timeout: _previous, ...service } = services[name] as RawConfig;
+  if (seconds !== undefined) service.timeout = seconds;
+  await saveConfig(loaded, { ...loaded.raw, services: { ...services, [name]: service } });
+  return true;
+}

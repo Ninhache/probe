@@ -1,7 +1,8 @@
 import { defineCommand } from "citty";
 import type { RawConfig } from "../config/migrations";
+import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
-import { openProject, rawServices, saveServices } from "./shared";
+import { openProject, rawServices, saveServices, secondsToMs } from "./shared";
 
 function parseInteger(value: string, flag: string): number {
   if (!/^\d+$/.test(value)) {
@@ -23,6 +24,10 @@ export default defineCommand({
     host: { type: "string", description: "Host (default: localhost)" },
     path: { type: "string", description: "Path to request (default: /)" },
     expect: { type: "string", description: "Expected status, e.g. 200 or 200,204 (default: 2xx)" },
+    timeout: {
+      type: "string",
+      description: `Seconds to wait for this service (default: ${DEFAULT_TIMEOUT_SECONDS})`,
+    },
   },
   async run({ args }) {
     const loaded = await openProject();
@@ -37,6 +42,10 @@ export default defineCommand({
     if (args.host) service.host = args.host;
     if (args.path) service.path = args.path;
     if (args.expect) service.expect = parseExpect(String(args.expect));
+    if (args.timeout !== undefined) {
+      secondsToMs("--timeout", String(args.timeout));
+      service.timeout = Number(args.timeout);
+    }
 
     await saveServices(loaded, { ...services, [args.name]: service });
     console.log(`Added ${args.name}. Try: probe check ${args.name}`);

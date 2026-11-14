@@ -18,7 +18,7 @@ import status from "./commands/status";
 import sync from "./commands/sync";
 import wait from "./commands/wait";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
-import { loadConfig } from "./config/loader";
+import { loadConfig, writeServiceTimeout } from "./config/loader";
 import {
   changedPreferences,
   initialDashboardSettings,
@@ -100,7 +100,7 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
  * The interactive libraries are imported here only, so every other path starts without them.
  * With `--interval` there is nothing to fall back to: what prevents the dashboard is an error.
  * Settings come from `--interval`, then `local.yml`, then the defaults; what the panels change
- * is saved to `local.yml`.
+ * is saved to `local.yml`, except the timeout of a service: it is shared, so it goes to `config.yml`.
  */
 async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const interval = dashboardInterval(rawArgs);
@@ -137,6 +137,7 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
       save(() => writeDashboardPreferences(paths, changed));
     },
     onSkipChange: (name, skip) => save(() => writeServiceSkip(paths, name, skip)),
+    onTimeoutChange: (name, seconds) => save(() => writeServiceTimeout(paths, name, seconds)),
   });
   await saving;
   return true;

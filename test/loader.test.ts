@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { loadConfig, saveConfig } from "../src/config/loader";
+import { loadConfig, saveConfig, writeServiceTimeout } from "../src/config/loader";
 import { tempProject } from "./helpers";
 
 describe("loadConfig", () => {
@@ -28,6 +28,17 @@ describe("loadConfig", () => {
   it.each([
     ["missing schemaVersion", "services: {}\n", /schemaVersion/],
     ["unknown key", "schemaVersion: 1\nservices:\n  api: { port: 1, nope: 1 }\n", /services\.api/],
+    ["timeout of zero", "schemaVersion: 1\nservices:\n  api: { port: 1, timeout: 0 }\n", /timeout/],
+    [
+      "negative timeout",
+      "schemaVersion: 1\nservices:\n  api: { port: 1, timeout: -2 }\n",
+      /timeout/,
+    ],
+    [
+      "timeout as text",
+      "schemaVersion: 1\nservices:\n  api: { port: 1, timeout: soon }\n",
+      /timeout/,
+    ],
     ["port out of range", "schemaVersion: 1\nservices:\n  api: { port: 70000 }\n", /port/],
     ["bad service name", "schemaVersion: 1\nservices:\n  'a b': { port: 1 }\n", /services/],
     ["broken YAML", "schemaVersion: [1\n", /not valid YAML/],
@@ -73,6 +84,59 @@ describe("saveConfig", () => {
     await expect(
       saveConfig(loaded, { ...loaded.raw, services: { api: { port: 0 } } }),
     ).rejects.toThrowError(/port/);
+    expect(await readFile(paths.config, "utf8")).toBe(yaml);
+  });
+});
+
+describe("writeServiceTimeout", () => {
+  const yaml = [
+    "# my services",
+    "schemaVersion: 1",
+    "services:",
+    "  front: { port: 3001 } # vite",
+    "  db:",
+    "    # slow to start",
+    "    port: 5432",
+    "",
+  ].join("\n");
+
+  it("sets the timeout of one service and leaves the rest of the file untouched", async () => {
+    const paths = await tempProject(yaml);
+
+    expect(await writeServiceTimeout(paths, "front", 10)).toBe(true);
+    expect(await writeServiceTimeout(paths, "db", 0.5)).toBe(true);
+
+    expect(await readFile(paths.config, "utf8")).toBe(
+      yaml
+        .replace("front: { port: 3001 }", "front: { port: 3001, timeout: 10 }")
+        .replace("    port: 5432\n", "    port: 5432\n    timeout: 0.5\n"),
+    );
+  });
+
+  it("removes the timeout, back to the file as it was", async () => {
+    const paths = await tempProject(yaml);
+    await writeServiceTimeout(paths, "front", 10);
+
+    expect(await writeServiceTimeout(paths, "front", undefined)).toBe(true);
+
+    expect(await readFile(paths.config, "utf8")).toBe(yaml);
+  });
+
+  it("keeps an edit made to the file since it was loaded", async () => {
+    const paths = await tempProject(yaml);
+    await loadConfig(paths);
+    await writeFile(paths.config, yaml.replace("port: 3001", "port: 4000"));
+
+    await writeServiceTimeout(paths, "front", 5);
+
+    expect(await readFile(paths.config, "utf8")).toContain("front: { port: 4000, timeout: 5 }");
+  });
+
+  it("does nothing for a service that is no longer declared", async () => {
+    const paths = await tempProject(yaml);
+
+    expect(await writeServiceTimeout(paths, "gone", 5)).toBe(false);
+
     expect(await readFile(paths.config, "utf8")).toBe(yaml);
   });
 });

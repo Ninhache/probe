@@ -39,7 +39,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | Command                                                   | What it does                                                           |
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `probe init`                                              | Create `.probe/` and the `.gitignore` entries                          |
-| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service                                                          |
+| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` gives it its own timeout)         |
 | `probe rm <name>`                                         | Remove a service                                                       |
 | `probe ls`                                                | List services                                                          |
 | `probe check [name...] [--json] [--timeout <seconds>]`    | Check all services, or the named ones                                  |
@@ -53,7 +53,8 @@ Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 `probe wait` is for scripts: `probe wait && pnpm test`. It checks at once, then again after 0.5 s, 1 s, 2 s, 4 s
 and every 5 s, for 60 s in total. `--timeout` sets the total, `--interval` the first pause, `--max-interval` the
 longest one. Unlike `check --timeout`, which is the time given to each service, `wait --timeout` covers the whole
-wait; each check inside it still gets 3 s. Progress goes to stderr, the final report to stdout; exit code `1` names the services still down.
+wait; each check inside it still gets 3 s, or the service's own `timeout`. Progress goes to stderr, the final
+report to stdout; exit code `1` names the services still down.
 
 `probe` works from any sub-directory: it walks up to the nearest `.probe/`.
 
@@ -62,13 +63,13 @@ wait; each check inside it still gets 3 s. Progress goes to stderr, the final re
 `probe` alone, on a terminal, opens a live list of your services and checks them every 2 s
 (`probe --interval 5` for another pace). Off a terminal, in CI or in a pipe, nothing changes: use `probe check`.
 
-| Key             | What it does                                     |
-| --------------- | ------------------------------------------------ |
-| `↑` `↓` `j` `k` | Move                                             |
-| `r`             | Check now                                        |
-| `Enter`         | Open the panel of the selected service (skip it) |
-| `o`             | Options: interval and timeout                    |
-| `q`             | Quit                                             |
+| Key             | What it does                           |
+| --------------- | -------------------------------------- |
+| `↑` `↓` `j` `k` | Move                                   |
+| `r`             | Check now                              |
+| `Enter`         | Open the panel of the selected service |
+| `o`             | Options: interval and timeout          |
+| `q`             | Quit                                   |
 
 What you change there is saved in `.probe/local.yml`, for your machine only:
 
@@ -81,6 +82,9 @@ services:
 A skipped service is left out of `probe check`, `probe wait` and the dashboard, and shown as `skipped`. Name it
 (`probe check db`) and it is checked anyway.
 
+The panel of a service also sets its timeout. That one is shared: it is written to `.probe/config.yml`, so
+commit it.
+
 ## Config
 
 `.probe/config.yml`:
@@ -91,14 +95,19 @@ services:
   api: { port: 3000, path: /health }
   front: { port: 5173 }
   admin: { host: 127.0.0.1, port: 8080, expect: [200, 204] }
+  db: { port: 5432, timeout: 10 }
 ```
 
-| Key      | Default     | Meaning                                |
-| -------- | ----------- | -------------------------------------- |
-| `port`   | required    | TCP port                               |
-| `host`   | `localhost` | Host name or IP                        |
-| `path`   | `/`         | Path requested with `GET`              |
-| `expect` | any 2xx     | Expected status, or a list of statuses |
+| Key       | Default     | Meaning                                 |
+| --------- | ----------- | --------------------------------------- |
+| `port`    | required    | TCP port                                |
+| `host`    | `localhost` | Host name or IP                         |
+| `path`    | `/`         | Path requested with `GET`               |
+| `expect`  | any 2xx     | Expected status, or a list of statuses  |
+| `timeout` | 3           | Seconds given to this service to answer |
+
+Which timeout applies: `--timeout` when you pass it, else the service's `timeout`, else 3 s (in the dashboard,
+the timeout set in its options). A config with a `timeout` needs `probe` 0.4.0 or later: older versions refuse it.
 
 Redirects are followed and the final status is judged, unless `expect` contains a 3xx: then the first response
 is judged as is.
