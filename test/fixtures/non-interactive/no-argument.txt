@@ -22,5 +22,13 @@ COMMANDS
 
 Use probe <command> --help for more information about a command.
 
+EXAMPLES
+
+  probe init                            Start in this project
+  probe add api -p 3000 --path /health  Declare a service
+  probe check                           Check every service
+  probe wait && pnpm test               Run the tests once all are up
+  probe                                 Open the dashboard (on a terminal)
+
 --- stderr
 probe: No command specified. See: probe --help
