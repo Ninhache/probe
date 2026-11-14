@@ -157,27 +157,31 @@ export function Dashboard({
     }
   };
 
-  // Keys read together reach ink as one string. The first is handled at once; each of the others
-  // waits for a render of its own, so it sees what the key before it changed.
+  // Several keys can arrive before the next render, in one string or one after the other. `press`
+  // belongs to a render: it is used only while no key was handled since that render, so a key
+  // always sees what the key before it changed. Otherwise the key waits for the next render.
   const waiting = useRef<Keystroke[]>([]);
-  const [, handled] = useState(0);
+  const handledKeys = useRef(0);
+  const seenKeys = handledKeys.current;
+  const [, redraw] = useState(0);
+  const handle = (keystroke: Keystroke) => {
+    press(keystroke);
+    handledKeys.current += 1;
+  };
   useEffect(() => {
+    if (seenKeys !== handledKeys.current) return;
     const next = waiting.current.shift();
     if (!next) return;
-    press(next);
-    handled((count) => count + 1);
+    handle(next);
+    redraw((count) => count + 1);
   });
   useInput((input, key) => {
-    const [first, ...rest] = splitKeys(input, key);
-    if (!first) return;
-    if (waiting.current.length > 0) {
-      waiting.current.push(first, ...rest);
-      return;
-    }
-    press(first);
-    if (rest.length === 0) return;
-    waiting.current.push(...rest);
-    handled((count) => count + 1);
+    const keys = splitKeys(input, key);
+    const fresh = seenKeys === handledKeys.current && waiting.current.length === 0;
+    const first = fresh ? keys.shift() : undefined;
+    if (first) handle(first);
+    waiting.current.push(...keys);
+    redraw((count) => count + 1);
   });
 
   const colors = createColors(terminal.color);
