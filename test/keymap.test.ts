@@ -4,8 +4,12 @@ import { helpBar, helpLines } from "../src/dashboard/keymap";
 describe("helpBar", () => {
   it("should show the keys of the list when there is room", () => {
     expect(helpBar("list", true, 100)).toBe(
-      "↑↓ jk move · r refresh · ↵ service · o options · ? help · q quit",
+      "↑↓ jk move · r check · ↵ service · u open · c copy · o options · ? help · q quit",
     );
+  });
+
+  it("should show every key of the list on 80 columns", () => {
+    expect(helpBar("list", true, 80)).toContain("jk move");
   });
 
   it("should show other keys in a panel", () => {
@@ -21,7 +25,10 @@ describe("helpBar", () => {
   });
 
   it("should give up moving first when the line is too wide", () => {
-    expect(helpBar("list", true, 60)).toBe("r refresh · ↵ service · o options · ? help · q quit");
+    expect(helpBar("list", true, 79)).toBe(
+      "r check · ↵ service · u open · c copy · o options · ? help · q quit",
+    );
+    expect(helpBar("list", true, 50)).toBe("↵ service · u open · o options · ? help · q quit");
   });
 
   it("should keep the keys that lead out when nothing else fits", () => {

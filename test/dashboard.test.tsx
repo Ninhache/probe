@@ -62,6 +62,8 @@ function open(options: {
   onTimeoutChange?: DashboardProps["onTimeoutChange"];
   onSettingsChange?: DashboardProps["onSettingsChange"];
   onSkipChange?: DashboardProps["onSkipChange"];
+  onOpen?: DashboardProps["onOpen"];
+  onCopy?: DashboardProps["onCopy"];
 }) {
   app = render(
     <Dashboard
@@ -73,6 +75,8 @@ function open(options: {
       onTimeoutChange={options.onTimeoutChange}
       onSettingsChange={options.onSettingsChange}
       onSkipChange={options.onSkipChange}
+      onOpen={options.onOpen}
+      onCopy={options.onCopy}
     />,
   );
   return app;
@@ -88,7 +92,7 @@ describe("dashboard", () => {
         "› ✓ api  http://localhost:3000/health  200  4ms",
         "  ✗ db   http://localhost:5432/        connection refused",
         "http://localhost:3000/health",
-        "↑↓ jk move · r refresh · ↵ service · o options · ? help · q quit",
+        "↑↓ jk move · r check · ↵ service · u open · c copy · o options · ? help · q quit",
       ].join("\n"),
     );
   });
@@ -110,7 +114,7 @@ describe("dashboard", () => {
     await tick();
     expect(lastFrame()).toContain("> ✓ api");
     expect(lastFrame()).toContain(
-      "jk move - r refresh - enter service - o options - ? help - q quit",
+      "jk move - r check - enter service - u open - c copy - o options - ? help - q quit",
     );
   });
 
@@ -504,6 +508,95 @@ describe("dashboard", () => {
     expect(lastFrame()).toContain("probe · 1/1 up · 1 skipped · every 60s");
   });
 
+  it("opens the URL of the selected service on u and says what happened", async () => {
+    const opened: string[] = [];
+    const { lastFrame, stdin } = open({
+      onOpen: async (name) => {
+        opened.push(name);
+        return `Opened ${name}`;
+      },
+    });
+    await tick();
+
+    stdin.write("j");
+    await tick();
+    stdin.write("u");
+    await tick();
+
+    expect(opened).toEqual(["db"]);
+    expect(lastFrame()).toContain("Opened db");
+  });
+
+  it("copies the curl command of the selected service on c, with the timeout it has now", async () => {
+    const copied: [string, number | undefined][] = [];
+    const { lastFrame, stdin } = open({
+      timeouts: { api: 5 },
+      onCopy: async (name, timeout) => {
+        copied.push([name, timeout]);
+        return "Copied";
+      },
+    });
+    await tick();
+
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write("l");
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("c");
+    await tick();
+
+    expect(copied).toEqual([["api", 10]]);
+    expect(lastFrame()).toContain("Copied");
+  });
+
+  it("shows whole a command that could not be copied, on a narrow terminal", async () => {
+    const command = "curl -i -L --max-time 3 http://localhost:3000/health";
+    const { lastFrame, stdin } = open({
+      terminal: { ...plain, columns: 30 },
+      onCopy: async () => `Not copied: ${command}`,
+    });
+    await tick();
+
+    stdin.write("c");
+    await tick();
+
+    expect(lastFrame()?.replaceAll("\n", " ")).toContain(command);
+  });
+
+  it("clears what u or c said at the next key", async () => {
+    const { lastFrame, stdin } = open({ onOpen: async () => "Opened it" });
+    await tick();
+    stdin.write("u");
+    await tick();
+
+    stdin.write("j");
+    await tick();
+
+    expect(lastFrame()).not.toContain("Opened it");
+  });
+
+  it("ignores u and c while a panel is open", async () => {
+    const calls: string[] = [];
+    const { stdin } = open({
+      onOpen: async (name) => `${calls.push(name)}`,
+      onCopy: async (name) => `${calls.push(name)}`,
+    });
+    await tick();
+    stdin.write("o");
+    await tick();
+
+    stdin.write("u");
+    await tick();
+    stdin.write("c");
+    await tick();
+
+    expect(calls).toEqual([]);
+  });
+
   it("lists every key on ? and comes back to the list on ?", async () => {
     const { lastFrame, stdin } = open({});
     await tick();
@@ -516,6 +609,8 @@ describe("dashboard", () => {
         "  ↑↓ jk  Move",
         "  r      Check now",
         "  ↵      Settings of the selected service",
+        "  u      Open its URL in the browser",
+        "  c      Copy its curl command",
         "  o      Options: interval and timeout",
         "Panels",
         "  ↑↓ jk  Move",

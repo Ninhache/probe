@@ -114,9 +114,14 @@ of macOS.
 | `↑` `↓` `j` `k` | Move                                   |
 | `r`             | Check now                              |
 | `Enter`         | Open the panel of the selected service |
+| `u`             | Open its URL in the browser            |
+| `c`             | Copy its curl command                  |
 | `o`             | Options: interval and timeout          |
 | `?`             | Every key; `?` or `Esc` closes         |
 | `q`             | Quit                                   |
+
+`c` uses `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the command is shown instead,
+to copy by hand.
 
 What you change there is saved in `.probe/local.yml`, for your machine only:
 
