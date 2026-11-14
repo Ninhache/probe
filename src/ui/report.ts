@@ -17,9 +17,10 @@ function nameBudget(nameWidth: number, columns: number, reserved: number): numbe
 }
 
 /**
- * Renders one line per check result.
+ * Renders one line per check result, followed by its hint when it has one.
  * On a terminal too narrow for the widest line, the target column is dropped and the rest is cut
  * to the width (6 columns at least); off a terminal (unknown width) lines are never cut.
+ * A hint is cut to the width of the terminal, whatever the other lines need.
  */
 export function formatCheckResults(results: CheckResult[], terminal: Terminal): string {
   const colors = createColors(terminal.color);
@@ -55,7 +56,11 @@ export function formatCheckResults(results: CheckResult[], terminal: Terminal): 
       } else {
         outcome = `${colors.green(String(result.status))}${GAP}${colors.dim(`${result.latencyMs}ms`)}`;
       }
-      return `${mark} ${name}${GAP}${target}${outcome}`;
+      const line = `${mark} ${name}${GAP}${target}${outcome}`;
+      if (!result.hint) return line;
+      const room = columns === undefined ? undefined : Math.max(1, columns - GAP.length);
+      const hint = room === undefined ? result.hint : truncate(result.hint, room);
+      return `${line}\n${GAP}${colors.dim(hint)}`;
     })
     .join("\n");
 }

@@ -168,6 +168,28 @@ describe("reports", () => {
     }
   });
 
+  it("print the hint of a failure under its line, never cut when the width is unknown", () => {
+    const hint = "nothing listens on :3000: is the service started?";
+    const down = [{ ...results[0], ok: false, error: "connection refused", hint }] as CheckResult[];
+
+    expect(formatCheckResults(down, plain)).toBe(
+      ["✗ api  http://127.0.0.1:4101/health  connection refused", `  ${hint}`].join("\n"),
+    );
+  });
+
+  it.each([100, 30, 6])("cut a hint to %i columns", (columns) => {
+    const hint = "nothing listens on :3000: is the service started?";
+    const down = [{ ...results[0], ok: false, error: "refused", hint }] as CheckResult[];
+
+    for (const env of [{}, { NO_COLOR: "1" }]) {
+      const text = formatCheckResults(down, detectTerminal({ isTTY: true, columns }, env));
+      const lines = text.split("\n").map(stripStyles);
+      expect(lines).toHaveLength(2);
+      expect(lines[1]?.length).toBeLessThanOrEqual(columns);
+      expect(lines[1]?.startsWith("  noth".slice(0, columns - 1))).toBe(true);
+    }
+  });
+
   it("render nothing for an empty list", () => {
     const narrow = detectTerminal({ isTTY: true, columns: 20 }, {});
     expect(formatCheckResults([], narrow)).toBe("");
