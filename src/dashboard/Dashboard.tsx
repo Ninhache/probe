@@ -157,8 +157,8 @@ export function Dashboard({
     }
   };
 
-  // Keys read together reach ink as one string. Each one is handled in a render of its own,
-  // so it sees what the key before it changed.
+  // Keys read together reach ink as one string. The first is handled at once; each of the others
+  // waits for a render of its own, so it sees what the key before it changed.
   const waiting = useRef<Keystroke[]>([]);
   const [, handled] = useState(0);
   useEffect(() => {
@@ -168,7 +168,15 @@ export function Dashboard({
     handled((count) => count + 1);
   });
   useInput((input, key) => {
-    waiting.current.push(...splitKeys(input, key));
+    const [first, ...rest] = splitKeys(input, key);
+    if (!first) return;
+    if (waiting.current.length > 0) {
+      waiting.current.push(first, ...rest);
+      return;
+    }
+    press(first);
+    if (rest.length === 0) return;
+    waiting.current.push(...rest);
     handled((count) => count + 1);
   });
 
