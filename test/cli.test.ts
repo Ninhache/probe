@@ -490,7 +490,28 @@ describe("probe (top level)", () => {
     }
     const usage = await exec(process.execPath, [CLI], cwd, env);
     expect(usage.code).toBe(2);
-    expect(usage.stdout).toContain("USAGE probe init|add|rm|ls|check|wait|status|sync|migrate");
+    expect(usage.stdout).toContain(
+      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|status|sync|migrate",
+    );
+  });
+
+  it("refuses --interval off a terminal, where no dashboard opens", async () => {
+    const cwd = await project();
+    await probe(cwd, "add", "api", "-p", String(port), "--path", "/health");
+
+    for (const args of [["--interval", "5"], ["--interval=5"]]) {
+      expect(await probe(cwd, ...args), args.join(" ")).toMatchObject({
+        code: 2,
+        stdout: "",
+        stderr: expect.stringContaining("needs an interactive terminal"),
+      });
+    }
+    for (const args of [["--interval", "abc"], ["--interval=0"], ["--interval"]]) {
+      expect(await probe(cwd, ...args), args.join(" ")).toMatchObject({
+        code: 2,
+        stderr: expect.stringContaining("--interval expects seconds"),
+      });
+    }
   });
 
   it("exits 2 on an unknown command", async () => {
