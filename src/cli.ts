@@ -19,6 +19,12 @@ import sync from "./commands/sync";
 import wait from "./commands/wait";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { loadConfig } from "./config/loader";
+import {
+  changedPreferences,
+  initialDashboardSettings,
+  readDashboardPreferences,
+  writeDashboardPreferences,
+} from "./config/local";
 import { DASHBOARD_INTERVAL_SECONDS, EXIT_ERROR, REFRESH_COMMAND } from "./constants";
 import { ProbeError } from "./errors";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
@@ -91,12 +97,14 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
  * `probe` alone on a terminal, inside a project with services, opens the dashboard.
  * The interactive libraries are imported here only, so every other path starts without them.
  * With `--interval` there is nothing to fall back to: what prevents the dashboard is an error.
+ * Settings come from `--interval`, then `local.yml`, then the defaults; those changed in the
+ * options panel are saved to `local.yml`.
  */
 async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const interval = dashboardInterval(rawArgs);
   if (interval === null) return false;
   const asked = interval !== undefined;
-  const intervalMs = secondsToMs(INTERVAL_OPTION, interval ?? String(DASHBOARD_INTERVAL_SECONDS));
+  const askedMs = asked ? secondsToMs(INTERVAL_OPTION, interval) : undefined;
   if (!isInteractive(process.stdin, process.stdout, process.env)) {
     if (!asked) return false;
     throw new ProbeError(
@@ -112,7 +120,15 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
   }
   const { openDashboard } = await import("./dashboard/open");
-  await openDashboard(config, stdoutTerminal(), intervalMs);
+  let settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
+  let saving: Promise<unknown> = Promise.resolve();
+  await openDashboard(config, stdoutTerminal(), settings, (next) => {
+    const changed = changedPreferences(settings, next);
+    settings = next;
+    // A read-only project must not break the dashboard: a failed save is dropped.
+    saving = saving.then(() => writeDashboardPreferences(paths, changed)).catch(() => {});
+  });
+  await saving;
   return true;
 }
 

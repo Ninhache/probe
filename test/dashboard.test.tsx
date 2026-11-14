@@ -4,6 +4,7 @@ import { render } from "ink-testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { Dashboard } from "../src/dashboard/Dashboard";
+import type { DashboardSettings } from "../src/dashboard/settings";
 import type { Terminal } from "../src/ui/terminal";
 
 const plain: Terminal = {
@@ -40,13 +41,15 @@ afterEach(() => app?.unmount());
 function open(options: {
   terminal?: Terminal;
   intervalMs?: number;
-  check?: (signal: AbortSignal) => Promise<CheckResult[]>;
+  check?: (signal: AbortSignal, timeoutMs: number) => Promise<CheckResult[]>;
+  onSettingsChange?: (settings: DashboardSettings) => void;
 }) {
   app = render(
     <Dashboard
       terminal={options.terminal ?? plain}
-      intervalMs={options.intervalMs ?? 60_000}
+      settings={{ intervalMs: options.intervalMs ?? 60_000, timeoutMs: 3_000 }}
       check={options.check ?? (async () => [api, db])}
+      onSettingsChange={options.onSettingsChange}
     />,
   );
   return app;
@@ -62,7 +65,7 @@ describe("dashboard", () => {
         "› ✓ api  http://localhost:3000/health  200  4ms",
         "  ✗ db   http://localhost:5432/        connection refused",
         "http://localhost:3000/health",
-        "↑↓ jk move · r refresh · q quit",
+        "↑↓ jk move · r refresh · o options · q quit",
       ].join("\n"),
     );
   });
@@ -83,7 +86,7 @@ describe("dashboard", () => {
     const { lastFrame } = open({ terminal: { ...plain, unicode: false } });
     await tick();
     expect(lastFrame()).toContain("> ✓ api");
-    expect(lastFrame()).toContain("jk move - r refresh - q quit");
+    expect(lastFrame()).toContain("jk move - r refresh - o options - q quit");
   });
 
   it("moves the selection with j, k and the arrows, within the list", async () => {
@@ -152,6 +155,91 @@ describe("dashboard", () => {
     expect(passes).toBe(1);
   });
 
+  it("opens the options on o and closes them on escape", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write("o");
+    await tick();
+    expect(lastFrame()).toBe(
+      [
+        "probe · 1/2 up · every 60s",
+        "› ✓ api  http://localhost:3000/health  200  4ms",
+        "  ✗ db   http://localhost:5432/        connection refused",
+        "http://localhost:3000/health",
+        "┌────────────────────────────┐",
+        "│ Options                    │",
+        "│ › Interval  ‹ 60s ›        │",
+        "│   Timeout   ‹ 3s ›         │",
+        "└────────────────────────────┘",
+        "↑↓ jk move · ←→ hl change · esc close",
+      ].join("\n"),
+    );
+    stdin.write(ESCAPE);
+    await tick(150);
+    expect(lastFrame()).not.toContain("Options");
+    expect(lastFrame()).toContain("o options");
+  });
+
+  it("changes the interval from the options, within the choices", async () => {
+    const changes: DashboardSettings[] = [];
+    const { lastFrame, stdin } = open({ onSettingsChange: (next) => changes.push(next) });
+    await tick();
+    stdin.write("o");
+    await tick();
+    stdin.write("h");
+    await tick();
+    expect(lastFrame()).toContain("every 30s");
+    expect(lastFrame()).toContain("› Interval  ‹ 30s ›");
+    stdin.write(`${ESCAPE}[C`);
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(lastFrame()).toContain("every 60s");
+    expect(changes).toEqual([
+      { intervalMs: 30_000, timeoutMs: 3_000 },
+      { intervalMs: 60_000, timeoutMs: 3_000 },
+    ]);
+  });
+
+  it("checks again with the new timeout as soon as it changes", async () => {
+    const timeouts: number[] = [];
+    const check = async (_signal: AbortSignal, timeoutMs: number) => {
+      timeouts.push(timeoutMs);
+      return [api];
+    };
+    const { lastFrame, stdin } = open({ check });
+    await tick();
+    stdin.write("o");
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(lastFrame()).toContain("› Timeout   ‹ 5s ›");
+    expect(timeouts).toEqual([3_000, 5_000]);
+  });
+
+  it("keeps the list still while the options are open", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write("o");
+    await tick();
+    stdin.write("j");
+    await tick();
+    expect(lastFrame()).toContain("› ✓ api");
+    expect(lastFrame()).toContain("› Timeout");
+  });
+
+  it("draws the options in ASCII, with no escape sequence, without unicode or colour", async () => {
+    const { lastFrame, frames, stdin } = open({ terminal: { ...plain, unicode: false } });
+    await tick();
+    stdin.write("o");
+    await tick();
+    expect(lastFrame()).toContain("| > Interval  < 60s >        |");
+    expect(lastFrame()).toContain("jk move - hl change - esc close");
+    expect(frames.join("")).not.toContain(ESCAPE);
+  });
+
   it("fits a 60-column terminal and follows a resize", async () => {
     const written: string[] = [];
     const stdout = Object.assign(new EventEmitter(), {
@@ -175,7 +263,11 @@ describe("dashboard", () => {
     const lines = () => frame().split("\n");
     const long = { ...db, name: "payments-gateway", error: "expected 200 or 204, got 503" };
     const ink = inkRender(
-      <Dashboard terminal={plain} intervalMs={60_000} check={async () => [api, long]} />,
+      <Dashboard
+        terminal={plain}
+        settings={{ intervalMs: 60_000, timeoutMs: 3_000 }}
+        check={async () => [api, long]}
+      />,
       {
         stdout: stdout as unknown as NodeJS.WriteStream,
         stdin: stdin as unknown as NodeJS.ReadStream,
