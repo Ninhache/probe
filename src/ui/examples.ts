@@ -46,6 +46,10 @@ export const EXAMPLES: Record<string, Example[]> = {
   status: [{ command: "probe status", note: "Version, migration, Makefile block" }],
   sync: [{ command: "probe sync", note: "Write the probe block of the Makefile" }],
   migrate: [{ command: "probe migrate", note: "Bring .probe/config.yml up to date" }],
+  completion: [
+    { command: "probe completion zsh", note: 'In ~/.zshrc: eval "$(probe completion zsh)"' },
+    { command: "probe completion bash", note: 'In ~/.bashrc: eval "$(probe completion bash)"' },
+  ],
 };
 
 /**

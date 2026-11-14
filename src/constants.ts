@@ -34,6 +34,8 @@ export const REGISTRY_TIMEOUT_MS = 5_000;
 export const UPDATE_CHECK_TTL_MS = 24 * 60 * 60 * 1000;
 export const UPDATE_CACHE_FILE = "latest.json";
 export const REFRESH_COMMAND = "__refresh-update-cache";
+/** Hidden command the completion scripts run: `probe __complete services`. */
+export const COMPLETE_COMMAND = "__complete";
 
 export const EXIT_OK = 0;
 export const EXIT_DOWN = 1;

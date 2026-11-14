@@ -9,6 +9,7 @@ import {
 } from "citty";
 import add from "./commands/add";
 import check from "./commands/check";
+import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
 import init from "./commands/init";
 import ls from "./commands/ls";
@@ -19,6 +20,8 @@ import { secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
 import wait from "./commands/wait";
+import { completableServices } from "./completion/services";
+import { COMPLETION_COMMAND } from "./completion/spec";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { loadConfig, writeServiceTimeout } from "./config/loader";
 import {
@@ -30,6 +33,7 @@ import {
   writeServiceSkip,
 } from "./config/local";
 import {
+  COMPLETE_COMMAND,
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
   EXIT_ERROR,
@@ -51,6 +55,8 @@ import {
 } from "./update/notifier";
 import { CLI_VERSION } from "./version";
 
+const commands = { init, add, rm, ls, check, wait, open, curl, status, sync, migrate };
+
 const main = defineCommand({
   meta: {
     name: "probe",
@@ -65,7 +71,7 @@ const main = defineCommand({
       default: String(DASHBOARD_INTERVAL_SECONDS),
     },
   },
-  subCommands: { init, add, rm, ls, check, wait, open, curl, status, sync, migrate },
+  subCommands: { ...commands, completion: completionCommand(commands) },
 });
 
 // citty styles its usage text whatever the stream is: strip it when stdout shows no colour.
@@ -83,7 +89,8 @@ async function printUsage<T extends ArgsDef = ArgsDef>(
 
 function notifyUpdate(rawArgs: string[]): void {
   const cliPath = process.argv[1];
-  if (updateCheckDisabled() || !cliPath) return;
+  // The completion script is printed at every shell start: no registry lookup, no notice there.
+  if (updateCheckDisabled() || !cliPath || rawArgs[0] === COMPLETION_COMMAND) return;
   scheduleRefresh(cacheDir(), cliPath);
   // `status` prints the update line itself.
   if (
@@ -182,8 +189,15 @@ function flushed(stream: NodeJS.WriteStream): Promise<void> {
   });
 }
 
+/** Answers the completion scripts: one word per line, and never an error, a Tab must stay silent. */
+async function printCompletions(kind: string | undefined): Promise<void> {
+  if (kind !== "services") return;
+  for (const name of await completableServices(process.cwd())) console.log(name);
+}
+
 async function run(rawArgs: string[]): Promise<void> {
   if (rawArgs[0] === REFRESH_COMMAND) return refreshCache(cacheDir());
+  if (rawArgs[0] === COMPLETE_COMMAND) return printCompletions(rawArgs[1]);
 
   const wantsHelp = rawArgs.includes("--help") || rawArgs.includes("-h");
   const wantsVersion = rawArgs.length === 1 && ["--version", "-v"].includes(rawArgs[0] as string);

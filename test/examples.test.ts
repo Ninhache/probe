@@ -2,6 +2,7 @@ import { type ArgsDef, parseArgs } from "citty";
 import { describe, expect, it } from "vitest";
 import add from "../src/commands/add";
 import check from "../src/commands/check";
+import completion from "../src/commands/completion";
 import curl from "../src/commands/curl";
 import init from "../src/commands/init";
 import ls from "../src/commands/ls";
@@ -25,6 +26,7 @@ const COMMANDS: Record<string, { args?: unknown }> = {
   status,
   sync,
   migrate,
+  completion: completion({}),
 };
 const HELP_WIDTH = 80;
 
