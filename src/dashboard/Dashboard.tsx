@@ -4,6 +4,7 @@ import type { CheckResult } from "../checkers/types";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
+import { type Keystroke, splitKeys } from "./keys";
 import type { Saved } from "./saves";
 import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
 
@@ -130,21 +131,21 @@ export function Dashboard({
     track(onTimeoutChange?.(name, value));
   };
 
-  useInput((input, key) => {
-    const up = key.upArrow || input === "k";
-    const down = key.downArrow || input === "j";
-    const left = key.leftArrow || input === "h";
-    const right = key.rightArrow || input === "l";
+  const press = ({ input, key }: Keystroke) => {
+    const up = key === "up" || input === "k";
+    const down = key === "down" || input === "j";
+    const left = key === "left" || input === "h";
+    const right = key === "right" || input === "l";
+    const enter = key === "return";
     const selectedName = latest?.[current]?.name;
     if (input === "q") exit();
     else if (panel === null) {
       if (input === "r") skipPause.current();
       else if (input === "o") setPanel({ kind: "options", row: 0 });
-      else if (key.return && selectedName)
-        setPanel({ kind: "service", name: selectedName, row: 0 });
+      else if (enter && selectedName) setPanel({ kind: "service", name: selectedName, row: 0 });
       else if (up) setSelected(Math.max(0, current - 1));
       else if (down) setSelected(Math.min(last, current + 1));
-    } else if (key.escape || (panel.kind === "options" ? input === "o" : key.return))
+    } else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter))
       setPanel(null);
     else if (up || down) {
       const lastRow = (panel.kind === "options" ? SETTING_ROWS : SERVICE_ROWS).length - 1;
@@ -154,6 +155,21 @@ export function Dashboard({
       else if (panel.row === TIMEOUT_ROW) changeTimeout(panel.name, right ? 1 : -1);
       else toggleSkip(panel.name);
     }
+  };
+
+  // Keys read together reach ink as one string. Each one is handled in a render of its own,
+  // so it sees what the key before it changed.
+  const waiting = useRef<Keystroke[]>([]);
+  const [, handled] = useState(0);
+  useEffect(() => {
+    const next = waiting.current.shift();
+    if (!next) return;
+    press(next);
+    handled((count) => count + 1);
+  });
+  useInput((input, key) => {
+    waiting.current.push(...splitKeys(input, key));
+    handled((count) => count + 1);
   });
 
   const colors = createColors(terminal.color);

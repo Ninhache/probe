@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { render as inkRender } from "ink";
 import { render } from "ink-testing-library";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { Dashboard, type DashboardProps, type ServiceTimeouts } from "../src/dashboard/Dashboard";
 import type { DashboardSettings } from "../src/dashboard/settings";
@@ -378,6 +378,36 @@ describe("dashboard", () => {
     await tick();
     expect(lastFrame()).toContain("› Timeout  ‹ 10s ›");
     expect(changes).toEqual([["api", 10]]);
+  });
+
+  it("moves down twice when two keys are read together", async () => {
+    const cache: CheckResult = { ...api, name: "cache" };
+    const { lastFrame, stdin } = open({ check: async () => [api, db, cache] });
+    await tick();
+
+    stdin.write("jj");
+
+    await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
+  });
+
+  it("handles keys read together in order: open the panel, change twice, close", async () => {
+    const changes: [string, number | undefined][] = [];
+    const { lastFrame, stdin } = open({
+      onTimeoutChange: (name, seconds) => {
+        changes.push([name, seconds]);
+      },
+    });
+    await tick();
+
+    stdin.write("j\rjll\r");
+
+    await vi.waitFor(() => {
+      expect(changes).toEqual([
+        ["db", 1],
+        ["db", 2],
+      ]);
+      expect(lastFrame()).not.toContain("Timeout");
+    });
   });
 
   it("says so when a change could not be saved, until a save goes through", async () => {
