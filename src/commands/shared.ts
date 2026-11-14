@@ -35,14 +35,18 @@ export function rawServices(loaded: LoadedConfig): Record<string, RawConfig> {
   return (loaded.raw.services ?? {}) as Record<string, RawConfig>;
 }
 
-/** Writes the new service list, then regenerates the Makefile block, unless it was edited by hand. */
+/**
+ * Writes the new service list, then regenerates the Makefile block when the project has one.
+ * No block (the Makefile is opt-in, through `probe sync`) or a block edited by hand is left as is.
+ */
 export async function saveServices(
   loaded: LoadedConfig,
   services: Record<string, RawConfig>,
 ): Promise<void> {
-  const edited = (await blockState(loaded.paths, loaded.config)) === "modified";
+  const block = await blockState(loaded.paths, loaded.config);
   const saved = await saveConfig(loaded, { ...loaded.raw, services });
-  if (!edited) {
+  if (block === "missing") return;
+  if (block !== "modified") {
     await syncMakefile(saved.paths, saved.config);
     return;
   }

@@ -27,23 +27,25 @@ Use the full name with `npx`: `npx probe` is another package.
 
 ## Quick start
 
-1. `probe init` creates `.probe/` and a `probe` block in your `Makefile`.
+1. `probe init` creates `.probe/`.
 2. `probe add api -p 3000 --path /health` declares a service.
-3. `probe check` or `make check` checks everything. Exit code is 1 if a service is down.
-4. Commit `.probe/config.yml`, `.probe/lock.yml` and the `Makefile`.
+3. `probe check` checks everything. Exit code is 1 if a service is down.
+4. Commit `.probe/config.yml`.
+
+Want `make check` too? See [Makefile](#makefile): it is optional.
 
 ## Commands
 
 | Command                                                   | What it does                                                           |
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `probe init`                                              | Create `.probe/`, the Makefile block and the `.gitignore` entries      |
+| `probe init`                                              | Create `.probe/` and the `.gitignore` entries                          |
 | `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service                                                          |
 | `probe rm <name>`                                         | Remove a service                                                       |
 | `probe ls`                                                | List services                                                          |
 | `probe check [name...] [--json] [--timeout <seconds>]`    | Check all services, or the named ones                                  |
 | `probe wait [name...] [--json] [--timeout <seconds>]`     | Check again until every service is up, or give up after the timeout    |
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
-| `probe sync`                                              | Regenerate the Makefile block                                          |
+| `probe sync`                                              | Add or regenerate the Makefile block (optional)                        |
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
 
 Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
@@ -104,21 +106,24 @@ is judged as is.
 Files in `.probe/`:
 
 - `config.yml`: services. Commit it.
-- `lock.yml`: CLI version and hash of the Makefile block. Commit it.
+- `lock.yml`: CLI version and hash of the Makefile block. Only there once `probe sync` has run. Commit it.
 - `local.yml`: per-machine values (dashboard settings, skipped services). Ignored by git.
 
 Never put secrets in `config.yml` or `lock.yml`.
 
 ## Makefile
 
-`probe init` and `probe sync` write a block between two markers. Everything outside the block is yours and is
-never touched.
+Optional. `probe sync` writes a block between two markers, in a new `Makefile` or at the end of yours. Everything
+outside the block is yours and is never touched. Without a block, no command creates or changes a `Makefile`.
 
 ```make
 # >>> probe (generated - do not edit, run `probe sync`)
 ...
 # <<< probe
 ```
+
+Once the block is there, `probe add` and `probe rm` keep it up to date. Commit the `Makefile` and
+`.probe/lock.yml`.
 
 Targets: `help`, `check`, `status` and one `check-<name>` per service. The block uses `probe` when it is in
 your `PATH`, else `npx -y @ninhache/probe@latest`. It works with GNU Make 3.81 (the macOS default).
