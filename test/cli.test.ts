@@ -271,6 +271,74 @@ describe("probe check", () => {
   });
 });
 
+describe("a service skipped in local.yml", () => {
+  async function skippedDown(): Promise<string> {
+    const root = await project();
+    await addApi(root);
+    await addDown(root);
+    await writeFile(join(root, ".probe", "local.yml"), "services:\n  down:\n    skip: true\n");
+    return root;
+  }
+
+  it("is not checked by probe check, which says so", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "check");
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("✓ api");
+    expect(result.stdout).toMatch(/^- down {2}http:\/\/127\.0\.0\.1:\d+\/ +skipped$/m);
+  });
+
+  it("is marked in the JSON output", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "check", "--json");
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject([
+      { name: "api", ok: true, status: 200 },
+      { name: "down", ok: true, skipped: true },
+    ]);
+  });
+
+  it("is checked all the same when it is named", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "check", "down");
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("connection refused");
+  });
+
+  it("is not waited for by probe wait", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "wait", "--timeout", "2");
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("is marked by probe ls", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "ls");
+
+    expect(result.stdout).toMatch(/^down {2}http:\/\/127\.0\.0\.1:\d+\/ {2}skipped$/m);
+    expect(result.stdout).not.toMatch(/^api .*skipped$/m);
+  });
+
+  it("changes neither the config, the lock nor the Makefile", async () => {
+    const root = await skippedDown();
+
+    const status = await probe(root, "status");
+
+    expect(status.code).toBe(0);
+    expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).not.toContain("skip");
+  });
+});
+
 describe("probe wait", () => {
   it("exits 0 as soon as a service that starts late is up", async () => {
     const root = await project();

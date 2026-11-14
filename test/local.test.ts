@@ -14,7 +14,9 @@ import {
   changedPreferences,
   initialDashboardSettings,
   readDashboardPreferences,
+  readSkippedServices,
   writeDashboardPreferences,
+  writeServiceSkip,
 } from "../src/config/local";
 import { tempProject } from "./helpers";
 
@@ -134,5 +136,89 @@ describe("dashboard settings at start", () => {
     expect(changedPreferences(start, { ...start, timeoutMs: 5_000 })).toEqual({ timeout: 5 });
     expect(changedPreferences(start, { ...start, intervalMs: 10_000 })).toEqual({ interval: 10 });
     expect(changedPreferences(start, start)).toEqual({});
+  });
+});
+
+describe("skipped services in local.yml", () => {
+  it("skips nothing when the file is missing", async () => {
+    const paths = await tempProject(CONFIG);
+
+    expect(await readSkippedServices(paths)).toEqual(new Set());
+  });
+
+  it("reads back the services it set aside", async () => {
+    const paths = await tempProject(CONFIG);
+
+    expect(await writeServiceSkip(paths, "db", true)).toBe(true);
+    expect(await writeServiceSkip(paths, "api", true)).toBe(true);
+
+    expect(await readSkippedServices(paths)).toEqual(new Set(["db", "api"]));
+    expect(await readFile(paths.local, "utf8")).toBe(
+      "services:\n  db:\n    skip: true\n  api:\n    skip: true\n",
+    );
+  });
+
+  it("removes what it wrote when a service comes back, keeping the rest", async () => {
+    const paths = await tempProject(CONFIG);
+    const before = "# mine\ndashboard:\n  interval: 5\n";
+    await writeFile(paths.local, before);
+    await writeServiceSkip(paths, "db", true);
+
+    expect(await writeServiceSkip(paths, "db", false)).toBe(true);
+
+    expect(await readFile(paths.local, "utf8")).toBe(before);
+  });
+
+  it("leaves an empty file, not an empty map, when nothing else is in it", async () => {
+    const paths = await tempProject(CONFIG);
+    await writeServiceSkip(paths, "db", true);
+
+    await writeServiceSkip(paths, "db", false);
+
+    expect(await readFile(paths.local, "utf8")).toBe("");
+    expect(await writeServiceSkip(paths, "db", true)).toBe(true);
+    expect(await readSkippedServices(paths)).toEqual(new Set(["db"]));
+  });
+
+  it("keeps the other keys of a service that comes back", async () => {
+    const paths = await tempProject(CONFIG);
+    await writeFile(paths.local, "services:\n  db:\n    port: 5433 # mine\n    skip: true\n");
+
+    await writeServiceSkip(paths, "db", false);
+
+    expect(await readFile(paths.local, "utf8")).toBe("services:\n  db:\n    port: 5433 # mine\n");
+  });
+
+  it("creates no file to bring back a service that was not set aside", async () => {
+    const paths = await tempProject(CONFIG);
+
+    expect(await writeServiceSkip(paths, "db", false)).toBe(true);
+
+    expect(await readdir(paths.dir)).toEqual(["config.yml"]);
+  });
+
+  it.each([
+    ["a value that is not true", "services:\n  db:\n    skip: yes please\n"],
+    ["services that are not a map", "services: 3\n"],
+    ["a service that is not a map", "services:\n  db: 3\n"],
+    ["invalid YAML", "services: [\n"],
+  ])("skips nothing on %s", async (_case, text) => {
+    const paths = await tempProject(CONFIG);
+    await writeFile(paths.local, text);
+
+    expect(await readSkippedServices(paths)).toEqual(new Set());
+  });
+
+  it.each([
+    ["services that are not a map", "services: 3\n"],
+    ["a service that is not a map", "services:\n  db: 3\n"],
+    ["invalid YAML", "services: [\n"],
+  ])("does not write over %s", async (_case, text) => {
+    const paths = await tempProject(CONFIG);
+    await writeFile(paths.local, text);
+
+    expect(await writeServiceSkip(paths, "db", true)).toBe(false);
+
+    expect(await readFile(paths.local, "utf8")).toBe(text);
   });
 });

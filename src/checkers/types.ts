@@ -9,7 +9,10 @@ export interface CheckContext {
 export interface CheckResult {
   name: string;
   type: string;
+  /** Also true for a skipped service: it is not down. */
   ok: boolean;
+  /** Set aside in `local.yml`: not checked. */
+  skipped?: true;
   target: string;
   status?: number;
   latencyMs: number;
