@@ -1,10 +1,8 @@
 import { render } from "ink";
-import { curlCommand, targetUrl } from "../checkers/http";
 import { runChecks } from "../checkers/run";
-import { clipboardTools, copyText } from "../clipboard";
 import type { Config } from "../config/schema";
-import { openerCommand, openUrl } from "../open-url";
 import type { Terminal } from "../ui/terminal";
+import { serviceActions } from "./actions";
 import { Dashboard, type DashboardProps } from "./Dashboard";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
@@ -41,26 +39,12 @@ export async function openDashboard(
       timeout === undefined ? [] : [[name, timeout]],
     ),
   );
-  const service = (name: string) => config.services[name] as Config["services"][string];
-  const onOpen: DashboardProps["onOpen"] = async (name) => {
-    const url = targetUrl(service(name));
-    return (await openUrl(url))
-      ? `Opened ${url}`
-      : `${openerCommand(process.platform)} not found, open it yourself: ${url}`;
-  };
-  const onCopy: DashboardProps["onCopy"] = async (name, timeout) => {
-    const command = curlCommand({ ...service(name), timeout });
-    if (await copyText(command)) return `Copied: ${command}`;
-    const tools = clipboardTools(process.platform, process.env).map(([tool]) => tool);
-    return `Not copied (no ${tools.join(" or ")}), copy it yourself: ${command}`;
-  };
   const app = render(
     <Dashboard
       terminal={terminal}
       check={check}
       timeouts={timeouts}
-      onOpen={onOpen}
-      onCopy={onCopy}
+      {...serviceActions(config)}
       {...state}
     />,
     { alternateScreen: true },
