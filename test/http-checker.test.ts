@@ -79,6 +79,7 @@ describe("http checker", () => {
       ok: false,
       status: 500,
       error: "expected 2xx, got 500",
+      hint: "the service answers with an error: look at its logs",
     });
   });
 
@@ -111,6 +112,7 @@ describe("http checker", () => {
     const result = await check({ path: "/slow" }, 100);
 
     expect(result).toMatchObject({ ok: false, error: "timeout after 0.1s" });
+    expect(result.hint).toContain("`timeout`");
     expect(result.status).toBeUndefined();
     expect(result.latencyMs).toBeLessThan(1_000);
   });
@@ -124,6 +126,7 @@ describe("http checker", () => {
     expect(await check({ port: closedPort })).toMatchObject({
       ok: false,
       error: "connection refused",
+      hint: `nothing listens on :${closedPort}: is the service started?`,
     });
   });
 });

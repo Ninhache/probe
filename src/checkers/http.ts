@@ -1,13 +1,6 @@
 import type { Service } from "../config/schema";
+import { diagnoseFailure, diagnoseStatus } from "./diagnosis";
 import type { Checker } from "./types";
-
-const REASONS: Record<string, string> = {
-  ECONNREFUSED: "connection refused",
-  ECONNRESET: "connection reset",
-  ENOTFOUND: "host not found",
-  EAI_AGAIN: "host not found",
-  EHOSTUNREACH: "host unreachable",
-};
 
 export function targetUrl(service: Service): string {
   const bareIpv6 = service.host.includes(":") && !service.host.startsWith("[");
@@ -22,22 +15,6 @@ function isExpected(expect: Service["expect"], status: number): boolean {
 
 function expectsRedirect(expect: Service["expect"]): boolean {
   return [expect ?? []].flat().some((status) => status >= 300 && status < 400);
-}
-
-function describeExpected(expect: Service["expect"]): string {
-  if (expect === undefined) return "2xx";
-  return Array.isArray(expect) ? expect.join(" or ") : String(expect);
-}
-
-function failureReason(error: unknown, timeoutMs: number): string {
-  if (error instanceof Error && error.name === "TimeoutError") {
-    return `timeout after ${timeoutMs / 1000}s`;
-  }
-  // fetch wraps the socket error in `cause`; with both IPv4 and IPv6 tried it is an AggregateError.
-  const cause = (error as { cause?: { code?: string; errors?: { code?: string }[] } })?.cause;
-  const code = cause?.code ?? cause?.errors?.[0]?.code;
-  if (code) return REASONS[code] ?? code;
-  return error instanceof Error ? error.message : String(error);
 }
 
 export const httpChecker: Checker = {
@@ -58,10 +35,10 @@ export const httpChecker: Checker = {
       await response.body?.cancel();
       const { status } = response;
       if (isExpected(service.expect, status)) return { ...base, ok: true, status, latencyMs };
-      const error = `expected ${describeExpected(service.expect)}, got ${status}`;
-      return { ...base, ok: false, status, latencyMs, error };
+      return { ...base, ok: false, status, latencyMs, ...diagnoseStatus(service, status) };
     } catch (error) {
-      return { ...base, ok: false, latencyMs: elapsed(), error: failureReason(error, timeoutMs) };
+      const diagnosis = diagnoseFailure(error, service, timeoutMs);
+      return { ...base, ok: false, latencyMs: elapsed(), ...diagnosis };
     }
   },
 };

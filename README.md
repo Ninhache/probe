@@ -11,6 +11,7 @@ Declare your project's local services once. Check they are up with one command, 
 $ probe check
 ✓ api    http://localhost:3000/health  200  12ms
 ✗ front  http://localhost:5173/        connection refused
+  nothing listens on :5173: is the service started?
 $ echo $?
 1
 ```
@@ -49,6 +50,10 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
 
 Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
+
+A service that is down comes with a hint when the cause is a known one: connection refused, timeout, host not
+found, unexpected status, certificate rejected after a redirect to https. With `--json` it is the `hint` field,
+next to `error`.
 
 `probe wait` is for scripts: `probe wait && pnpm test`. It checks at once, then again after 0.5 s, 1 s, 2 s, 4 s
 and every 5 s, for 60 s in total. `--timeout` sets the total, `--interval` the first pause, `--max-interval` the

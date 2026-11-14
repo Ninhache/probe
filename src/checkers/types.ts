@@ -18,6 +18,8 @@ export interface CheckResult {
   status?: number;
   latencyMs: number;
   error?: string;
+  /** What to try next, when the failure is a known one. */
+  hint?: string;
 }
 
 export interface Checker {

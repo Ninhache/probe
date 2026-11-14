@@ -15,7 +15,8 @@ exit code: 1
     "target": "http://127.0.0.1:DOWN_PORT/",
     "ok": false,
     "latencyMs": N,
-    "error": "connection refused"
+    "error": "connection refused",
+    "hint": "nothing listens on :DOWN_PORT: is the service started?"
   }
 ]
 --- stderr
