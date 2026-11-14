@@ -3,21 +3,24 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type DetectDeps, detectPorts, detectServices, systemDeps } from "../src/detect";
+import { detectServices, systemDeps } from "../src/detect";
+import { allSources } from "../src/detect/registry";
+import { answersHttp, detectPorts, type PortProbe } from "../src/detect/sources/ports";
 import { tempDir } from "./helpers";
 
 const SECRET = "S3CRET";
-const NO_PORTS: Pick<DetectDeps, "answers" | "ports"> = { answers: async () => false, ports: [] };
+const NO_PORTS: PortProbe = { answers: async () => false, ports: [] };
 
 /** An example project made of `files`, searched with the real file reader. */
 async function detectIn(
   files: Record<string, string>,
   existing = {},
-  ports: Partial<DetectDeps> = {},
+  probe: Partial<PortProbe> = {},
 ) {
   const root = await tempDir();
   for (const [name, text] of Object.entries(files)) await writeFile(join(root, name), text);
-  return detectServices(root, existing, { ...systemDeps({}), ...NO_PORTS, ...ports });
+  const sources = allSources({ ...NO_PORTS, ...probe });
+  return detectServices(root, existing, { ...systemDeps({}), sources });
 }
 
 describe("detectServices in .env", () => {
@@ -59,6 +62,86 @@ describe("detectServices in .env", () => {
       "SITE_URL=https://localhost:8443\nDOCS_URL=http://example.com\nREDIS_URL=http://localhost:6379\n";
 
     expect(await detectIn({ ".env": env })).toEqual([]);
+  });
+});
+
+describe("detectServices in a compose file", () => {
+  const COMPOSE = `
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:\${API_PORT:-4000}:3000"
+      - target: 9229
+        published: "9229"
+  db:
+    image: postgres
+    ports: ["5433:5432"]
+  worker:
+    image: busybox
+  metrics:
+    image: statsd
+    ports: ["8125:8125/udp", "3000"]
+`;
+
+  it.each(["compose.yml", "compose.yaml", "docker-compose.yml", "docker-compose.yaml"])(
+    "should propose the published http ports of %s under the service names",
+    async (file) => {
+      const found = await detectIn({ [file]: COMPOSE });
+
+      expect(found).toEqual([
+        { name: "web", service: { port: 8080 }, source: `${file} (web service)` },
+        { name: "api", service: { port: 4000 }, source: `${file} (api service)` },
+        { name: "api-9229", service: { port: 9229 }, source: `${file} (api service)` },
+      ]);
+    },
+  );
+
+  it("should take the value of a variable from .env, and only that", async () => {
+    const env = `API_PORT=4100\nSTRIPE_KEY=${SECRET}\n`;
+
+    const found = await detectIn({ "compose.yml": COMPOSE, ".env": env });
+
+    expect(found.find(({ name }) => name === "api")?.service).toEqual({ port: 4100 });
+    expect(JSON.stringify(found)).not.toContain(SECRET);
+  });
+
+  it("should keep the compose name when .env gives the same port", async () => {
+    const found = await detectIn({ "compose.yml": COMPOSE, ".env": "PORT=8080\n" });
+
+    expect(found.filter(({ service }) => service.port === 8080).map(({ name }) => name)).toEqual([
+      "web",
+    ]);
+  });
+
+  it("should find nothing in a compose file that is not valid YAML", async () => {
+    expect(await detectIn({ "compose.yml": "services: [" })).toEqual([]);
+  });
+});
+
+describe("detectServices with a source of its own", () => {
+  it("should apply the same rules to any source", async () => {
+    const custom = {
+      id: "custom",
+      find: async () => [
+        { name: "Bad Name!", service: { port: 4000 }, source: "custom" },
+        { name: "db", service: { port: 5432 }, source: "custom" },
+        { name: "ok", service: { port: 4001 }, source: "custom" },
+        { name: "ok", service: { port: 4002 }, source: "custom" },
+      ],
+    };
+
+    const found = await detectServices(
+      "/nowhere",
+      {},
+      { read: async () => null, sources: [custom] },
+    );
+
+    expect(found.map(({ name }) => name)).toEqual(["ok", "ok-2"]);
   });
 });
 
@@ -106,9 +189,7 @@ describe("detectServices on local ports", () => {
   afterAll(() => new Promise((done) => server.close(done)));
 
   it("should propose a port where an HTTP server answers, whatever the status", async () => {
-    const { answers } = systemDeps({});
-
-    const found = await detectIn({}, {}, { answers, ports: [port, closedPort] });
+    const found = await detectIn({}, {}, { answers: answersHttp, ports: [port, closedPort] });
 
     expect(found).toEqual([
       { name: `port-${port}`, service: { port }, source: `answers on localhost:${port}` },
@@ -129,7 +210,7 @@ describe("detectServices on local ports", () => {
     await new Promise<void>((done) => redirecting.listen(0, "localhost", done));
     const redirectingPort = (redirecting.address() as AddressInfo).port;
 
-    const found = await detectIn({}, {}, { ...systemDeps({}), ports: [redirectingPort] });
+    const found = await detectIn({}, {}, { answers: answersHttp, ports: [redirectingPort] });
     await new Promise((done) => redirecting.close(done));
     await new Promise((done) => target.close(done));
 
