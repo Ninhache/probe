@@ -3,10 +3,11 @@ import type { Key } from "ink";
 /** One key press: a named key, or the character typed. */
 export interface Keystroke {
   input: string;
-  key?: "up" | "down" | "left" | "right" | "return" | "escape";
+  key?: "up" | "down" | "left" | "right" | "return" | "escape" | "backspace" | "tab";
 }
 
 const ESCAPE = String.fromCharCode(27);
+const DELETE = String.fromCharCode(127);
 const ARROWS: Record<string, Keystroke["key"]> = { A: "up", B: "down", C: "right", D: "left" };
 // An arrow sequence, or any single character.
 const KEY_PATTERN = new RegExp(`${ESCAPE}\\[([ABCD])|[\\s\\S]`, "g");
@@ -18,7 +19,17 @@ function named(key: Key): Keystroke["key"] {
   if (key.rightArrow) return "right";
   if (key.return) return "return";
   if (key.escape) return "escape";
+  // Terminals send DEL for the backspace key: ink calls it `delete`.
+  if (key.backspace || key.delete) return "backspace";
+  if (key.tab) return "tab";
   return undefined;
+}
+
+/** The character a key press types into a text field, if it types one. */
+export function typedCharacter({ input, key }: Keystroke): string | undefined {
+  return key === undefined && input.length === 1 && input >= " " && input !== DELETE
+    ? input
+    : undefined;
 }
 
 /**
@@ -33,6 +44,8 @@ export function splitKeys(input: string, key: Key): Keystroke[] {
     if (arrow) return { input: "", key: ARROWS[arrow] };
     if (text === "\r" || text === "\n") return { input: "", key: "return" };
     if (text === ESCAPE) return { input: "", key: "escape" };
+    if (text === DELETE || text === "\b") return { input: "", key: "backspace" };
+    if (text === "\t") return { input: "", key: "tab" };
     return { input: text };
   });
 }

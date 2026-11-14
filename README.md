@@ -81,7 +81,7 @@ tick. Nothing is ticked at first, and nothing is written unless you tick it. The
   each, redirects not followed).
   `PROBE_DETECT_PORTS=4000,4001` tries other ports, `PROBE_DETECT_PORTS=` none.
 
-`probe rm` is the one command that deletes something. On a terminal it asks first, with "No" selected: `--yes`
+`probe rm` deletes something, so on a terminal it asks first, with "No" selected: `--yes`
 (`-y`) skips the question. Off a terminal, in a script or in CI, it removes at once, as before.
 
 `probe open` uses `open` on macOS and `xdg-open` elsewhere. Without it, the URL is printed and the exit code is
@@ -109,21 +109,32 @@ of macOS.
 `probe` alone, on a terminal, opens a live list of your services and checks them every 2 s
 (`probe --interval 5` for another pace). Off a terminal, in CI or in a pipe, nothing changes: use `probe check`.
 
-| Key             | What it does                           |
-| --------------- | -------------------------------------- |
-| `↑` `↓` `j` `k` | Move                                   |
-| `r`             | Check now                              |
-| `Enter`         | Open the panel of the selected service |
-| `u`             | Open its URL in the browser            |
-| `c`             | Copy its curl command                  |
-| `o`             | Options: interval and timeout          |
-| `?`             | Every key; `?` or `Esc` closes         |
-| `q`             | Quit                                   |
+| Key             | What it does                                   |
+| --------------- | ---------------------------------------------- |
+| `↑` `↓` `j` `k` | Move                                           |
+| `r`             | Check now                                      |
+| `Enter`         | Open the panel of the selected service         |
+| `u`             | Open its URL in the browser                    |
+| `c`             | Copy its curl command                          |
+| `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
+| `a`             | Add a service                                  |
+| `e`             | Edit the selected service                      |
+| `d`             | Remove the selected service, after a question  |
+| `o`             | Options: interval and timeout                  |
+| `?`             | Every key; `?` or `Esc` closes                 |
+| `q`             | Quit                                           |
+
+The bar at the bottom shows the keys you need first; `?` lists them all.
 
 `c` uses `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the command is shown instead,
 to copy by hand.
 
-What you change there is saved in `.probe/local.yml`, for your machine only:
+`a` and `e` open a form: name, port, host, path, expected status. `↑` `↓` or `Tab` change field, `Enter` saves,
+`Esc` cancels. A field left empty takes its default. `d` asks first: only `y` removes. All three write
+`.probe/config.yml` the way `probe add` and `probe rm` do: comments kept, [Makefile](#makefile) block kept up to
+date. While you type, in the filter or in the form, `q` and `?` are letters.
+
+The panels save what you change in `.probe/local.yml`, for your machine only:
 
 ```yaml
 dashboard: { interval: 5, timeout: 3 }
@@ -186,7 +197,7 @@ outside the block is yours and is never touched. Without a block, no command cre
 # <<< probe
 ```
 
-Once the block is there, `probe add` and `probe rm` keep it up to date. Commit the `Makefile` and
+Once the block is there, `probe add`, `probe rm` and the dashboard keep it up to date. Commit the `Makefile` and
 `.probe/lock.yml`.
 
 Targets: `help`, `check`, `status`, `probe` (opens the [dashboard](#dashboard)) and one `check-<name>` per

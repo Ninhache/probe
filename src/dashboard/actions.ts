@@ -20,22 +20,27 @@ const system = (): ActionDeps => ({
 });
 
 /**
- * What `u` and `c` do for a service of `config`, each resolving to the lines that say what happened.
+ * What `u` and `c` do for a service of the config as it is when the key is pressed, each resolving to the lines that say what happened.
  * When the tool is missing, the URL or the command is alone on its line, to be selected by hand.
  */
 export function serviceActions(
-  config: Config,
+  config: () => Config,
   deps: ActionDeps = system(),
 ): Required<Pick<DashboardProps, "onOpen" | "onCopy">> {
-  const service = (name: string) => config.services[name] as Config["services"][string];
+  const service = (name: string) => config().services[name];
+  const gone = (name: string) => `${name} is no longer in the config`;
   return {
     async onOpen(name) {
-      const url = targetUrl(service(name));
+      const found = service(name);
+      if (!found) return gone(name);
+      const url = targetUrl(found);
       if (await deps.openUrl(url)) return `Opened ${url}`;
       return `${openerCommand(deps.platform)} not found. The URL:\n${url}`;
     },
     async onCopy(name, timeout) {
-      const command = curlCommand({ ...service(name), timeout });
+      const found = service(name);
+      if (!found) return gone(name);
+      const command = curlCommand({ ...found, timeout });
       if (await deps.copyText(command)) return `Copied: ${command}`;
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy with. The command:\n${command}`;

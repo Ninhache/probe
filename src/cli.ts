@@ -16,6 +16,7 @@ import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import open from "./commands/open";
 import rm from "./commands/rm";
+import { type ServiceWritten, writeService } from "./commands/service-writes";
 import { secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
@@ -124,7 +125,7 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
  * The interactive libraries are imported here only, so every other path starts without them.
  * With `--interval` there is nothing to fall back to: what prevents the dashboard is an error.
  * Settings come from `--interval`, then `local.yml`, then the defaults; what the panels change
- * is saved to `local.yml`, except the timeout of a service: it is shared, so it goes to `config.yml`.
+ * is saved to `local.yml`, except what a service is and its timeout: shared, so in `config.yml`.
  */
 async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const interval = dashboardInterval(rawArgs);
@@ -166,6 +167,20 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
         () => writeServiceTimeout(paths, name, seconds),
         `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
       ),
+    onServiceWrite: async (write) => {
+      let written: ServiceWritten | null = null;
+      const failure = await saves.save(
+        `${PROBE_DIR}/${CONFIG_FILE}`,
+        async () => {
+          written = await writeService(paths, write);
+          return written !== null;
+        },
+        write.kind === "add"
+          ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
+          : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+      );
+      return { failure, ...(written as ServiceWritten | null) };
+    },
   });
   await saves.idle();
   // The dashboard said so too, but its screen is gone once it closes.
