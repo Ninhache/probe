@@ -88,7 +88,7 @@ describe("dashboard", () => {
         "› ✓ api  http://localhost:3000/health  200  4ms",
         "  ✗ db   http://localhost:5432/        connection refused",
         "http://localhost:3000/health",
-        "↑↓ jk move · r refresh · ↵ service · o options · q quit",
+        "↑↓ jk move · r refresh · ↵ service · o options · ? help · q quit",
       ].join("\n"),
     );
   });
@@ -109,7 +109,9 @@ describe("dashboard", () => {
     const { lastFrame } = open({ terminal: { ...plain, unicode: false } });
     await tick();
     expect(lastFrame()).toContain("> ✓ api");
-    expect(lastFrame()).toContain("jk move - r refresh - enter service - o options - q quit");
+    expect(lastFrame()).toContain(
+      "jk move - r refresh - enter service - o options - ? help - q quit",
+    );
   });
 
   it("moves the selection with j, k and the arrows, within the list", async () => {
@@ -194,7 +196,7 @@ describe("dashboard", () => {
         "│ › Interval  ‹ 60s ›        │",
         "│   Timeout   ‹ 3s ›         │",
         "└────────────────────────────┘",
-        "↑↓ jk move · ←→ hl change · esc close",
+        "↑↓ jk move · ←→ hl change · esc close · ? help · q quit",
       ].join("\n"),
     );
     stdin.write(ESCAPE);
@@ -263,7 +265,7 @@ describe("dashboard", () => {
     stdin.write("o");
     await tick();
     expect(lastFrame()).toContain("| > Interval  < 60s >        |");
-    expect(lastFrame()).toContain("jk move - hl change - esc close");
+    expect(lastFrame()).toContain("jk move - hl change - esc close - ? help - q quit");
     expect(frames.join("")).not.toContain(ESCAPE);
   });
 
@@ -285,7 +287,7 @@ describe("dashboard", () => {
         "│ › Skip     ‹ no ›          │",
         "│   Timeout  ‹ default ›     │",
         "└────────────────────────────┘",
-        "↑↓ jk move · ←→ hl change · esc close",
+        "↑↓ jk move · ←→ hl change · esc close · ? help · q quit",
       ].join("\n"),
     );
     stdin.write(ENTER);
@@ -502,6 +504,66 @@ describe("dashboard", () => {
     expect(lastFrame()).toContain("probe · 1/1 up · 1 skipped · every 60s");
   });
 
+  it("lists every key on ? and comes back to the list on ?", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write("?");
+    await tick();
+    expect(lastFrame()).toBe(
+      [
+        "probe · keys",
+        "List",
+        "  ↑↓ jk  Move",
+        "  r      Check now",
+        "  ↵      Settings of the selected service",
+        "  o      Options: interval and timeout",
+        "Panels",
+        "  ↑↓ jk  Move",
+        "  ←→ hl  Change the value",
+        "  esc    Close",
+        "Everywhere",
+        "  ?      This help",
+        "  q      Quit",
+        "? esc close · q quit",
+      ].join("\n"),
+    );
+    stdin.write("?");
+    await tick();
+    expect(lastFrame()).toContain("probe · 1/2 up");
+  });
+
+  it("closes the help on escape, back to the panel that was open", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write("o?");
+    await tick();
+    expect(lastFrame()).not.toContain("│ Options");
+    stdin.write(ESCAPE);
+    await tick();
+    expect(lastFrame()).toContain("│ Options");
+  });
+
+  it("ignores the keys of the list while the help is open", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write("?jo");
+    await tick();
+    stdin.write("?");
+    await tick();
+    expect(lastFrame()).toContain("› ✓ api");
+    expect(lastFrame()).not.toContain("│ Options");
+  });
+
+  it("draws the help in ASCII, with no escape sequence, without unicode or colour", async () => {
+    const { lastFrame, stdin } = open({ terminal: { ...plain, unicode: false } });
+    await tick();
+    stdin.write("?");
+    await tick();
+    expect(lastFrame()).toContain("  enter  Settings of the selected service");
+    expect(lastFrame()).toContain("? esc close - q quit");
+    expect(lastFrame()).not.toContain(ESCAPE);
+  });
+
   it("fits a 60-column terminal and follows a resize", async () => {
     const written: string[] = [];
     const stdout = Object.assign(new EventEmitter(), {
@@ -546,6 +608,7 @@ describe("dashboard", () => {
       stdout.emit("resize");
       await tick();
       expect(lines()).toContain("  ✗ payments-ga…  expected 20…");
+      expect(lines()).toContain("o options · ? help · q quit");
       for (const line of lines()) expect(line.length).toBeLessThanOrEqual(30);
     } finally {
       ink.unmount();
