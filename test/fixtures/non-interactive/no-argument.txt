@@ -2,7 +2,7 @@ exit code: 2
 --- stdout
 Health checks for your local dev services (probe vVERSION)
 
-USAGE probe [OPTIONS] init|add|rm|ls|check|wait|status|sync|migrate
+USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|status|sync|migrate
 
 OPTIONS
 
@@ -16,6 +16,8 @@ COMMANDS
        ls    List services                                                       
     check    Check that services respond (all of them by default)                
      wait    Check again and again until services are up (all of them by default)
+     open    Open the URL of a service in the browser                            
+     curl    Print the curl command that requests a service                      
    status    Show pending migration, Makefile state and updates                  
      sync    Add or regenerate the probe block of the Makefile (optional)        
   migrate    Migrate the config to the current schema version                    

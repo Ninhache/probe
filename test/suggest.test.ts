@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { closest, typoDistance } from "../src/suggest";
 
-const COMMANDS = ["init", "add", "rm", "ls", "check", "wait", "status", "sync", "migrate"];
+const COMMANDS = ["init", "add", "rm", "ls", "check", "wait", "open", "curl", "status", "sync"];
 
 describe("typoDistance", () => {
   it.each([
@@ -24,7 +24,9 @@ describe("closest", () => {
     ["chekc", "check"],
     ["cehk", "check"],
     ["stats", "status"],
-    ["migrat", "migrate"],
+    ["stauts", "status"],
+    ["opne", "open"],
+    ["crul", "curl"],
     ["Check", "check"],
     ["sl", "ls"],
     ["ad", "add"],
@@ -33,7 +35,7 @@ describe("closest", () => {
     expect(closest(typed, COMMANDS)).toBe(command);
   });
 
-  it.each(["nope", "deploy", "x", "zz", "xyz", ""])("suggests nothing for %j", (typed) => {
+  it.each(["nope", "deploy", "x", "zz", "xyz", "", "ynsc"])("suggests nothing for %j", (typed) => {
     expect(closest(typed, COMMANDS)).toBeUndefined();
   });
 

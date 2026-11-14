@@ -9,9 +9,11 @@ import {
 } from "citty";
 import add from "./commands/add";
 import check from "./commands/check";
+import curl from "./commands/curl";
 import init from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
+import open from "./commands/open";
 import rm from "./commands/rm";
 import { secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
@@ -63,7 +65,7 @@ const main = defineCommand({
       default: String(DASHBOARD_INTERVAL_SECONDS),
     },
   },
-  subCommands: { init, add, rm, ls, check, wait, status, sync, migrate },
+  subCommands: { init, add, rm, ls, check, wait, open, curl, status, sync, migrate },
 });
 
 // citty styles its usage text whatever the stream is: strip it when stdout shows no colour.
