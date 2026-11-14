@@ -40,3 +40,13 @@ export const COMPLETE_COMMAND = "__complete";
 export const EXIT_OK = 0;
 export const EXIT_DOWN = 1;
 export const EXIT_ERROR = 2;
+
+/**
+ * Local ports tried when looking for services to propose: the usual ones of dev servers.
+ * Not 5000 nor 7000: on macOS, AirPlay Receiver answers there.
+ */
+export const DETECT_PORTS = [3000, 3001, 4200, 4321, 5173, 8000, 8080];
+/** Overrides DETECT_PORTS: a comma-separated list, empty to try none. */
+export const DETECT_PORTS_ENV = "PROBE_DETECT_PORTS";
+// A local server answers in a few ms: a short limit keeps `init` and `add` instant.
+export const DETECT_TIMEOUT_MS = 300;

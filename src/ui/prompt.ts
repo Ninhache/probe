@@ -56,3 +56,28 @@ export async function ask(
   if (isCancel(answer)) return null;
   return answer || (defaultValue ?? "");
 }
+
+/** One line of a checklist. */
+export interface Choice {
+  label: string;
+  /** Shown dimmed next to the label of the line the cursor is on. */
+  hint?: string;
+}
+
+/**
+ * Shows a checklist on the terminal. Nothing is ticked first: Enter alone picks nothing.
+ * @param message the question above the list
+ * @param choices the lines, in order
+ * @param streams streams to use instead of the process terminal
+ * @returns the indexes of the ticked lines, or null when cancelled (Ctrl+C, Escape)
+ */
+export async function choose(
+  message: string,
+  choices: Choice[],
+  streams: PromptStreams = {},
+): Promise<number[] | null> {
+  const { multiselect, isCancel } = await import("@clack/prompts");
+  const options = choices.map((choice, value) => ({ value, ...choice }));
+  const picked = await multiselect({ message, options, required: false, ...streams });
+  return isCancel(picked) ? null : picked;
+}
