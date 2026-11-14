@@ -25,7 +25,10 @@ export const EXAMPLES: Record<string, Example[]> = {
     { command: "probe add admin -p 8080 --expect 200,204", note: "Accept these statuses only" },
     { command: "probe add db -p 5432 --timeout 10", note: "Give it 10 s to answer" },
   ],
-  rm: [{ command: "probe rm api", note: "Remove the service named api" }],
+  rm: [
+    { command: "probe rm api", note: "Remove the service named api" },
+    { command: "probe rm api --yes", note: "Remove it without the question" },
+  ],
   ls: [{ command: "probe ls", note: "List the services and their URL" }],
   check: [
     { command: "probe check", note: "Check every service" },

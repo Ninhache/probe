@@ -41,7 +41,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `probe init`                                              | Create `.probe/` and the `.gitignore` entries                          |
 | `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` gives it its own timeout)         |
-| `probe rm <name>`                                         | Remove a service                                                       |
+| `probe rm <name> [--yes]`                                 | Remove a service                                                       |
 | `probe ls`                                                | List services                                                          |
 | `probe check [name...] [--json] [--timeout <seconds>]`    | Check all services, or the named ones                                  |
 | `probe wait [name...] [--json] [--timeout <seconds>]`     | Check again until every service is up, or give up after the timeout    |
@@ -63,6 +63,9 @@ and every 5 s, for 60 s in total. `--timeout` sets the total, `--interval` the f
 longest one. Unlike `check --timeout`, which is the time given to each service, `wait --timeout` covers the whole
 wait; each check inside it still gets 3 s, or the service's own `timeout`. Progress goes to stderr, the final
 report to stdout; exit code `1` names the services still down.
+
+`probe rm` is the one command that deletes something. On a terminal it asks first, with "No" selected: `--yes`
+(`-y`) skips the question. Off a terminal, in a script or in CI, it removes at once, as before.
 
 `probe open` uses `open` on macOS and `xdg-open` elsewhere. Without it, the URL is printed and the exit code is
 `1`. `probe curl api` prints a command to copy, or to run: `probe curl api | sh`.

@@ -828,7 +828,7 @@ describe("probe (top level)", () => {
   it.each([
     [["--help"], "probe add api -p 3000 --path /health  Declare a service"],
     [["check", "--help"], "probe check api db        Check these two only"],
-    [["rm", "-h"], "probe rm api  Remove the service named api"],
+    [["rm", "-h"], "probe rm api --yes  Remove it without the question"],
   ])("ends the help of %j with examples", async (args, example) => {
     const { code, stdout } = await probe(await tempDir(), ...args);
 
