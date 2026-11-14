@@ -3,11 +3,15 @@ import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const ANSI = "\u001b[";
+
+/** Exit code reported for a run stopped by its time limit, as `timeout(1)` does. */
+const KILLED = 124;
 
 interface Run {
   code: number;
@@ -20,14 +24,16 @@ function exec(
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv = {},
+  timeout = 0,
 ): Promise<Run> {
   return new Promise((done) => {
     execFile(
       file,
       args,
-      { cwd, env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", ...env } },
+      { cwd, timeout, env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", ...env } },
       (error, stdout, stderr) => {
         const code = error ? ((error as { code?: number }).code ?? 1) : 0;
+        if (error?.killed) return done({ code: KILLED, stdout, stderr });
         done({ code: typeof code === "number" ? code : 1, stdout, stderr });
       },
     );
@@ -573,6 +579,34 @@ describe("probe wait", () => {
 
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain("No services yet");
+  });
+});
+
+describe("something still pending once the report is printed", () => {
+  const HOLD_OPEN = pathToFileURL(resolve(import.meta.dirname, "fixtures", "hold-open.mjs")).href;
+  const held = (cwd: string, ...args: string[]) =>
+    exec(process.execPath, ["--import", HOLD_OPEN, CLI, ...args], cwd, {}, 5_000);
+
+  it("check returns at once, with its report and exit code", async () => {
+    const root = await project();
+    await addApi(root);
+    await addDown(root);
+
+    const result = await held(root, "check");
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("✓ api");
+    expect(result.stdout).toMatch(/✗ down .*connection refused/);
+  });
+
+  it("wait returns at once too", async () => {
+    const root = await project();
+    await addApi(root);
+
+    const result = await held(root, "wait", "--json");
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject([{ name: "api", ok: true }]);
   });
 });
 

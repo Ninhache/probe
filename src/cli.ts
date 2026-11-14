@@ -157,6 +157,13 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   return true;
 }
 
+/** Resolves once everything written to the stream so far has left the process. */
+function flushed(stream: NodeJS.WriteStream): Promise<void> {
+  return new Promise((done) => {
+    stream.write("", () => done());
+  });
+}
+
 async function run(rawArgs: string[]): Promise<void> {
   if (rawArgs[0] === REFRESH_COMMAND) return refreshCache(cacheDir());
 
@@ -164,10 +171,8 @@ async function run(rawArgs: string[]): Promise<void> {
   const wantsVersion = rawArgs.length === 1 && ["--version", "-v"].includes(rawArgs[0] as string);
   if (wantsHelp || wantsVersion) return runMain(main, { rawArgs, showUsage: printUsage });
 
-  let dashboard = false;
   try {
-    dashboard = await openedDashboard(rawArgs);
-    if (!dashboard) await runCommand(main, { rawArgs });
+    if (!(await openedDashboard(rawArgs))) await runCommand(main, { rawArgs });
   } catch (error) {
     process.exitCode = EXIT_ERROR;
     if (error instanceof ProbeError) {
@@ -183,7 +188,9 @@ async function run(rawArgs: string[]): Promise<void> {
   }
   notifyUpdate(rawArgs);
   // A check cut short can leave a socket connecting for seconds: do not wait for it.
-  if (dashboard) process.exit();
+  await flushed(process.stdout);
+  await flushed(process.stderr);
+  process.exit();
 }
 
 await run(process.argv.slice(2));
