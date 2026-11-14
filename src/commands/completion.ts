@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { bashScript } from "../completion/bash";
+import { fishScript } from "../completion/fish";
 import {
   COMPLETION_COMMAND,
   type CommandLike,
@@ -10,14 +11,18 @@ import {
 import { zshScript } from "../completion/zsh";
 import { ProbeError } from "../errors";
 
-const SCRIPTS: Record<Shell, typeof zshScript> = { zsh: zshScript, bash: bashScript };
+const SCRIPTS: Record<Shell, typeof zshScript> = {
+  zsh: zshScript,
+  bash: bashScript,
+  fish: fishScript,
+};
 
 const meta = {
   name: COMPLETION_COMMAND,
   description: `Print the shell completion script (${SHELLS.join(", ")})`,
 };
 const args = {
-  shell: { type: "positional", description: SHELLS.join(" or "), required: true },
+  shell: { type: "positional", description: SHELLS.join(", "), required: true },
 } as const;
 
 /**

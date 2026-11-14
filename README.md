@@ -50,7 +50,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
 | `probe sync`                                              | Add or regenerate the Makefile block (optional)                        |
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
-| `probe completion <zsh\|bash>`                            | Print the shell completion script                                      |
+| `probe completion <zsh\|bash\|fish>`                      | Print the shell completion script                                      |
 
 Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 
@@ -76,10 +76,12 @@ Tab completes the commands, their options and the names of your services (`probe
 ```sh
 eval "$(probe completion zsh)"     # in ~/.zshrc, after compinit
 eval "$(probe completion bash)"    # in ~/.bashrc (macOS: ~/.bash_profile)
+probe completion fish | source     # in ~/.config/fish/config.fish
 ```
 
 In zsh you can also save it once instead: `probe completion zsh > ~/.zfunc/_probe`, with `~/.zfunc` in your
-`fpath`. It works with the bash 3.2 of macOS.
+`fpath`; in fish, `probe completion fish > ~/.config/fish/completions/probe.fish`. It works with the bash 3.2
+of macOS.
 
 ## Dashboard
 

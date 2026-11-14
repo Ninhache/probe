@@ -49,6 +49,7 @@ export const EXAMPLES: Record<string, Example[]> = {
   completion: [
     { command: "probe completion zsh", note: 'In ~/.zshrc: eval "$(probe completion zsh)"' },
     { command: "probe completion bash", note: 'In ~/.bashrc: eval "$(probe completion bash)"' },
+    { command: "probe completion fish | source", note: "In ~/.config/fish/config.fish" },
   ],
 };
 
