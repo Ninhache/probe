@@ -27,7 +27,15 @@ import {
   writeDashboardPreferences,
   writeServiceSkip,
 } from "./config/local";
-import { DASHBOARD_INTERVAL_SECONDS, EXIT_ERROR, REFRESH_COMMAND } from "./constants";
+import {
+  CONFIG_FILE,
+  DASHBOARD_INTERVAL_SECONDS,
+  EXIT_ERROR,
+  LOCAL_FILE,
+  PROBE_DIR,
+  REFRESH_COMMAND,
+} from "./constants";
+import { createSaveQueue } from "./dashboard/saves";
 import { ProbeError } from "./errors";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
@@ -123,23 +131,29 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   }
   const { openDashboard } = await import("./dashboard/open");
   let settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
-  let saving: Promise<unknown> = Promise.resolve();
-  // One write at a time; a read-only project must not break the dashboard: a failed save is dropped.
-  const save = (write: () => Promise<boolean>) => {
-    saving = saving.then(write).catch(() => {});
-  };
+  const saves = createSaveQueue();
+  const local = `${PROBE_DIR}/${LOCAL_FILE}`;
+  const saveLocal = (write: () => Promise<boolean>) =>
+    saves.save(local, write, `${local} cannot be edited safely: fix or delete it`);
   await openDashboard(config, stdoutTerminal(), {
     settings,
     skipped: await readSkippedServices(paths),
     onSettingsChange: (next) => {
       const changed = changedPreferences(settings, next);
       settings = next;
-      save(() => writeDashboardPreferences(paths, changed));
+      return saveLocal(() => writeDashboardPreferences(paths, changed));
     },
-    onSkipChange: (name, skip) => save(() => writeServiceSkip(paths, name, skip)),
-    onTimeoutChange: (name, seconds) => save(() => writeServiceTimeout(paths, name, seconds)),
+    onSkipChange: (name, skip) => saveLocal(() => writeServiceSkip(paths, name, skip)),
+    onTimeoutChange: (name, seconds) =>
+      saves.save(
+        `${PROBE_DIR}/${CONFIG_FILE}`,
+        () => writeServiceTimeout(paths, name, seconds),
+        `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+      ),
   });
-  await saving;
+  await saves.idle();
+  // The dashboard said so too, but its screen is gone once it closes.
+  for (const failure of saves.failures()) console.error(`probe: not saved: ${failure}`);
   return true;
 }
 

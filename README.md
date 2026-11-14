@@ -85,6 +85,9 @@ A skipped service is left out of `probe check`, `probe wait` and the dashboard, 
 The panel of a service also sets its timeout. That one is shared: it is written to `.probe/config.yml`, so
 commit it.
 
+A change that cannot be saved (a file that is read-only, or not valid YAML) still applies until you quit. The
+dashboard shows `not saved: …`, and says it again on stderr when it closes.
+
 ## Config
 
 `.probe/config.yml`:
