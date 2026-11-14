@@ -41,6 +41,22 @@ describe("writeService", () => {
     expect(text).not.toMatch(/admin:[^\n]*host/);
   });
 
+  it("should leave a one-status list as written when the edit gives the same status", async () => {
+    const config = CONFIG.replace("front: { port: 5173 }", "front: { port: 5173, expect: [200] }");
+    const paths = await tempProject(config);
+
+    await writeService(paths, {
+      kind: "edit",
+      name: "front",
+      fields: { host: "localhost", port: 5174, path: "/", expect: 200 },
+    });
+
+    const text = await readFile(paths.config, "utf8");
+    expect(text).toContain("port: 5174");
+    // Still a list: the YAML writer may only space it differently.
+    expect(text).toMatch(/expect: \[ ?200 ?\]/);
+  });
+
   it("should write nothing when the service to add already exists", async () => {
     const paths = await tempProject(CONFIG);
 

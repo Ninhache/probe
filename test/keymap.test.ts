@@ -105,8 +105,13 @@ describe("helpColumns", () => {
     expect(widest(left) + HELP_GAP + widest(right)).toBeLessThanOrEqual(80);
   });
 
+  it("should keep two columns down to 60 columns, in unicode and in ASCII", () => {
+    expect(helpColumns(true, 60)).toHaveLength(2);
+    expect(helpColumns(false, 60)).toHaveLength(2);
+  });
+
   it("should fall back to one column when two do not fit", () => {
-    expect(helpColumns(true, 50)).toEqual([helpLines(true)]);
+    expect(helpColumns(true, 40)).toEqual([helpLines(true)]);
   });
 
   it("should fit the height of a terminal of 24 lines in two columns", () => {

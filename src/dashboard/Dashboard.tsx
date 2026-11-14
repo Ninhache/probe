@@ -84,6 +84,13 @@ const PANEL_FRAME_WIDTH = 4;
 
 const seconds = (ms: number) => `${ms / 1000}s`;
 
+/** The last `max` characters of a text, the cut shown at its start. */
+function ending(text: string, max: number): string {
+  const characters = Array.from(text);
+  if (characters.length <= max) return text;
+  return max <= 1 ? "…" : `…${characters.slice(characters.length - max + 1).join("")}`;
+}
+
 /**
  * Live list of the services, checked again `intervalMs` after each pass ends; `o` opens the options,
  * enter the settings of the selected service, `u` its URL in the browser, `c` copies its curl
@@ -471,10 +478,11 @@ export function Dashboard({
             const active = index === dialog.row;
             const value = dialog.values[key];
             const room = Math.max(1, formWidth - PANEL_FRAME_WIDTH);
-            const typed = truncate(
-              `${active ? marker : "  "}${label.padEnd(formLabelWidth)}  ${value}${active ? CURSOR : ""}`,
-              room,
-            );
+            const prefix = `${active ? marker : "  "}${label.padEnd(formLabelWidth)}  `;
+            // The field being typed shows its end, where the next character goes.
+            const typed = active
+              ? `${prefix}${ending(value, Math.max(1, room - prefix.length - CURSOR.length))}${CURSOR}`
+              : truncate(`${prefix}${value}`, room);
             const example = value
               ? ""
               : truncate(placeholder, Math.max(0, room - typed.length - 1));

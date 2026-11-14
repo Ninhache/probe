@@ -33,14 +33,14 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
 const BINDINGS: readonly Binding[] = [
   list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 1 }),
   list({ keys: "r", action: "check", help: "Check now", barless: true }),
-  list({ keys: "↵", ascii: "enter", action: "service", help: "Settings of the service", drop: 4 }),
-  list({ keys: "u", action: "open", help: "Open its URL in a browser", barless: true }),
-  list({ keys: "c", action: "copy", help: "Copy its curl command", barless: true }),
-  list({ keys: "e", action: "edit", help: "Edit its port, host, path", barless: true }),
-  list({ keys: "d", action: "remove", help: "Remove it (asks first)", barless: true }),
+  list({ keys: "↵", ascii: "enter", action: "service", help: "Service settings", drop: 4 }),
+  list({ keys: "u", action: "open", help: "Open its URL", barless: true }),
+  list({ keys: "c", action: "copy", help: "Copy curl command", barless: true }),
+  list({ keys: "e", action: "edit", help: "Edit the service", barless: true }),
+  list({ keys: "d", action: "remove", help: "Remove it", barless: true }),
   list({ keys: "a", action: "add", help: "Add a service", drop: 2 }),
   list({ keys: "/", action: "filter", help: "Filter by name", drop: 3 }),
-  list({ keys: "o", action: "options", help: "Options: interval, timeout", barless: true }),
+  list({ keys: "o", action: "options", help: "Options", barless: true }),
   {
     screens: ["panel"],
     section: "Panels",
@@ -75,7 +75,7 @@ const BINDINGS: readonly Binding[] = [
     keys: "↵",
     ascii: "enter",
     action: "keep",
-    help: "Keep it, back to the list",
+    help: "Keep the filter",
   },
   { screens: ["filter"], section: "Filter", keys: "esc", action: "clear", help: "Clear it" },
   {
@@ -84,7 +84,7 @@ const BINDINGS: readonly Binding[] = [
     keys: "↑↓ tab",
     ascii: "tab",
     action: "field",
-    help: "Next or previous field",
+    help: "Change field",
     drop: 1,
   },
   {

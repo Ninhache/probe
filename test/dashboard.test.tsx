@@ -53,11 +53,12 @@ const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, 
   );
 const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Types keys and waits for them: the dashboard handles one key per render. */
-async function type(stdin: { write(keys: string): void }, keys: string): Promise<void> {
-  stdin.write(keys);
-  await tick(50 + 25 * keys.length);
-}
+/** Waits for the screen to show a text: keys are handled one per render. */
+const shows = (lastFrame: () => string | undefined, text: string) =>
+  vi.waitFor(() => expect(lastFrame()).toContain(text));
+/** Waits for a text to leave the screen. */
+const hides = (lastFrame: () => string | undefined, text: string) =>
+  vi.waitFor(() => expect(lastFrame()).not.toContain(text));
 
 let app: ReturnType<typeof render> | undefined;
 afterEach(() => app?.unmount());
@@ -617,14 +618,14 @@ describe("dashboard", () => {
       "List",
       "  ↑↓ jk   Move",
       "  r       Check now",
-      "  ↵       Settings of the service",
-      "  u       Open its URL in a browser",
-      "  c       Copy its curl command",
-      "  e       Edit its port, host, path",
-      "  d       Remove it (asks first)",
+      "  ↵       Service settings",
+      "  u       Open its URL",
+      "  c       Copy curl command",
+      "  e       Edit the service",
+      "  d       Remove it",
       "  a       Add a service",
       "  /       Filter by name",
-      "  o       Options: interval, timeout",
+      "  o       Options",
     ];
     const right = [
       "Panels",
@@ -633,10 +634,10 @@ describe("dashboard", () => {
       "  esc     Close",
       "Filter",
       "  ↑↓      Move",
-      "  ↵       Keep it, back to the list",
+      "  ↵       Keep the filter",
       "  esc     Clear it",
       "Add and edit",
-      "  ↑↓ tab  Next or previous field",
+      "  ↑↓ tab  Change field",
       "  ↵       Save",
       "  esc     Cancel",
       "Outside a text field",
@@ -683,7 +684,7 @@ describe("dashboard", () => {
     await tick();
     stdin.write("?");
     await tick();
-    expect(lastFrame()).toContain("  enter   Settings of the service");
+    expect(lastFrame()).toContain("  enter   Service settings");
     expect(lastFrame()).toContain("  arrows  Move");
     expect(lastFrame()).toContain("? esc close - q quit");
     expect(lastFrame()).not.toContain(ESCAPE);
@@ -746,8 +747,9 @@ describe("dashboard filter", () => {
     const { lastFrame, stdin } = open({});
     await tick();
 
-    await type(stdin, "/D");
+    stdin.write("/D");
 
+    await shows(lastFrame, "Filter: D_");
     expect(lastFrame()).toBe(
       [
         "probe · 1/2 up · every 60s",
@@ -763,30 +765,33 @@ describe("dashboard filter", () => {
     const { lastFrame, stdin } = open({});
     await tick();
 
-    await type(stdin, "/q?j");
+    stdin.write("/q?j");
 
-    expect(lastFrame()).toContain("Filter: q?j_");
+    await shows(lastFrame, "Filter: q?j_");
     expect(lastFrame()).toContain('no service matches "q?j"');
   });
 
   it("widens the list again on backspace", async () => {
     const { lastFrame, stdin } = open({});
     await tick();
+    stdin.write("/dx");
+    await shows(lastFrame, "Filter: dx_");
 
-    await type(stdin, `/dx${BACKSPACE}`);
+    stdin.write(BACKSPACE);
 
-    expect(lastFrame()).toContain("Filter: d_");
+    await shows(lastFrame, "Filter: d_");
     expect(lastFrame()).toContain("✗ db");
   });
 
   it("shows every service again on escape", async () => {
     const { lastFrame, stdin } = open({});
     await tick();
+    stdin.write("/d");
+    await shows(lastFrame, "Filter: d_");
 
-    await type(stdin, "/d");
-    await type(stdin, ESCAPE);
+    stdin.write(ESCAPE);
 
-    expect(lastFrame()).toContain("› ✓ api");
+    await shows(lastFrame, "› ✓ api");
     expect(lastFrame()).toContain("/ filter");
   });
 
@@ -795,29 +800,30 @@ describe("dashboard filter", () => {
     const { lastFrame, stdin } = open({ onOpen });
     await tick();
 
-    await type(stdin, `/d${ENTER}u`);
+    stdin.write(`/d${ENTER}u`);
 
-    expect(onOpen).toHaveBeenCalledWith("db");
+    await vi.waitFor(() => expect(onOpen).toHaveBeenCalledWith("db"));
     expect(lastFrame()).toContain("probe · 1/2 up · every 60s · filter: d");
   });
 
   it("clears a kept filter on escape", async () => {
     const { lastFrame, stdin } = open({});
     await tick();
+    stdin.write(`/d${ENTER}`);
+    await shows(lastFrame, "filter: d");
 
-    await type(stdin, `/d${ENTER}`);
-    await type(stdin, ESCAPE);
+    stdin.write(ESCAPE);
 
+    await hides(lastFrame, "filter: d");
     expect(lastFrame()).toContain("› ✓ api");
-    expect(lastFrame()).not.toContain("filter: d");
   });
 });
 
 describe("dashboard service changes", () => {
+  type Outcome = Awaited<ReturnType<NonNullable<DashboardProps["onServiceWrite"]>>>;
+
   /** A project whose services follow what the dashboard writes. */
-  function project(
-    outcome: Awaited<ReturnType<NonNullable<DashboardProps["onServiceWrite"]>>> = SAVED,
-  ) {
+  function project(outcome: Outcome = SAVED) {
     let services = [api, db];
     const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async (write) => {
       if (outcome.saved && write.kind === "remove")
@@ -838,9 +844,9 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, "d");
+    stdin.write("d");
 
-    expect(lastFrame()).toContain("Remove api from the config?");
+    await shows(lastFrame, "Remove api from the config?");
     expect(lastFrame()).toContain("y remove · n esc keep");
     expect(onServiceWrite).not.toHaveBeenCalled();
   });
@@ -849,13 +855,14 @@ describe("dashboard service changes", () => {
     const { onServiceWrite, ...props } = project();
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
+    stdin.write("d");
+    await shows(lastFrame, "Remove api");
 
-    await type(stdin, "d");
-    await type(stdin, answer);
+    stdin.write(answer);
 
+    await hides(lastFrame, "Remove api");
     expect(onServiceWrite).not.toHaveBeenCalled();
     expect(lastFrame()).toContain("› ✓ api");
-    expect(lastFrame()).not.toContain("Remove api");
   });
 
   it("removes the service on y and says so", async () => {
@@ -863,12 +870,12 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, "jdy");
+    stdin.write("jdy");
 
+    await shows(lastFrame, "Removed db");
     expect(onServiceWrite).toHaveBeenCalledWith({ kind: "remove", name: "db" });
-    expect(lastFrame()).toContain("Removed db");
     expect(lastFrame()).not.toContain("✗ db");
-    expect(lastFrame()).toContain("probe · 1/1 up");
+    await shows(lastFrame, "probe · 1/1 up");
   });
 
   it("removes the service the filter shows, not the one at that place in the full list", async () => {
@@ -876,9 +883,11 @@ describe("dashboard service changes", () => {
     const { stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, `/d${ENTER}dy`);
+    stdin.write(`/d${ENTER}dy`);
 
-    expect(onServiceWrite).toHaveBeenCalledWith({ kind: "remove", name: "db" });
+    await vi.waitFor(() =>
+      expect(onServiceWrite).toHaveBeenCalledWith({ kind: "remove", name: "db" }),
+    );
   });
 
   it("keeps the service on screen and says why when the removal is not saved", async () => {
@@ -889,10 +898,10 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, "dy");
+    stdin.write("dy");
 
+    await shows(lastFrame, "not saved: config.yml is read-only");
     expect(lastFrame()).toContain("› ✓ api");
-    expect(lastFrame()).toContain("not saved: config.yml is read-only");
     expect(lastFrame()).not.toContain("Removed api");
   });
 
@@ -900,21 +909,22 @@ describe("dashboard service changes", () => {
     const { onServiceWrite, ...props } = project();
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
+    stdin.write("dy");
+    await shows(lastFrame, "Removed api");
 
-    await type(stdin, "dy");
-    await type(stdin, "dy");
+    stdin.write("dy");
 
-    expect(lastFrame()).toContain("no service: press a to add one");
+    await shows(lastFrame, "no service: press a to add one");
   });
 
   it("opens an empty form on a", async () => {
     const { lastFrame, stdin } = open(project());
     await tick();
 
-    await type(stdin, "a");
+    stdin.write("a");
 
+    await shows(lastFrame, "│ Add a service");
     const frame = lastFrame() ?? "";
-    expect(frame).toContain("│ Add a service");
     expect(frame).toContain("│ › Name    _ api");
     expect(frame).toContain("│   Port    3000");
     expect(frame).toContain("│   Expect  any 2xx");
@@ -926,43 +936,56 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, `aweb${TAB}8080${ENTER}`);
+    stdin.write(`aweb${TAB}8080${ENTER}`);
 
+    await shows(lastFrame, "Added web");
     expect(onServiceWrite).toHaveBeenCalledWith({
       kind: "add",
       name: "web",
       fields: { port: 8080, host: "localhost", path: "/", expect: undefined },
     });
-    expect(lastFrame()).toContain("Added web");
-    expect(lastFrame()).toContain("✓ web");
     expect(lastFrame()).not.toContain("Add a service");
+    await shows(lastFrame, "✓ web");
   });
 
   it("takes q, ?, j and k as letters of a field", async () => {
     const { lastFrame, stdin } = open(project());
     await tick();
 
-    await type(stdin, "aq?jk");
+    stdin.write("aq?jk");
 
-    expect(lastFrame()).toContain("› Name    q?jk_");
+    await shows(lastFrame, "› Name    q?jk_");
   });
 
   it("deletes the last character on backspace", async () => {
     const { lastFrame, stdin } = open(project());
     await tick();
+    stdin.write("awebb");
+    await shows(lastFrame, "› Name    webb_");
 
-    await type(stdin, `awebb${BACKSPACE}`);
+    stdin.write(BACKSPACE);
 
-    expect(lastFrame()).toContain("› Name    web_");
+    await shows(lastFrame, "› Name    web_");
   });
 
   it("moves between the fields with the arrows", async () => {
     const { lastFrame, stdin } = open(project());
     await tick();
 
-    await type(stdin, `a${ESCAPE}[B${ESCAPE}[B${ESCAPE}[A8`);
+    stdin.write(`a${ESCAPE}[B${ESCAPE}[B${ESCAPE}[A8`);
 
-    expect(lastFrame()).toContain("› Port    8_");
+    await shows(lastFrame, "› Port    8_");
+  });
+
+  it("shows the end of a value too long for the field", async () => {
+    const { lastFrame, stdin } = open(project());
+    await tick();
+    const path = `/${"a".repeat(40)}/end`;
+
+    stdin.write(`e${TAB}${TAB}${BACKSPACE.repeat(7)}${path}`);
+
+    await shows(lastFrame, "/end_ │");
+    expect(lastFrame()).toContain("› Path    …aaa");
   });
 
   it("reads every status typed in the last field", async () => {
@@ -970,13 +993,15 @@ describe("dashboard service changes", () => {
     const { stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, `aweb${TAB}80${TAB}127.0.0.1${TAB}/up${TAB}200,204${ENTER}`);
+    stdin.write(`aweb${TAB}80${TAB}127.0.0.1${TAB}/up${TAB}200,204${ENTER}`);
 
-    expect(onServiceWrite).toHaveBeenCalledWith({
-      kind: "add",
-      name: "web",
-      fields: { port: 80, host: "127.0.0.1", path: "/up", expect: [200, 204] },
-    });
+    await vi.waitFor(() =>
+      expect(onServiceWrite).toHaveBeenCalledWith({
+        kind: "add",
+        name: "web",
+        fields: { port: 80, host: "127.0.0.1", path: "/up", expect: [200, 204] },
+      }),
+    );
   });
 
   it("goes to the field that cannot be saved and says why, writing nothing", async () => {
@@ -984,11 +1009,11 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, `aweb${TAB}99999${TAB}${ENTER}`);
+    stdin.write(`aweb${TAB}99999${TAB}${ENTER}`);
 
-    expect(onServiceWrite).not.toHaveBeenCalled();
+    await shows(lastFrame, "A port between 1 and 65535");
     expect(lastFrame()).toContain("› Port    99999_");
-    expect(lastFrame()).toContain("A port between 1 and 65535");
+    expect(onServiceWrite).not.toHaveBeenCalled();
   });
 
   it("refuses a name already used", async () => {
@@ -996,32 +1021,33 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, `adb${TAB}80${ENTER}`);
+    stdin.write(`adb${TAB}80${ENTER}`);
 
+    await shows(lastFrame, "db already exists");
     expect(onServiceWrite).not.toHaveBeenCalled();
-    expect(lastFrame()).toContain("db already exists");
   });
 
   it("closes the form on escape, writing nothing", async () => {
     const { onServiceWrite, ...props } = project();
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
+    stdin.write("aweb");
+    await shows(lastFrame, "› Name    web_");
 
-    await type(stdin, "aweb");
-    await type(stdin, ESCAPE);
+    stdin.write(ESCAPE);
 
+    await hides(lastFrame, "Add a service");
     expect(onServiceWrite).not.toHaveBeenCalled();
-    expect(lastFrame()).not.toContain("Add a service");
   });
 
   it("opens the form of the selected service on e, filled with what it has", async () => {
     const { lastFrame, stdin } = open(project());
     await tick();
 
-    await type(stdin, "e");
+    stdin.write("e");
 
+    await shows(lastFrame, "│ Edit api");
     const frame = lastFrame() ?? "";
-    expect(frame).toContain("│ Edit api");
     expect(frame).not.toContain("Name");
     expect(frame).toContain("│ › Port    3000_");
     expect(frame).toContain("│   Path    /health");
@@ -1032,14 +1058,14 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    await type(stdin, `e${BACKSPACE.repeat(4)}4000${ENTER}`);
+    stdin.write(`e${BACKSPACE.repeat(4)}4000${ENTER}`);
 
+    await shows(lastFrame, "Saved api");
     expect(onServiceWrite).toHaveBeenCalledWith({
       kind: "edit",
       name: "api",
       fields: { port: 4000, host: "localhost", path: "/health", expect: undefined },
     });
-    expect(lastFrame()).toContain("Saved api");
   });
 
   it("shows the warning that comes with a write", async () => {
@@ -1047,9 +1073,9 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open(project({ saved: true, warning }));
     await tick();
 
-    await type(stdin, `aweb${TAB}80${ENTER}`);
+    stdin.write(`aweb${TAB}80${ENTER}`);
 
-    expect(lastFrame()).toContain("Added web");
+    await shows(lastFrame, "Added web");
     expect(lastFrame()).toContain(warning);
   });
 
@@ -1060,16 +1086,18 @@ describe("dashboard service changes", () => {
     await tick();
     const before = passes.mock.calls.length;
 
-    await type(stdin, "dy");
+    stdin.write("dy");
 
-    expect(passes.mock.calls.length).toBe(before + 1);
+    await vi.waitFor(() => expect(passes.mock.calls.length).toBe(before + 1));
   });
 
   it("leaves a, e and d without effect when the config cannot be written from here", async () => {
     const { lastFrame, stdin } = open({});
     await tick();
 
-    await type(stdin, "aed");
+    // Nothing to wait for: the keys must leave the screen as it is.
+    stdin.write("aed");
+    await tick(150);
 
     expect(lastFrame()).not.toContain("Add a service");
     expect(lastFrame()).not.toContain("Remove");
