@@ -18,3 +18,41 @@ export async function confirm(message: string, streams: PromptStreams = {}): Pro
   const answer = await ask({ message, initialValue: false, ...streams });
   return !isCancel(answer) && answer;
 }
+
+/** What a free-text question shows and accepts. */
+export interface Question {
+  /** Greyed example shown while nothing is typed. */
+  placeholder?: string;
+  /** Answer used when Enter is pressed alone; it is not validated. */
+  defaultValue?: string;
+  /** Returns what is wrong with the answer, or undefined to accept it. */
+  validate?: (answer: string) => string | undefined;
+}
+
+/**
+ * Asks for one line of text on the terminal, again until `validate` accepts it.
+ * @param message the question, e.g. `Port`
+ * @param question placeholder, default answer and validation
+ * @param streams streams to use instead of the process terminal
+ * @returns the answer, or null when cancelled (Ctrl+C, Escape)
+ */
+export async function ask(
+  message: string,
+  question: Question = {},
+  streams: PromptStreams = {},
+): Promise<string | null> {
+  const { text, isCancel } = await import("@clack/prompts");
+  const { placeholder, defaultValue, validate } = question;
+  const answer = await text({
+    message,
+    placeholder,
+    defaultValue,
+    validate: (typed) => {
+      const value = typed ?? "";
+      return value === "" && defaultValue !== undefined ? undefined : validate?.(value);
+    },
+    ...streams,
+  });
+  if (isCancel(answer)) return null;
+  return answer || (defaultValue ?? "");
+}

@@ -7,7 +7,7 @@ import {
   runCommand,
   runMain,
 } from "citty";
-import add from "./commands/add";
+import add, { guidedAdd } from "./commands/add";
 import check from "./commands/check";
 import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
@@ -189,7 +189,17 @@ async function offeredInit(error: unknown, rawArgs: string[]): Promise<boolean> 
   return true;
 }
 
+/** `probe add` with nothing after it, on a terminal, asks for what the options would have given. */
+function wantsGuidedAdd(rawArgs: string[]): boolean {
+  return (
+    rawArgs.length === 1 &&
+    rawArgs[0] === "add" &&
+    isInteractive(process.stdin, process.stdout, process.env)
+  );
+}
+
 async function dispatch(rawArgs: string[]): Promise<void> {
+  if (wantsGuidedAdd(rawArgs)) return guidedAdd();
   if (!(await openedDashboard(rawArgs))) await runCommand(main, { rawArgs });
 }
 

@@ -64,6 +64,9 @@ longest one. Unlike `check --timeout`, which is the time given to each service, 
 wait; each check inside it still gets 3 s, or the service's own `timeout`. Progress goes to stderr, the final
 report to stdout; exit code `1` names the services still down.
 
+`probe add` alone, on a terminal, asks for the name, the port, the path and the expected status, one at a time:
+Enter alone keeps the default, Ctrl+C adds nothing. Off a terminal it needs its arguments, as before.
+
 `probe rm` is the one command that deletes something. On a terminal it asks first, with "No" selected: `--yes`
 (`-y`) skips the question. Off a terminal, in a script or in CI, it removes at once, as before.
 
