@@ -390,6 +390,17 @@ describe("dashboard", () => {
     await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
   });
 
+  it("moves down twice when a second key arrives before the screen is redrawn", async () => {
+    const cache: CheckResult = { ...api, name: "cache" };
+    const { lastFrame, stdin } = open({ check: async () => [api, db, cache] });
+    await vi.waitFor(() => expect(lastFrame()).toContain("cache"));
+
+    stdin.write("j");
+    stdin.write("j");
+
+    await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
+  });
+
   it("handles keys read together in order: open the panel, change twice, close", async () => {
     const changes: [string, number | undefined][] = [];
     const { lastFrame, stdin } = open({

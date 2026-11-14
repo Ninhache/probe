@@ -157,26 +157,29 @@ export function Dashboard({
     }
   };
 
-  // Keys read together reach ink as one string. The first is handled at once; each of the others
-  // waits for a render of its own, so it sees what the key before it changed.
+  // Several keys can arrive before the next render, in one string or one after the other. A key is
+  // handled at once only when `press` still sees the current state; otherwise it waits for a render
+  // of its own, so it sees what the key before it changed.
   const waiting = useRef<Keystroke[]>([]);
+  const stale = useRef(false);
   const [, handled] = useState(0);
   useEffect(() => {
+    stale.current = false;
     const next = waiting.current.shift();
     if (!next) return;
     press(next);
+    stale.current = true;
     handled((count) => count + 1);
   });
   useInput((input, key) => {
-    const [first, ...rest] = splitKeys(input, key);
-    if (!first) return;
-    if (waiting.current.length > 0) {
-      waiting.current.push(first, ...rest);
-      return;
+    const keys = splitKeys(input, key);
+    const first = !stale.current && waiting.current.length === 0 ? keys.shift() : undefined;
+    if (first) {
+      press(first);
+      stale.current = true;
     }
-    press(first);
-    if (rest.length === 0) return;
-    waiting.current.push(...rest);
+    if (keys.length === 0) return;
+    waiting.current.push(...keys);
     handled((count) => count + 1);
   });
 
