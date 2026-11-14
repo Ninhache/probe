@@ -4,7 +4,10 @@ import { makefilePath, syncMakefile } from "../makefile/sync";
 import { openProject } from "./shared";
 
 export default defineCommand({
-  meta: { name: "sync", description: "Regenerate the probe block of the Makefile" },
+  meta: {
+    name: "sync",
+    description: "Add or regenerate the probe block of the Makefile (optional)",
+  },
   async run() {
     const { config, paths } = await openProject();
     const { created, changed } = await syncMakefile(paths, config);

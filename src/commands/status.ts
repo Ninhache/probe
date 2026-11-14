@@ -16,7 +16,7 @@ function describeBlock(state: BlockState, colors: Colors): string {
     case "outdated":
       return colors.yellow("out of date → run `probe sync`");
     case "missing":
-      return colors.yellow("no probe block → run `probe sync`");
+      return colors.dim("no probe block (optional) → `probe sync` adds one");
   }
 }
 

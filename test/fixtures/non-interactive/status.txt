@@ -1,6 +1,6 @@
 exit code: 0
 --- stdout
 migration  none pending
-makefile   in sync
+makefile   no probe block (optional) → `probe sync` adds one
 update     check disabled (VERSION)
 --- stderr

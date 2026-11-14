@@ -6,14 +6,14 @@ USAGE probe init|add|rm|ls|check|wait|status|sync|migrate
 
 COMMANDS
 
-     init    Create .probe/, the .gitignore entries and the Makefile block       
+     init    Create .probe/ and the .gitignore entries                           
       add    Add a service                                                       
        rm    Remove a service                                                    
        ls    List services                                                       
     check    Check that services respond (all of them by default)                
      wait    Check again and again until services are up (all of them by default)
    status    Show pending migration, Makefile state and updates                  
-     sync    Regenerate the probe block of the Makefile                          
+     sync    Add or regenerate the probe block of the Makefile (optional)        
   migrate    Migrate the config to the current schema version                    
 
 Use probe <command> --help for more information about a command.

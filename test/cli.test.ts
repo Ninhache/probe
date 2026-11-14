@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
@@ -69,22 +69,27 @@ async function project(): Promise<string> {
   return root;
 }
 
+/** A project that opted in to the Makefile block. */
+async function makefileProject(): Promise<string> {
+  const root = await project();
+  expect((await probe(root, "sync")).code).toBe(0);
+  return root;
+}
+
 const addApi = (root: string) =>
   probe(root, "add", "api", "-p", String(port), "--host", "127.0.0.1", "--path", "/health");
 const addDown = (root: string) =>
   probe(root, "add", "down", "-p", String(closedPort), "--host", "127.0.0.1");
 
 describe("probe init", () => {
-  it("creates the config, the lock, the Makefile and the .gitignore entries", async () => {
+  it("creates the config and the .gitignore entries, and no Makefile", async () => {
     const root = await project();
 
     expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).toContain(
       "schemaVersion: 1\nservices: {}\n",
     );
-    expect(await readFile(join(root, ".probe", "lock.yml"), "utf8")).toMatch(
-      /cliVersion: \d+\.\d+\.\d+\nmakefile:\n {2}hash: [0-9a-f]{64}\n/,
-    );
-    expect(await readFile(join(root, "Makefile"), "utf8")).toContain("# >>> probe");
+    expect(await readdir(root)).toEqual([".gitignore", ".probe"]);
+    expect(await readdir(join(root, ".probe"))).toEqual(["config.yml"]);
     expect(await readFile(join(root, ".gitignore"), "utf8")).toBe(
       ".probe/local.yml\n.probe/*.bak.yml\n",
     );
@@ -111,8 +116,27 @@ describe("probe init", () => {
 });
 
 describe("probe add / rm / ls", () => {
-  it("adds a service to the config and to the Makefile", async () => {
+  it("adds and removes a service without creating a Makefile", async () => {
     const root = await project();
+
+    expect((await addApi(root)).code).toBe(0);
+    expect((await probe(root, "rm", "api")).code).toBe(0);
+
+    expect(await readdir(root)).toEqual([".gitignore", ".probe"]);
+    expect(await readdir(join(root, ".probe"))).toEqual(["config.yml"]);
+  });
+
+  it("leaves a Makefile that has no probe block as it is", async () => {
+    const root = await project();
+    await writeFile(join(root, "Makefile"), "mine:\n\t@echo mine\n");
+
+    await addApi(root);
+
+    expect(await readFile(join(root, "Makefile"), "utf8")).toBe("mine:\n\t@echo mine\n");
+  });
+
+  it("adds a service to the config and to the Makefile block of a project that has one", async () => {
+    const root = await makefileProject();
 
     expect((await addApi(root)).code).toBe(0);
 
@@ -163,7 +187,7 @@ describe("probe add / rm / ls", () => {
   });
 
   it("exits 2 without a stack trace on a file system error", async () => {
-    const root = await project();
+    const root = await makefileProject();
     await chmod(join(root, "Makefile"), 0o444);
 
     const result = await probe(root, "add", "api", "-p", "3000");
@@ -173,8 +197,8 @@ describe("probe add / rm / ls", () => {
     expect(result.stderr).not.toContain("    at ");
   });
 
-  it("removes a service from the config and from the Makefile", async () => {
-    const root = await project();
+  it("removes a service from the config and from the Makefile block", async () => {
+    const root = await makefileProject();
     await addApi(root);
 
     expect((await probe(root, "rm", "api")).code).toBe(0);
@@ -387,8 +411,25 @@ describe("probe wait", () => {
 });
 
 describe("probe status / sync", () => {
-  it("reports a clean project", async () => {
+  it("does not ask for a Makefile block, and sync adds one", async () => {
     const root = await project();
+    await addApi(root);
+
+    const before = await probe(root, "status");
+    const sync = await probe(root, "sync");
+
+    expect(before.code).toBe(0);
+    expect(before.stdout).toContain("makefile   no probe block (optional)");
+    expect(sync.stdout).toBe("Created Makefile. Try: make help\n");
+    expect(await readFile(join(root, "Makefile"), "utf8")).toContain("check-api:");
+    expect(await readFile(join(root, ".probe", "lock.yml"), "utf8")).toMatch(
+      /cliVersion: \d+\.\d+\.\d+\nmakefile:\n {2}hash: [0-9a-f]{64}\n/,
+    );
+    expect((await probe(root, "status")).stdout).toContain("makefile   in sync");
+  });
+
+  it("reports a clean project", async () => {
+    const root = await makefileProject();
     const { stdout, code } = await probe(root, "status");
 
     expect(code).toBe(0);
@@ -398,7 +439,7 @@ describe("probe status / sync", () => {
   });
 
   it("detects a hand-edited block, and sync restores it without touching other targets", async () => {
-    const root = await project();
+    const root = await makefileProject();
     await addApi(root);
     const makefile = join(root, "Makefile");
     const generated = await readFile(makefile, "utf8");
@@ -414,7 +455,7 @@ describe("probe status / sync", () => {
   });
 
   it("keeps a hand-edited block when a service is added or removed", async () => {
-    const root = await project();
+    const root = await makefileProject();
     await addApi(root);
     const makefile = join(root, "Makefile");
     const edited = (await readFile(makefile, "utf8")).replace("@$(PROBE) check api", "@echo mine");
@@ -434,7 +475,7 @@ describe("probe status / sync", () => {
   });
 
   it("reports a config edited by hand as out of date", async () => {
-    const root = await project();
+    const root = await makefileProject();
     const config = join(root, ".probe", "config.yml");
     await writeFile(config, "schemaVersion: 1\nservices:\n  web: { port: 8080 }\n");
 
@@ -503,7 +544,7 @@ describe("generated Makefile with real make", () => {
     exec("make", [target, `PROBE=${process.execPath} ${CLI}`], root);
 
   it("make help lists probe targets and hand-written ones", async () => {
-    const root = await project();
+    const root = await makefileProject();
     await addApi(root);
     const makefile = join(root, "Makefile");
     await writeFile(
@@ -521,7 +562,7 @@ describe("generated Makefile with real make", () => {
   });
 
   it("make check and make check-<name> follow the services' state", async () => {
-    const root = await project();
+    const root = await makefileProject();
     await addApi(root);
 
     expect(await make(root, "check")).toMatchObject({
