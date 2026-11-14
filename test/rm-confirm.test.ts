@@ -1,51 +1,18 @@
-import { execFile, execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { tempProject } from "./helpers";
+import { CTRL_C, ENTER, hasPython, onTerminal as runOnTerminal } from "./terminal";
 
-const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
-const PTY = resolve(import.meta.dirname, "fixtures", "on-terminal.py");
 const CONFIG = "schemaVersion: 1\nservices:\n  api: { port: 3000 }\n  db: { port: 5432 }\n";
 const QUESTION = "Remove api?";
-const ENTER = "\r";
-const CTRL_C = "\u0003";
 
-function hasPython(): boolean {
-  try {
-    execFileSync("python3", ["--version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-interface Run {
-  code: number;
-  screen: string;
-  config: string;
-}
-
-/** Runs `probe <args>` on a pseudo-terminal, typing `keys` when the question shows. */
-async function onTerminal(args: string[], keys: string): Promise<Run> {
+/** Runs `probe <args>` in a project on a pseudo-terminal, typing `keys` when the question shows. */
+async function onTerminal(args: string[], keys: string) {
   const { root, config } = await tempProject(CONFIG);
-  // CI is set on the runners, and it turns every question off.
-  const env = { ...process.env, PROBE_NO_UPDATE_CHECK: "1", TERM: "xterm-256color", CI: "" };
-  const steps = JSON.stringify([[QUESTION, keys]]);
-  return new Promise((done) => {
-    execFile(
-      "python3",
-      [PTY, steps, process.execPath, CLI, ...args],
-      { cwd: join(root), env },
-      async (error, stdout) => {
-        const code = error ? ((error as { code?: number }).code ?? 1) : 0;
-        done({ code: Number(code), screen: stdout, config: await readFile(config, "utf8") });
-      },
-    );
-  });
+  const run = await runOnTerminal(root, args, [[QUESTION, keys]]);
+  return { ...run, config: await readFile(config, "utf8") };
 }
 
-// The pseudo-terminal comes from python3, present on the Linux and macOS runners.
 describe.skipIf(!hasPython())("probe rm on a terminal", () => {
   it("should remove the service when the answer is yes", async () => {
     const { code, screen, config } = await onTerminal(["rm", "api"], `y${ENTER}`);

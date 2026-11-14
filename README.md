@@ -70,7 +70,8 @@ report to stdout; exit code `1` names the services still down.
 `probe open` uses `open` on macOS and `xdg-open` elsewhere. Without it, the URL is printed and the exit code is
 `1`. `probe curl api` prints a command to copy, or to run: `probe curl api | sh`.
 
-`probe` works from any sub-directory: it walks up to the nearest `.probe/`.
+`probe` works from any sub-directory: it walks up to the nearest `.probe/`. When there is none, on a terminal,
+it offers to create it where you are, then runs your command. Off a terminal it stops with exit code `2`.
 
 ## Completion
 

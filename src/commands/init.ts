@@ -24,19 +24,27 @@ async function ignoreLocalFiles(root: string): Promise<void> {
   await writeFile(file, `${current}${separator}${missing.join("\n")}\n`);
 }
 
+/**
+ * Creates `.probe/` with an empty config in `root`, and ignores its per-machine files in git.
+ * @throws ProbeError `ALREADY_INITIALIZED` when `root` already has a `.probe/`
+ */
+export async function initProject(root: string): Promise<void> {
+  const paths = pathsFor(root);
+  if (existsSync(paths.dir)) {
+    throw new ProbeError("ALREADY_INITIALIZED", `${PROBE_DIR}/ already exists here.`);
+  }
+  await mkdir(paths.dir);
+  await writeFile(paths.config, INITIAL_CONFIG);
+  await ignoreLocalFiles(paths.root);
+}
+
 export default defineCommand({
   meta: {
     name: "init",
     description: "Create .probe/ and the .gitignore entries",
   },
   async run() {
-    const paths = pathsFor(process.cwd());
-    if (existsSync(paths.dir)) {
-      throw new ProbeError("ALREADY_INITIALIZED", `${PROBE_DIR}/ already exists here.`);
-    }
-    await mkdir(paths.dir);
-    await writeFile(paths.config, INITIAL_CONFIG);
-    await ignoreLocalFiles(paths.root);
+    await initProject(process.cwd());
     console.log(`Created ${PROBE_DIR}/. Next: probe add api -p 3000`);
   },
 });
