@@ -295,6 +295,74 @@ describe("probe check", () => {
   });
 });
 
+describe("a service skipped in local.yml", () => {
+  async function skippedDown(): Promise<string> {
+    const root = await project();
+    await addApi(root);
+    await addDown(root);
+    await writeFile(join(root, ".probe", "local.yml"), "services:\n  down:\n    skip: true\n");
+    return root;
+  }
+
+  it("is not checked by probe check, which says so", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "check");
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("✓ api");
+    expect(result.stdout).toMatch(/^- down {2}http:\/\/127\.0\.0\.1:\d+\/ +skipped$/m);
+  });
+
+  it("is marked in the JSON output", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "check", "--json");
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject([
+      { name: "api", ok: true, status: 200 },
+      { name: "down", ok: true, skipped: true },
+    ]);
+  });
+
+  it("is checked all the same when it is named", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "check", "down");
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("connection refused");
+  });
+
+  it("is not waited for by probe wait", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "wait", "--timeout", "2");
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("is marked by probe ls", async () => {
+    const root = await skippedDown();
+
+    const result = await probe(root, "ls");
+
+    expect(result.stdout).toMatch(/^down {2}http:\/\/127\.0\.0\.1:\d+\/ {2}skipped$/m);
+    expect(result.stdout).not.toMatch(/^api .*skipped$/m);
+  });
+
+  it("changes neither the config, the lock nor the Makefile", async () => {
+    const root = await skippedDown();
+
+    const status = await probe(root, "status");
+
+    expect(status.code).toBe(0);
+    expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).not.toContain("skip");
+  });
+});
+
 describe("probe wait", () => {
   it("exits 0 as soon as a service that starts late is up", async () => {
     const root = await project();
@@ -531,7 +599,28 @@ describe("probe (top level)", () => {
     }
     const usage = await exec(process.execPath, [CLI], cwd, env);
     expect(usage.code).toBe(2);
-    expect(usage.stdout).toContain("USAGE probe init|add|rm|ls|check|wait|status|sync|migrate");
+    expect(usage.stdout).toContain(
+      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|status|sync|migrate",
+    );
+  });
+
+  it("refuses --interval off a terminal, where no dashboard opens", async () => {
+    const cwd = await project();
+    await probe(cwd, "add", "api", "-p", String(port), "--path", "/health");
+
+    for (const args of [["--interval", "5"], ["--interval=5"]]) {
+      expect(await probe(cwd, ...args), args.join(" ")).toMatchObject({
+        code: 2,
+        stdout: "",
+        stderr: expect.stringContaining("needs an interactive terminal"),
+      });
+    }
+    for (const args of [["--interval", "abc"], ["--interval=0"], ["--interval"]]) {
+      expect(await probe(cwd, ...args), args.join(" ")).toMatchObject({
+        code: 2,
+        stderr: expect.stringContaining("--interval expects seconds"),
+      });
+    }
   });
 
   it("exits 2 on an unknown command", async () => {

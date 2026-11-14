@@ -13,13 +13,23 @@ import init from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import rm from "./commands/rm";
-import { stdoutTerminal } from "./commands/shared";
+import { secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
 import wait from "./commands/wait";
-import { EXIT_ERROR, REFRESH_COMMAND } from "./constants";
+import { findProbeDir, requireProbeDir } from "./config/discovery";
+import { loadConfig } from "./config/loader";
+import {
+  changedPreferences,
+  initialDashboardSettings,
+  readDashboardPreferences,
+  readSkippedServices,
+  writeDashboardPreferences,
+  writeServiceSkip,
+} from "./config/local";
+import { DASHBOARD_INTERVAL_SECONDS, EXIT_ERROR, REFRESH_COMMAND } from "./constants";
 import { ProbeError } from "./errors";
-import { detectTerminal, stripStyles } from "./ui/terminal";
+import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
   cacheDir,
   refreshCache,
@@ -34,6 +44,14 @@ const main = defineCommand({
     name: "probe",
     version: CLI_VERSION,
     description: "Health checks for your local dev services",
+  },
+  args: {
+    interval: {
+      type: "string",
+      valueHint: "seconds",
+      description: "Seconds between two refreshes of the dashboard (probe alone, on a terminal)",
+      default: String(DASHBOARD_INTERVAL_SECONDS),
+    },
   },
   subCommands: { init, add, rm, ls, check, wait, status, sync, migrate },
 });
@@ -62,6 +80,68 @@ function notifyUpdate(rawArgs: string[]): void {
   if (notice) console.error(`\n${notice}`);
 }
 
+const INTERVAL_OPTION = "--interval";
+
+/**
+ * Reads the arguments the dashboard accepts: none, or `--interval` alone.
+ * Returns the interval in seconds as typed, `undefined` when not given, `null` for any other arguments.
+ */
+function dashboardInterval(rawArgs: string[]): string | undefined | null {
+  const [first, second, ...rest] = rawArgs;
+  if (first === undefined) return undefined;
+  if (first.startsWith(`${INTERVAL_OPTION}=`) && second === undefined)
+    return first.slice(INTERVAL_OPTION.length + 1);
+  if (first === INTERVAL_OPTION && rest.length === 0) return second ?? "";
+  return null;
+}
+
+/**
+ * `probe` alone on a terminal, inside a project with services, opens the dashboard.
+ * The interactive libraries are imported here only, so every other path starts without them.
+ * With `--interval` there is nothing to fall back to: what prevents the dashboard is an error.
+ * Settings come from `--interval`, then `local.yml`, then the defaults; what the panels change
+ * is saved to `local.yml`.
+ */
+async function openedDashboard(rawArgs: string[]): Promise<boolean> {
+  const interval = dashboardInterval(rawArgs);
+  if (interval === null) return false;
+  const asked = interval !== undefined;
+  const askedMs = asked ? secondsToMs(INTERVAL_OPTION, interval) : undefined;
+  if (!isInteractive(process.stdin, process.stdout, process.env)) {
+    if (!asked) return false;
+    throw new ProbeError(
+      "USAGE",
+      `${INTERVAL_OPTION} sets the refresh of the dashboard, which needs an interactive terminal.`,
+    );
+  }
+  const paths = asked ? requireProbeDir(process.cwd()) : findProbeDir(process.cwd());
+  if (!paths) return false;
+  const { config } = await loadConfig(paths);
+  if (Object.keys(config.services).length === 0) {
+    if (!asked) return false;
+    throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
+  }
+  const { openDashboard } = await import("./dashboard/open");
+  let settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
+  let saving: Promise<unknown> = Promise.resolve();
+  // One write at a time; a read-only project must not break the dashboard: a failed save is dropped.
+  const save = (write: () => Promise<boolean>) => {
+    saving = saving.then(write).catch(() => {});
+  };
+  await openDashboard(config, stdoutTerminal(), {
+    settings,
+    skipped: await readSkippedServices(paths),
+    onSettingsChange: (next) => {
+      const changed = changedPreferences(settings, next);
+      settings = next;
+      save(() => writeDashboardPreferences(paths, changed));
+    },
+    onSkipChange: (name, skip) => save(() => writeServiceSkip(paths, name, skip)),
+  });
+  await saving;
+  return true;
+}
+
 async function run(rawArgs: string[]): Promise<void> {
   if (rawArgs[0] === REFRESH_COMMAND) return refreshCache(cacheDir());
 
@@ -69,8 +149,10 @@ async function run(rawArgs: string[]): Promise<void> {
   const wantsVersion = rawArgs.length === 1 && ["--version", "-v"].includes(rawArgs[0] as string);
   if (wantsHelp || wantsVersion) return runMain(main, { rawArgs, showUsage: printUsage });
 
+  let dashboard = false;
   try {
-    await runCommand(main, { rawArgs });
+    dashboard = await openedDashboard(rawArgs);
+    if (!dashboard) await runCommand(main, { rawArgs });
   } catch (error) {
     process.exitCode = EXIT_ERROR;
     if (error instanceof ProbeError) {
@@ -85,6 +167,8 @@ async function run(rawArgs: string[]): Promise<void> {
     }
   }
   notifyUpdate(rawArgs);
+  // A check cut short can leave a socket connecting for seconds: do not wait for it.
+  if (dashboard) process.exit();
 }
 
 await run(process.argv.slice(2));

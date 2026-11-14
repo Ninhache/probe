@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { tempDir } from "./helpers";
 
@@ -12,6 +12,7 @@ import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const FIXTURES = resolve(import.meta.dirname, "fixtures");
+const DIST_URL = pathToFileURL(resolve(CLI, "..")).href;
 const RECORDER = pathToFileURL(join(FIXTURES, "record-modules.mjs")).href;
 
 /** Packages that may only load once probe has decided to be interactive. */
@@ -118,6 +119,8 @@ describe("off a terminal", () => {
     [["ls"]],
     [["status"]],
     [["wait", "--timeout", "1"]],
+    // Bare `probe` is the dashboard's entry: off a terminal it must stop before the import.
+    [[]],
   ])("probe %s loads no interactive library", async (args) => {
     const cwd = await project();
     const modules = join(cwd, "modules.txt");
@@ -126,10 +129,16 @@ describe("off a terminal", () => {
 
     // Proves the recorder sees the dependencies: without it the next assertion proves nothing.
     expect(loaded.some((url) => url.includes("/node_modules/citty/"))).toBe(true);
-    const interactive = loaded.filter((url) =>
-      INTERACTIVE_PACKAGES.some((name) => url.includes(`/node_modules/${name}/`)),
-    );
-    expect(interactive).toEqual([]);
+    const isInteractive = (text: string) =>
+      INTERACTIVE_PACKAGES.some((name) => text.includes(`/node_modules/${name}/`));
+    expect(loaded.filter(isInteractive)).toEqual([]);
+
+    // The dashboard's libraries are bundled: esbuild leaves their source paths in the chunk.
+    const chunks = loaded.filter((url) => url.startsWith(DIST_URL));
+    expect(chunks.length).toBeGreaterThan(0);
+    for (const url of chunks) {
+      expect(isInteractive(await readFile(fileURLToPath(url), "utf8")), url).toBe(false);
+    }
   });
 
   it("starts within the budget", async () => {

@@ -42,14 +42,15 @@ function failureReason(error: unknown, timeoutMs: number): string {
 
 export const httpChecker: Checker = {
   type: "http",
-  async check(name, service, { timeoutMs }) {
+  async check(name, service, { timeoutMs, signal }) {
     const target = targetUrl(service);
     const base = { name, type: "http", target };
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);
+    const timeout = AbortSignal.timeout(timeoutMs);
     try {
       const response = await fetch(target, {
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
         // Following a redirect hides its status: an expected 3xx could never match.
         redirect: expectsRedirect(service.expect) ? "manual" : "follow",
       });

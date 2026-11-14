@@ -2,7 +2,11 @@ exit code: 2
 --- stdout
 Health checks for your local dev services (probe vVERSION)
 
-USAGE probe init|add|rm|ls|check|wait|status|sync|migrate
+USAGE probe [OPTIONS] init|add|rm|ls|check|wait|status|sync|migrate
+
+OPTIONS
+
+  --interval=<seconds>    Seconds between two refreshes of the dashboard (probe alone, on a terminal) (Default: 2)
 
 COMMANDS
 

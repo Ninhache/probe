@@ -57,6 +57,30 @@ wait; each check inside it still gets 3 s. Progress goes to stderr, the final re
 
 `probe` works from any sub-directory: it walks up to the nearest `.probe/`.
 
+## Dashboard
+
+`probe` alone, on a terminal, opens a live list of your services and checks them every 2 s
+(`probe --interval 5` for another pace). Off a terminal, in CI or in a pipe, nothing changes: use `probe check`.
+
+| Key             | What it does                                     |
+| --------------- | ------------------------------------------------ |
+| `↑` `↓` `j` `k` | Move                                             |
+| `r`             | Check now                                        |
+| `Enter`         | Open the panel of the selected service (skip it) |
+| `o`             | Options: interval and timeout                    |
+| `q`             | Quit                                             |
+
+What you change there is saved in `.probe/local.yml`, for your machine only:
+
+```yaml
+dashboard: { interval: 5, timeout: 3 }
+services:
+  db: { skip: true }
+```
+
+A skipped service is left out of `probe check`, `probe wait` and the dashboard, and shown as `skipped`. Name it
+(`probe check db`) and it is checked anyway.
+
 ## Config
 
 `.probe/config.yml`:
@@ -83,7 +107,7 @@ Files in `.probe/`:
 
 - `config.yml`: services. Commit it.
 - `lock.yml`: CLI version and hash of the Makefile block. Only there once `probe sync` has run. Commit it.
-- `local.yml`: per-machine values. Ignored by git. Unused for now.
+- `local.yml`: per-machine values (dashboard settings, skipped services). Ignored by git.
 
 Never put secrets in `config.yml` or `lock.yml`.
 
