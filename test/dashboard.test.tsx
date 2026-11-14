@@ -48,7 +48,7 @@ const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, 
         }
       : result,
   );
-const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
+const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let app: ReturnType<typeof render> | undefined;
 afterEach(() => app?.unmount());
@@ -383,7 +383,7 @@ describe("dashboard", () => {
   it("moves down twice when two keys are read together", async () => {
     const cache: CheckResult = { ...api, name: "cache" };
     const { lastFrame, stdin } = open({ check: async () => [api, db, cache] });
-    await tick();
+    await vi.waitFor(() => expect(lastFrame()).toContain("cache"));
 
     stdin.write("jj");
 
@@ -397,7 +397,7 @@ describe("dashboard", () => {
         changes.push([name, seconds]);
       },
     });
-    await tick();
+    await vi.waitFor(() => expect(lastFrame()).toContain("db"));
 
     stdin.write("j\rjll\r");
 
