@@ -166,6 +166,16 @@ services:
     expect(found.map(({ service }) => service.port)).toEqual([80]);
   });
 
+  it("should name a mail catcher after its web page, not its SMTP port", async () => {
+    const found = await detectIn({
+      "compose.yml": 'services: { mailer: { ports: ["1025:1025", "8025:8025"] } }',
+    });
+
+    expect(found).toEqual([
+      { name: "mailer", service: { port: 8025 }, source: "compose.yml (mailer service)" },
+    ]);
+  });
+
   it("should follow a YAML merge key", async () => {
     const compose = 'x-web: &web\n  ports: ["8080:80"]\nservices:\n  web:\n    <<: *web\n';
 

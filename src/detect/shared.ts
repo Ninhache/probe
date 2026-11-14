@@ -3,8 +3,11 @@ import type { RawConfig } from "../config/migrations";
 export const DEFAULT_HOST = "localhost";
 export const DEFAULT_NAME = "app";
 
-// The check is a plain HTTP GET: https, databases, caches and brokers would always be reported down.
-const NOT_HTTP_PORTS = [443, 1433, 2181, 3306, 5432, 5672, 6379, 8443, 9092, 11211, 27017];
+// The check is a plain HTTP GET: mail servers, https, databases, caches and brokers would always
+// be reported down.
+const NOT_HTTP_PORTS = [
+  25, 443, 465, 587, 1025, 1433, 2181, 3306, 5432, 5672, 6379, 8443, 9092, 11211, 27017,
+];
 
 export const isHttpPort = (port: number) => !NOT_HTTP_PORTS.includes(port);
 
