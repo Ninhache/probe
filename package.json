@@ -1,6 +1,6 @@
 {
   "name": "@ninhache/probe",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Health checks for your local dev services, from the CLI or a generated Makefile",
   "license": "MIT",
   "author": "Ninhache",
