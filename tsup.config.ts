@@ -8,8 +8,8 @@ export default defineConfig({
   format: ["esm"],
   target: "node22",
   clean: true,
-  // The dashboard's libraries are bundled into its lazy chunk: installing probe stays three packages.
-  noExternal: ["ink", "react"],
+  // The interactive libraries are bundled into lazy chunks: installing probe stays three packages.
+  noExternal: ["ink", "react", /^@clack\//, "sisteransi", "fast-string-width", "fast-wrap-ansi"],
   // ink imports it only when DEV=true and the package is installed.
   external: ["react-devtools-core"],
   // The bundled libraries have CommonJS parts that call `require` on Node built-ins.
