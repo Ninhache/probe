@@ -35,13 +35,19 @@ describe("helpBar", () => {
 });
 
 describe("helpLines", () => {
-  it("should list each key of the bars once per section", () => {
-    const keys = helpLines(true)
-      .filter(({ heading }) => !heading)
-      .map(({ text }) => text.trim());
+  it.each(["list", "panel"] as const)("should have a line for each key of the %s bar", (screen) => {
+    const help = helpLines(true).map(({ text }) => text);
 
-    expect(new Set(keys).size).toBe(keys.length - 1);
-    expect(keys).toContain("?      This help");
+    for (const item of helpBar(screen, true, 100).split(" · ")) {
+      const keys = item.slice(0, item.lastIndexOf(" "));
+      expect(help.some((line) => line.startsWith(`  ${keys} `))).toBe(true);
+    }
+  });
+
+  it("should give each line its own id", () => {
+    const ids = helpLines(true).map(({ id }) => id);
+
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("should name the sections in the order of the screens", () => {

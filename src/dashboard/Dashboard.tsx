@@ -199,8 +199,8 @@ export function Dashboard({
     return (
       <Box flexDirection="column">
         <Text>{colors.bold(cut(`probe ${dot} keys`))}</Text>
-        {helpLines(unicode).map(({ text, heading }) => (
-          <Text key={text}>{heading ? colors.bold(cut(text)) : cut(text)}</Text>
+        {helpLines(unicode).map(({ id, text, heading }) => (
+          <Text key={id}>{heading ? colors.bold(cut(text)) : cut(text)}</Text>
         ))}
         <Text>{colors.dim(cut(helpBar("help", unicode, columns)))}</Text>
       </Box>

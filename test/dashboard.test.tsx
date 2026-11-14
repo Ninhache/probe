@@ -520,7 +520,7 @@ describe("dashboard", () => {
         "Panels",
         "  ↑↓ jk  Move",
         "  ←→ hl  Change the value",
-        "  esc    Close",
+        "  esc    Close (so does the key that opened it)",
         "Everywhere",
         "  ?      This help",
         "  q      Quit",

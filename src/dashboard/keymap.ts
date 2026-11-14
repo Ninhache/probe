@@ -45,7 +45,12 @@ const BINDINGS: readonly Binding[] = [
     help: "Change the value",
     drop: 2,
   },
-  { screens: ["panel"], keys: "esc", action: "close", help: "Close" },
+  {
+    screens: ["panel"],
+    keys: "esc",
+    action: "close",
+    help: "Close (so does the key that opened it)",
+  },
   { screens: ["help"], keys: "? esc", action: "close", help: "Close" },
   { screens: ["list", "panel"], keys: "?", action: "help", help: "This help" },
   { screens: ["list", "panel", "help"], keys: "q", action: "quit", help: "Quit" },
@@ -80,6 +85,8 @@ export function helpBar(screen: Screen, unicode: boolean, columns: number): stri
 }
 
 export interface HelpLine {
+  /** Unique among the lines: the same key can be in two sections. */
+  id: string;
   text: string;
   heading: boolean;
 }
@@ -88,8 +95,9 @@ export interface HelpLine {
 export function helpLines(unicode: boolean): HelpLine[] {
   const width = Math.max(...BINDINGS.map((binding) => written(binding, unicode).length));
   return SECTIONS.flatMap(([title, has]) => [
-    { text: title, heading: true },
+    { id: title, text: title, heading: true },
     ...BINDINGS.filter(has).map((binding) => ({
+      id: `${title} ${binding.keys}`,
       text: `  ${written(binding, unicode).padEnd(width)}  ${binding.help}`,
       heading: false,
     })),
