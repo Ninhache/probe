@@ -147,11 +147,15 @@ outside the block is yours and is never touched. Without a block, no command cre
 Once the block is there, `probe add` and `probe rm` keep it up to date. Commit the `Makefile` and
 `.probe/lock.yml`.
 
-Targets: `help`, `check`, `status` and one `check-<name>` per service. The block uses `probe` when it is in
+Targets: `help`, `check`, `status`, `probe` (opens the [dashboard](#dashboard)) and one `check-<name>` per
+service. The block uses `probe` when it is in
 your `PATH`, else `npx -y @ninhache/probe@latest`. It works with GNU Make 3.81 (the macOS default).
 
 Edited the block by hand? `probe status` says so and `probe add` / `probe rm` leave it alone. `probe sync`
 restores it.
+
+A newer `probe` can add targets to the block: `make probe` came with 0.6.0. A block written before that is
+reported as `outdated` by `probe status`. Run `probe sync` once to get the new targets.
 
 ## Migrations
 

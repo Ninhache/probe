@@ -882,6 +882,7 @@ describe("generated Makefile with real make", () => {
     expect(code).toBe(0);
     expect(stdout).toMatch(/^ {2}help +List available targets$/m);
     expect(stdout).toMatch(/^ {2}check +Check that every service responds$/m);
+    expect(stdout).toMatch(/^ {2}probe +Open the dashboard$/m);
     expect(stdout).toMatch(/^ {2}check-api +Check api$/m);
     expect(stdout).toMatch(/^ {2}mine +My own target$/m);
   });

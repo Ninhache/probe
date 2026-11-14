@@ -34,7 +34,11 @@ describe("renderBlock", () => {
   it("has one check target per service", () => {
     expect(block).toContain("check-api: ## Check api\n\t@$(PROBE) check api\n");
     expect(block).toContain("check-front: ## Check front\n\t@$(PROBE) check front\n");
-    expect(block).toContain(".PHONY: help check status check-api check-front\n");
+    expect(block).toContain(".PHONY: help check status probe check-api check-front\n");
+  });
+
+  it("has a target that opens the dashboard", () => {
+    expect(block).toContain("probe: ## Open the dashboard\n\t@$(PROBE)\n");
   });
 
   it("prefers the probe binary and falls back to npx with the scoped name", () => {
