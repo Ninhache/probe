@@ -38,6 +38,7 @@ import {
 import { createSaveQueue } from "./dashboard/saves";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
+import { formatExamples } from "./ui/examples";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
   cacheDir,
@@ -66,12 +67,16 @@ const main = defineCommand({
 });
 
 // citty styles its usage text whatever the stream is: strip it when stdout shows no colour.
+// Its usage has no room for examples: they are added after it.
 async function printUsage<T extends ArgsDef = ArgsDef>(
   command: CommandDef<T>,
   parent?: CommandDef<T>,
 ): Promise<void> {
   const usage = await renderUsage(command, parent);
-  console.log(`${stdoutTerminal().color ? usage : stripStyles(usage)}\n`);
+  const { color } = stdoutTerminal();
+  const meta = await (typeof command.meta === "function" ? command.meta() : command.meta);
+  const examples = formatExamples(command === main ? undefined : meta?.name, color);
+  console.log(`${color ? usage : stripStyles(usage)}\n${examples ? `\n${examples}\n` : ""}`);
 }
 
 function notifyUpdate(rawArgs: string[]): void {

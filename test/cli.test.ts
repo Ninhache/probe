@@ -755,6 +755,18 @@ describe("probe (top level)", () => {
     }
   });
 
+  it.each([
+    [["--help"], "probe add api -p 3000 --path /health  Declare a service"],
+    [["check", "--help"], "probe check api db        Check these two only"],
+    [["rm", "-h"], "probe rm api  Remove the service named api"],
+  ])("ends the help of %j with examples", async (args, example) => {
+    const { code, stdout } = await probe(await tempDir(), ...args);
+
+    expect(code).toBe(0);
+    expect(stdout).toContain("\nEXAMPLES\n\n");
+    expect(stdout).toContain(`\n  ${example}\n`);
+  });
+
   it("exits 2 on an unknown command", async () => {
     expect(await probe(await tempDir(), "nope")).toMatchObject({
       code: 2,
