@@ -20,16 +20,12 @@ import wait from "./commands/wait";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { loadConfig } from "./config/loader";
 import {
-  type DashboardPreferences,
+  changedPreferences,
+  initialDashboardSettings,
   readDashboardPreferences,
   writeDashboardPreferences,
 } from "./config/local";
-import {
-  DASHBOARD_INTERVAL_SECONDS,
-  DEFAULT_TIMEOUT_SECONDS,
-  EXIT_ERROR,
-  REFRESH_COMMAND,
-} from "./constants";
+import { DASHBOARD_INTERVAL_SECONDS, EXIT_ERROR, REFRESH_COMMAND } from "./constants";
 import { ProbeError } from "./errors";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
@@ -124,17 +120,10 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
   }
   const { openDashboard } = await import("./dashboard/open");
-  const saved = await readDashboardPreferences(paths);
-  let settings = {
-    intervalMs: askedMs ?? (saved.interval ?? DASHBOARD_INTERVAL_SECONDS) * 1000,
-    timeoutMs: (saved.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
-  };
+  let settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
   let saving: Promise<unknown> = Promise.resolve();
   await openDashboard(config, stdoutTerminal(), settings, (next) => {
-    // Only what the panel changed is saved: an interval given by --interval stays a one-off.
-    const changed: DashboardPreferences = {};
-    if (next.intervalMs !== settings.intervalMs) changed.interval = next.intervalMs / 1000;
-    if (next.timeoutMs !== settings.timeoutMs) changed.timeout = next.timeoutMs / 1000;
+    const changed = changedPreferences(settings, next);
     settings = next;
     // A read-only project must not break the dashboard: a failed save is dropped.
     saving = saving.then(() => writeDashboardPreferences(paths, changed)).catch(() => {});

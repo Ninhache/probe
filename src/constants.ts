@@ -5,6 +5,10 @@ export const CONFIG_FILE = "config.yml";
 export const LOCK_FILE = "lock.yml";
 export const LOCAL_FILE = "local.yml";
 export const BACKUP_GLOB = "*.bak.yml";
+// Matches BACKUP_GLOB, so the copy written before replacing local.yml is git-ignored too.
+export const LOCAL_DRAFT_FILE = "local.draft.bak.yml";
+// local.yml is where credentials go: a new one is readable by its owner only.
+export const LOCAL_FILE_MODE = 0o600;
 
 export const DEFAULT_MAKEFILE = "Makefile";
 
