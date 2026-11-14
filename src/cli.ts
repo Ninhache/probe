@@ -11,7 +11,7 @@ import add from "./commands/add";
 import check from "./commands/check";
 import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
-import init from "./commands/init";
+import init, { initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import open from "./commands/open";
@@ -45,6 +45,7 @@ import { createSaveQueue } from "./dashboard/saves";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
 import { formatExamples } from "./ui/examples";
+import { confirm } from "./ui/prompt";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
   cacheDir,
@@ -172,6 +173,26 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   return true;
 }
 
+/**
+ * A command run outside a project, on a terminal: offers to create `.probe/` in the current directory.
+ * Off a terminal, with `--json`, or for any other error, asks nothing.
+ * @returns true once `.probe/` is created, so the command can run again
+ */
+async function offeredInit(error: unknown, rawArgs: string[]): Promise<boolean> {
+  if (!(error instanceof ProbeError) || error.code !== "NO_PROBE_DIR") return false;
+  if (rawArgs.includes("--json")) return false;
+  if (!isInteractive(process.stdin, process.stdout, process.env)) return false;
+  const root = process.cwd();
+  if (!(await confirm(`No ${PROBE_DIR}/ here. Create it in ${root}?`))) return false;
+  await initProject(root);
+  console.log(`Created ${PROBE_DIR}/.`);
+  return true;
+}
+
+async function dispatch(rawArgs: string[]): Promise<void> {
+  if (!(await openedDashboard(rawArgs))) await runCommand(main, { rawArgs });
+}
+
 const UNKNOWN_COMMAND = "E_UNKNOWN_COMMAND";
 
 /** The command a mistyped one was probably meant to be, as a sentence to add to citty's error. */
@@ -204,7 +225,12 @@ async function run(rawArgs: string[]): Promise<void> {
   if (wantsHelp || wantsVersion) return runMain(main, { rawArgs, showUsage: printUsage });
 
   try {
-    if (!(await openedDashboard(rawArgs))) await runCommand(main, { rawArgs });
+    try {
+      await dispatch(rawArgs);
+    } catch (error) {
+      if (!(await offeredInit(error, rawArgs))) throw error;
+      await dispatch(rawArgs);
+    }
   } catch (error) {
     process.exitCode = EXIT_ERROR;
     if (error instanceof ProbeError) {
