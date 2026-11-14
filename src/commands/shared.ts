@@ -1,6 +1,7 @@
 import { requireProbeDir } from "../config/discovery";
 import { type LoadedConfig, loadConfig, saveConfig } from "../config/loader";
 import type { RawConfig } from "../config/migrations";
+import type { Config, Service } from "../config/schema";
 import { MAX_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
 import { blockState, syncMakefile } from "../makefile/sync";
@@ -29,6 +30,13 @@ export function secondsToMs(option: string, value: string): number {
     );
   }
   return Math.ceil(seconds * 1000);
+}
+
+/** Returns the service of that name; throws the error every command gives for an unknown one. */
+export function namedService(config: Config, name: string): Service {
+  const service = Object.hasOwn(config.services, name) ? config.services[name] : undefined;
+  if (!service) throw new ProbeError("SERVICE_UNKNOWN", `unknown service "${name}". See: probe ls`);
+  return service;
 }
 
 export function rawServices(loaded: LoadedConfig): Record<string, RawConfig> {

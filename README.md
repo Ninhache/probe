@@ -45,6 +45,8 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | `probe ls`                                                | List services                                                          |
 | `probe check [name...] [--json] [--timeout <seconds>]`    | Check all services, or the named ones                                  |
 | `probe wait [name...] [--json] [--timeout <seconds>]`     | Check again until every service is up, or give up after the timeout    |
+| `probe open <name>`                                       | Open the URL of a service in the browser                               |
+| `probe curl <name>`                                       | Print the curl command that requests a service                         |
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
 | `probe sync`                                              | Add or regenerate the Makefile block (optional)                        |
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
@@ -60,6 +62,9 @@ and every 5 s, for 60 s in total. `--timeout` sets the total, `--interval` the f
 longest one. Unlike `check --timeout`, which is the time given to each service, `wait --timeout` covers the whole
 wait; each check inside it still gets 3 s, or the service's own `timeout`. Progress goes to stderr, the final
 report to stdout; exit code `1` names the services still down.
+
+`probe open` uses `open` on macOS and `xdg-open` elsewhere. Without it, the URL is printed and the exit code is
+`1`. `probe curl api` prints a command to copy, or to run: `probe curl api | sh`.
 
 `probe` works from any sub-directory: it walks up to the nearest `.probe/`.
 

@@ -1,4 +1,5 @@
 import type { Service } from "../config/schema";
+import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { diagnoseFailure, diagnoseStatus } from "./diagnosis";
 import type { Checker } from "./types";
 
@@ -6,6 +7,18 @@ export function targetUrl(service: Service): string {
   const bareIpv6 = service.host.includes(":") && !service.host.startsWith("[");
   const host = bareIpv6 ? `[${service.host}]` : service.host;
   return `http://${host}:${service.port}${service.path}`;
+}
+
+const shellQuoted = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
+
+/**
+ * Returns the curl command that sends what the check sends: same URL, same time limit, redirects
+ * followed unless a 3xx is expected. It prints the status line and the headers before the body.
+ */
+export function curlCommand(service: Service): string {
+  const follow = expectsRedirect(service.expect) ? "" : " -L";
+  const seconds = service.timeout ?? DEFAULT_TIMEOUT_SECONDS;
+  return `curl -i${follow} --max-time ${seconds} ${shellQuoted(targetUrl(service))}`;
 }
 
 function isExpected(expect: Service["expect"], status: number): boolean {

@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -582,6 +582,76 @@ describe("probe wait", () => {
   });
 });
 
+describe("probe open / curl", () => {
+  /** A directory to use as PATH, holding only a fake opener that writes its argument to `opened`. */
+  async function fakeOpener(): Promise<{ bin: string; opened: string }> {
+    const bin = await tempDir();
+    const opened = join(bin, "opened");
+    for (const name of ["open", "xdg-open"]) {
+      await writeFile(join(bin, name), `#!/bin/sh\nprintf '%s' "$1" > '${opened}'\n`);
+      await chmod(join(bin, name), 0o755);
+    }
+    return { bin, opened };
+  }
+
+  it("opens the URL of the service with the opener of the platform", async () => {
+    const root = await project();
+    await addApi(root);
+    const { bin, opened } = await fakeOpener();
+    const url = `http://127.0.0.1:${port}/health`;
+
+    const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: bin });
+
+    expect(run).toEqual({ code: 0, stdout: `Opened ${url}\n`, stderr: "" });
+    await vi.waitFor(async () => expect(await readFile(opened, "utf8")).toBe(url));
+  });
+
+  it("prints the URL and exits 1 when the opener is not installed", async () => {
+    const root = await project();
+    await addApi(root);
+    const opener = process.platform === "darwin" ? "open" : "xdg-open";
+
+    const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: await tempDir() });
+
+    expect(run).toEqual({
+      code: 1,
+      stdout: `http://127.0.0.1:${port}/health\n`,
+      stderr: `probe: ${opener} not found, open the URL yourself.\n`,
+    });
+  });
+
+  it("prints a curl command that runs as is", async () => {
+    const root = await project();
+    await addApi(root);
+
+    const { code, stdout, stderr } = await probe(root, "curl", "api");
+
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+    expect(stdout).toBe(`curl -i -L --max-time 3 'http://127.0.0.1:${port}/health'\n`);
+    const answer = await exec("sh", ["-c", `${stdout.trim()} -s`], root);
+    expect(answer.code).toBe(0);
+    expect(answer.stdout).toMatch(/^HTTP\/1\.1 200 /);
+  });
+
+  it.each(["open", "curl"])(
+    "exits 2 and points to probe ls when %s gets an unknown service",
+    async (command) => {
+      const root = await project();
+      await addApi(root);
+
+      expect(await probe(root, command, "nope")).toEqual({
+        code: 2,
+        stdout: "",
+        stderr: 'probe: unknown service "nope". See: probe ls\n',
+      });
+    },
+  );
+
+  it.each(["open", "curl"])("exits 2 when %s gets no service name", async (command) => {
+    expect((await probe(await project(), command)).code).toBe(2);
+  });
+});
+
 describe("something still pending once the report is printed", () => {
   const HOLD_OPEN = pathToFileURL(resolve(import.meta.dirname, "fixtures", "hold-open.mjs")).href;
   const held = (cwd: string, ...args: string[]) =>
@@ -732,7 +802,7 @@ describe("probe (top level)", () => {
     const usage = await exec(process.execPath, [CLI], cwd, env);
     expect(usage.code).toBe(2);
     expect(usage.stdout).toContain(
-      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|status|sync|migrate",
+      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|status|sync|migrate",
     );
   });
 

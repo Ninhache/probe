@@ -38,6 +38,11 @@ export const EXAMPLES: Record<string, Example[]> = {
     { command: "probe wait api --timeout 120", note: "Wait for api, 2 minutes at most" },
     { command: "probe wait --interval 1 --max-interval 10", note: "Check less often" },
   ],
+  open: [{ command: "probe open front", note: "Open the URL of front in the browser" }],
+  curl: [
+    { command: "probe curl api", note: "Print the curl command for api" },
+    { command: "probe curl api | sh", note: "Run it" },
+  ],
   status: [{ command: "probe status", note: "Version, migration, Makefile block" }],
   sync: [{ command: "probe sync", note: "Write the probe block of the Makefile" }],
   migrate: [{ command: "probe migrate", note: "Bring .probe/config.yml up to date" }],

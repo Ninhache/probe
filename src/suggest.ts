@@ -1,5 +1,5 @@
 /** Typos forgiven in a word, by its length: a short word one typo away from everything suggests nothing. */
-const SHORT_WORD = 3;
+const SHORT_WORD = 4;
 const TYPOS_SHORT = 1;
 const TYPOS_LONG = 2;
 
@@ -24,7 +24,7 @@ export function typoDistance(a: string, b: string): number {
 
 /**
  * Returns the candidate the word was most likely meant to be, or `undefined` when none is close:
- * one typo at most for a candidate of 3 letters or fewer, two otherwise. The first of equal candidates wins.
+ * one typo at most for a candidate of 4 letters or fewer, two otherwise. The first of equal candidates wins.
  */
 export function closest(word: string, candidates: readonly string[]): string | undefined {
   let found: { candidate: string; distance: number } | undefined;

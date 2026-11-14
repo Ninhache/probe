@@ -2,9 +2,11 @@ import { type ArgsDef, parseArgs } from "citty";
 import { describe, expect, it } from "vitest";
 import add from "../src/commands/add";
 import check from "../src/commands/check";
+import curl from "../src/commands/curl";
 import init from "../src/commands/init";
 import ls from "../src/commands/ls";
 import migrate from "../src/commands/migrate";
+import open from "../src/commands/open";
 import rm from "../src/commands/rm";
 import status from "../src/commands/status";
 import sync from "../src/commands/sync";
@@ -18,6 +20,8 @@ const COMMANDS: Record<string, { args?: unknown }> = {
   ls,
   check,
   wait,
+  open,
+  curl,
   status,
   sync,
   migrate,
