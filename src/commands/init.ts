@@ -6,6 +6,9 @@ import { pathsFor } from "../config/discovery";
 import { CURRENT_SCHEMA_VERSION } from "../config/schema";
 import { BACKUP_GLOB, LOCAL_FILE, PROBE_DIR } from "../constants";
 import { ProbeError } from "../errors";
+import { isInteractive } from "../ui/terminal";
+import { offerDetected } from "./detected";
+import { openProject } from "./shared";
 
 const IGNORED = [`${PROBE_DIR}/${LOCAL_FILE}`, `${PROBE_DIR}/${BACKUP_GLOB}`];
 
@@ -45,6 +48,14 @@ export default defineCommand({
   },
   async run() {
     await initProject(process.cwd());
-    console.log(`Created ${PROBE_DIR}/. Next: probe add api -p 3000`);
+    const next = "Next: probe add api -p 3000";
+    // Off a terminal nobody can tick a list: nothing is looked for.
+    if (!isInteractive(process.stdin, process.stdout, process.env)) {
+      console.log(`Created ${PROBE_DIR}/. ${next}`);
+      return;
+    }
+    console.log(`Created ${PROBE_DIR}/.`);
+    const added = await offerDetected(await openProject());
+    if (!added || added.length === 0) console.log(next);
   },
 });

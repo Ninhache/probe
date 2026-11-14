@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { ask as askText, confirm, type Question } from "../src/ui/prompt";
+import { ask as askText, choose, confirm, type Question } from "../src/ui/prompt";
 
 const ENTER = "\r";
 const CTRL_C = "\u0003";
@@ -79,5 +79,37 @@ describe("ask", () => {
 
   it("should return null when cancelled", async () => {
     expect(await type({}, [["Port", CTRL_C]])).toBeNull();
+  });
+});
+
+/** Shows a two-line checklist on fake streams and types `keys` once it is drawn. */
+async function tick(keys: string): Promise<number[] | null> {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let screen = "";
+  let typed = false;
+  output.on("data", (chunk: Buffer) => {
+    screen += chunk.toString();
+    if (typed || !screen.includes("second")) return;
+    typed = true;
+    setImmediate(() => input.write(keys));
+  });
+  return choose("Which ones?", [{ label: "first" }, { label: "second" }], { input, output });
+}
+
+describe("choose", () => {
+  const SPACE = " ";
+  const DOWN = "\u001b[B";
+
+  it("should return the indexes of the ticked lines", async () => {
+    expect(await tick(`${DOWN}${SPACE}${ENTER}`)).toEqual([1]);
+  });
+
+  it("should return nothing when Enter is pressed alone", async () => {
+    expect(await tick(ENTER)).toEqual([]);
+  });
+
+  it("should return null when cancelled", async () => {
+    expect(await tick(CTRL_C)).toBeNull();
   });
 });

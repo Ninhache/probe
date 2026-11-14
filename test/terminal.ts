@@ -25,9 +25,18 @@ export function onTerminal(
   cwd: string,
   args: string[],
   steps: Step[],
+  extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number; screen: string }> {
-  // CI is set on the runners, and it turns every question off.
-  const env = { ...process.env, PROBE_NO_UPDATE_CHECK: "1", TERM: "xterm-256color", CI: "" };
+  const env = {
+    ...process.env,
+    PROBE_NO_UPDATE_CHECK: "1",
+    TERM: "xterm-256color",
+    // CI is set on the runners, and it turns every question off.
+    CI: "",
+    // No port of the machine is tried: a dev server running there would add a question.
+    PROBE_DETECT_PORTS: "",
+    ...extraEnv,
+  };
   return new Promise((done) => {
     execFile(
       "python3",

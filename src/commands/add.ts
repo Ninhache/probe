@@ -5,6 +5,7 @@ import { SERVICE_NAME_PATTERN, serviceSchemaV1 } from "../config/schema";
 import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
 import { ask } from "../ui/prompt";
+import { offerDetected } from "./detected";
 import { openProject, rawServices, saveServices, secondsToMs } from "./shared";
 
 function parseInteger(value: string, flag: string): number {
@@ -49,12 +50,19 @@ function expectProblem(expect: string): string | undefined {
 }
 
 /**
- * `probe add` alone on a terminal: asks for the name, port, path and expected status, then adds the service.
+ * `probe add` alone on a terminal: proposes the services found in the project, and when none is
+ * found or ticked, asks for the name, port, path and expected status, then adds the service.
  * Each answer is asked again until the config schema accepts it. Cancelling writes nothing.
  */
 export async function guidedAdd(): Promise<void> {
   const loaded = await openProject();
   const services = rawServices(loaded);
+  const detected = await offerDetected(loaded);
+  if (detected === null) {
+    console.log("Nothing added.");
+    return;
+  }
+  if (detected.length > 0) return;
   const answers: string[] = [];
   const questions = [
     {
