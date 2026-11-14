@@ -35,6 +35,30 @@ describe.skipIf(!hasPython())("probe init on a terminal", () => {
     expect(await configOf(root)).toContain("api: { port: 4000, path: /health }");
   });
 
+  it("should show the source of every line, not only the one under the cursor", async () => {
+    const root = await withEnv();
+    await writeFile(join(root, "package.json"), '{"name":"shop","scripts":{"dev":"vite"}}');
+
+    const { screen } = await onTerminal(root, ["init"], [[LIST, CTRL_C]]);
+
+    const list = screen.slice(0, screen.indexOf("Enter: confirm"));
+    expect(list).toContain(".env (API_URL)");
+    expect(list).toContain("package.json (dev script)");
+  });
+
+  it("should propose a local port where a server answers", async () => {
+    const server = createServer((_request, response) => response.end());
+    await new Promise<void>((done) => server.listen(0, "localhost", done));
+    const port = (server.address() as AddressInfo).port;
+
+    const { screen } = await onTerminal(await tempDir(), ["init"], [[LIST, CTRL_C]], {
+      PROBE_DETECT_PORTS: String(port),
+    });
+    await new Promise((done) => server.close(done));
+
+    expect(screen).toContain(`answers on localhost:${port}`);
+  });
+
   it("should show and write no other value of .env", async () => {
     const root = await withEnv();
 

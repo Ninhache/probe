@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { httpChecker } from "./checkers/http";
+import { targetUrl } from "./checkers/http";
 import type { RawConfig } from "./config/migrations";
 import { SERVICE_NAME_PATTERN, serviceSchemaV1 } from "./config/schema";
 import { DETECT_PORTS, DETECT_PORTS_ENV, DETECT_TIMEOUT_MS } from "./constants";
@@ -178,14 +178,22 @@ export function detectPorts(env: NodeJS.ProcessEnv): number[] {
     .filter((port) => Number.isInteger(port) && port > 0 && port <= 65535);
 }
 
-/** The real sources: files on disk, and the HTTP checker with a short time limit. */
+/** The real sources: files on disk, and one GET per port with a short time limit. */
 export function systemDeps(env: NodeJS.ProcessEnv): DetectDeps {
   return {
     read: (path) => readFile(path, "utf8").catch(() => null),
+    // The first response is the answer: following a redirect would send a request
+    // somewhere else, possibly outside the machine.
     answers: async (port) => {
-      const service = serviceSchemaV1.parse({ port });
-      const result = await httpChecker.check("", service, { timeoutMs: DETECT_TIMEOUT_MS });
-      return result.status !== undefined;
+      const url = targetUrl(serviceSchemaV1.parse({ port }));
+      const signal = AbortSignal.timeout(DETECT_TIMEOUT_MS);
+      try {
+        const response = await fetch(url, { signal, redirect: "manual" });
+        await response.body?.cancel();
+        return true;
+      } catch {
+        return false;
+      }
     },
     ports: detectPorts(env),
   };

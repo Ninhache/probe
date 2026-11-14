@@ -115,6 +115,28 @@ describe("detectServices on local ports", () => {
     ]);
   });
 
+  it("should propose a port that redirects, without following the redirect", async () => {
+    let followed = 0;
+    const target = createServer((_request, response) => {
+      followed++;
+      response.end();
+    });
+    await new Promise<void>((done) => target.listen(0, "localhost", done));
+    const location = `http://localhost:${(target.address() as AddressInfo).port}/login`;
+    const redirecting = createServer((_request, response) =>
+      response.writeHead(302, { location }).end(),
+    );
+    await new Promise<void>((done) => redirecting.listen(0, "localhost", done));
+    const redirectingPort = (redirecting.address() as AddressInfo).port;
+
+    const found = await detectIn({}, {}, { ...systemDeps({}), ports: [redirectingPort] });
+    await new Promise((done) => redirecting.close(done));
+    await new Promise((done) => target.close(done));
+
+    expect(found.map(({ name }) => name)).toEqual([`port-${redirectingPort}`]);
+    expect(followed).toBe(0);
+  });
+
   it("should not try a port a file already gave", async () => {
     const tried: number[] = [];
     const answers = async (candidate: number) => tried.push(candidate) > 0;
