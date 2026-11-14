@@ -756,8 +756,30 @@ describe("probe (top level)", () => {
   });
 
   it("exits 2 on an unknown command", async () => {
-    expect((await probe(await tempDir(), "nope")).code).toBe(2);
+    expect(await probe(await tempDir(), "nope")).toMatchObject({
+      code: 2,
+      stdout: "",
+      stderr: "probe: Unknown command nope. See: probe --help\n",
+    });
   });
+
+  it.each([
+    ["chek", "check"],
+    ["statsu", "status"],
+    ["sl", "ls"],
+  ])(
+    "suggests for the mistyped command %s the command %s, and runs nothing",
+    async (typed, command) => {
+      const root = await project();
+      await addApi(root);
+
+      expect(await probe(root, typed)).toMatchObject({
+        code: 2,
+        stdout: "",
+        stderr: `probe: Unknown command ${typed}. Did you mean: probe ${command}? See: probe --help\n`,
+      });
+    },
+  );
 });
 
 describe("generated Makefile with real make", () => {

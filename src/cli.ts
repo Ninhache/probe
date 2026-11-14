@@ -37,6 +37,7 @@ import {
 } from "./constants";
 import { createSaveQueue } from "./dashboard/saves";
 import { ProbeError } from "./errors";
+import { closest } from "./suggest";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
   cacheDir,
@@ -157,6 +158,16 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   return true;
 }
 
+const UNKNOWN_COMMAND = "E_UNKNOWN_COMMAND";
+
+/** The command a mistyped one was probably meant to be, as a sentence to add to citty's error. */
+function didYouMean(error: Error, rawArgs: string[]): string {
+  if ((error as { code?: string }).code !== UNKNOWN_COMMAND) return "";
+  const typed = rawArgs.find((arg) => !arg.startsWith("-"));
+  const command = typed && closest(typed, Object.keys(main.subCommands ?? {}));
+  return command ? ` Did you mean: probe ${command}?` : "";
+}
+
 /** Resolves once everything written to the stream so far has left the process. */
 function flushed(stream: NodeJS.WriteStream): Promise<void> {
   return new Promise((done) => {
@@ -180,7 +191,8 @@ async function run(rawArgs: string[]): Promise<void> {
     } else if (error instanceof Error && error.name === "CLIError") {
       // citty's own usage errors (unknown command, missing argument)
       if (rawArgs.length === 0) await printUsage(main);
-      console.error(`probe: ${error.message.replace(/\.$/, "")}. See: probe --help`);
+      const message = stripStyles(error.message).replace(/\.$/, "");
+      console.error(`probe: ${message}.${didYouMean(error, rawArgs)} See: probe --help`);
     } else {
       // No rethrow: an uncaught error exits 1, which callers read as "a service is down".
       console.error(`probe: ${error instanceof Error ? error.message : String(error)}`);
