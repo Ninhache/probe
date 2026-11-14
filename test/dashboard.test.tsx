@@ -33,6 +33,25 @@ const db: CheckResult = {
 };
 
 const ESCAPE = String.fromCharCode(27);
+const ENTER = "\r";
+/** Checks like the real runner: a skipped service is reported, not checked. */
+const checkUnlessSkipped = async (
+  _signal: AbortSignal,
+  _timeoutMs: number,
+  skipped: ReadonlySet<string>,
+): Promise<CheckResult[]> =>
+  [api, db].map((result) =>
+    skipped.has(result.name)
+      ? {
+          name: result.name,
+          type: result.type,
+          target: result.target,
+          ok: true,
+          skipped: true,
+          latencyMs: 0,
+        }
+      : result,
+  );
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let app: ReturnType<typeof render> | undefined;
@@ -41,15 +60,23 @@ afterEach(() => app?.unmount());
 function open(options: {
   terminal?: Terminal;
   intervalMs?: number;
-  check?: (signal: AbortSignal, timeoutMs: number) => Promise<CheckResult[]>;
+  skipped?: string[];
+  check?: (
+    signal: AbortSignal,
+    timeoutMs: number,
+    skipped: ReadonlySet<string>,
+  ) => Promise<CheckResult[]>;
   onSettingsChange?: (settings: DashboardSettings) => void;
+  onSkipChange?: (name: string, skip: boolean) => void;
 }) {
   app = render(
     <Dashboard
       terminal={options.terminal ?? plain}
       settings={{ intervalMs: options.intervalMs ?? 60_000, timeoutMs: 3_000 }}
       check={options.check ?? (async () => [api, db])}
+      skipped={options.skipped}
       onSettingsChange={options.onSettingsChange}
+      onSkipChange={options.onSkipChange}
     />,
   );
   return app;
@@ -65,7 +92,7 @@ describe("dashboard", () => {
         "› ✓ api  http://localhost:3000/health  200  4ms",
         "  ✗ db   http://localhost:5432/        connection refused",
         "http://localhost:3000/health",
-        "↑↓ jk move · r refresh · o options · q quit",
+        "↑↓ jk move · r refresh · ↵ service · o options · q quit",
       ].join("\n"),
     );
   });
@@ -86,7 +113,7 @@ describe("dashboard", () => {
     const { lastFrame } = open({ terminal: { ...plain, unicode: false } });
     await tick();
     expect(lastFrame()).toContain("> ✓ api");
-    expect(lastFrame()).toContain("jk move - r refresh - o options - q quit");
+    expect(lastFrame()).toContain("jk move - r refresh - enter service - o options - q quit");
   });
 
   it("moves the selection with j, k and the arrows, within the list", async () => {
@@ -238,6 +265,83 @@ describe("dashboard", () => {
     expect(lastFrame()).toContain("| > Interval  < 60s >        |");
     expect(lastFrame()).toContain("jk move - hl change - esc close");
     expect(frames.join("")).not.toContain(ESCAPE);
+  });
+
+  it("opens the settings of the selected service on enter and closes them on enter", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    expect(lastFrame()).toBe(
+      [
+        "probe · 1/2 up · every 60s",
+        "  ✓ api  http://localhost:3000/health  200  4ms",
+        "› ✗ db   http://localhost:5432/        connection refused",
+        "http://localhost:5432/ · connection refused",
+        "┌────────────────────────────┐",
+        "│ db                         │",
+        "│ › Skip  ‹ no ›             │",
+        "└────────────────────────────┘",
+        "↑↓ jk move · ←→ hl change · esc close",
+      ].join("\n"),
+    );
+    stdin.write(ENTER);
+    await tick();
+    expect(lastFrame()).not.toContain("Skip");
+  });
+
+  it("stops checking a service set aside from its panel, and says so", async () => {
+    const changes: [string, boolean][] = [];
+    const { lastFrame, stdin } = open({
+      check: checkUnlessSkipped,
+      onSkipChange: (name, skip) => changes.push([name, skip]),
+    });
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(lastFrame()).toContain("probe · 1/1 up · 1 skipped · every 60s");
+    expect(lastFrame()).toContain("› - db   http://localhost:5432/        skipped");
+    expect(lastFrame()).toContain("› Skip  ‹ yes ›");
+    stdin.write("h");
+    await tick();
+    expect(lastFrame()).toContain("probe · 1/2 up · every 60s");
+    expect(changes).toEqual([
+      ["db", true],
+      ["db", false],
+    ]);
+  });
+
+  it("shows a service as skipped before the pass that skips it ends", async () => {
+    let passes = 0;
+    const check = (signal: AbortSignal) => {
+      passes += 1;
+      if (passes === 1) return Promise.resolve([api, db]);
+      return new Promise<CheckResult[]>((resolve) => {
+        signal.addEventListener("abort", () => resolve([api, db]));
+      });
+    };
+    const { lastFrame, stdin } = open({ check });
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(passes).toBe(2);
+    expect(lastFrame()).toContain("probe · 1/1 up · 1 skipped · every 60s");
+  });
+
+  it("starts with the services already set aside", async () => {
+    const { lastFrame } = open({ check: checkUnlessSkipped, skipped: ["db"] });
+    await tick();
+    expect(lastFrame()).toContain("probe · 1/1 up · 1 skipped · every 60s");
   });
 
   it("fits a 60-column terminal and follows a resize", async () => {

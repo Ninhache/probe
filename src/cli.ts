@@ -23,7 +23,9 @@ import {
   changedPreferences,
   initialDashboardSettings,
   readDashboardPreferences,
+  readSkippedServices,
   writeDashboardPreferences,
+  writeServiceSkip,
 } from "./config/local";
 import { DASHBOARD_INTERVAL_SECONDS, EXIT_ERROR, REFRESH_COMMAND } from "./constants";
 import { ProbeError } from "./errors";
@@ -97,8 +99,8 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
  * `probe` alone on a terminal, inside a project with services, opens the dashboard.
  * The interactive libraries are imported here only, so every other path starts without them.
  * With `--interval` there is nothing to fall back to: what prevents the dashboard is an error.
- * Settings come from `--interval`, then `local.yml`, then the defaults; those changed in the
- * options panel are saved to `local.yml`.
+ * Settings come from `--interval`, then `local.yml`, then the defaults; what the panels change
+ * is saved to `local.yml`.
  */
 async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const interval = dashboardInterval(rawArgs);
@@ -122,11 +124,19 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const { openDashboard } = await import("./dashboard/open");
   let settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
   let saving: Promise<unknown> = Promise.resolve();
-  await openDashboard(config, stdoutTerminal(), settings, (next) => {
-    const changed = changedPreferences(settings, next);
-    settings = next;
-    // A read-only project must not break the dashboard: a failed save is dropped.
-    saving = saving.then(() => writeDashboardPreferences(paths, changed)).catch(() => {});
+  // One write at a time; a read-only project must not break the dashboard: a failed save is dropped.
+  const save = (write: () => Promise<boolean>) => {
+    saving = saving.then(write).catch(() => {});
+  };
+  await openDashboard(config, stdoutTerminal(), {
+    settings,
+    skipped: await readSkippedServices(paths),
+    onSettingsChange: (next) => {
+      const changed = changedPreferences(settings, next);
+      settings = next;
+      save(() => writeDashboardPreferences(paths, changed));
+    },
+    onSkipChange: (name, skip) => save(() => writeServiceSkip(paths, name, skip)),
   });
   await saving;
   return true;
