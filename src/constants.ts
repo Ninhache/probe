@@ -12,6 +12,9 @@ export const DEFAULT_CHECKER_TYPE = "http";
 export const DEFAULT_TIMEOUT_SECONDS = 3;
 /** Pause between two passes of the dashboard, counted from the end of a pass. */
 export const DASHBOARD_INTERVAL_SECONDS = 2;
+/** Values the options panel of the dashboard steps through, in seconds. */
+export const DASHBOARD_INTERVAL_CHOICES_SECONDS = [0.5, 1, 2, 5, 10, 30, 60];
+export const DASHBOARD_TIMEOUT_CHOICES_SECONDS = [1, 2, 3, 5, 10, 30];
 // setTimeout overflows above 2^31 ms and then fires at once.
 export const MAX_TIMEOUT_SECONDS = 2_147_483;
 

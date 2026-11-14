@@ -19,7 +19,12 @@ import sync from "./commands/sync";
 import wait from "./commands/wait";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { loadConfig } from "./config/loader";
-import { DASHBOARD_INTERVAL_SECONDS, EXIT_ERROR, REFRESH_COMMAND } from "./constants";
+import {
+  DASHBOARD_INTERVAL_SECONDS,
+  DEFAULT_TIMEOUT_SECONDS,
+  EXIT_ERROR,
+  REFRESH_COMMAND,
+} from "./constants";
 import { ProbeError } from "./errors";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
@@ -112,7 +117,10 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
   }
   const { openDashboard } = await import("./dashboard/open");
-  await openDashboard(config, stdoutTerminal(), intervalMs);
+  await openDashboard(config, stdoutTerminal(), {
+    intervalMs,
+    timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000,
+  });
   return true;
 }
 
