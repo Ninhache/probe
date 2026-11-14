@@ -170,6 +170,9 @@ Release: bump `version` in `package.json`, merge, then push a `v<version>` tag. 
 to npm through trusted publishing: no token, the package trusts this repo's `release.yml` (set on npmjs.com,
 package Settings, Trusted Publisher). It then opens a PR on `ninhache/homebrew-tap` with the new `url` and
 `sha256` (secret `HOMEBREW_TAP_TOKEN`), which merges itself once the tap's CI is green.
+It also creates the GitHub Release, with notes listing the pull requests merged since the previous tag.
+
+What changed in each version: [Releases](https://github.com/Ninhache/probe/releases).
 
 ## License
 
