@@ -2,14 +2,14 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RawConfig } from "../config/migrations";
 import { SERVICE_NAME_PATTERN, serviceSchemaV1 } from "../config/schema";
-import { allSources } from "./registry";
+import { SOURCES } from "./registry";
 import { address, isHttpPort } from "./shared";
 import { answersHttp, detectPorts } from "./sources/ports";
-import type { Candidate, Source } from "./types";
+import type { Candidate, Machine, Source } from "./types";
 
-export type { Candidate, Source, SourceContext } from "./types";
+export type { Candidate, Machine, Source, SourceContext } from "./types";
 
-export interface DetectDeps {
+export interface DetectDeps extends Machine {
   /** Returns the text of a file by its absolute path, or null when it cannot be read. */
   read: (path: string) => Promise<string | null>;
   /** The places to look at, in order. */
@@ -27,12 +27,14 @@ export interface DetectDeps {
 export async function detectServices(
   root: string,
   existing: Record<string, RawConfig>,
-  { read, sources }: DetectDeps,
+  { read, sources, ports, answers }: DetectDeps,
 ): Promise<Candidate[]> {
   const names = new Set(Object.keys(existing));
   const addresses = new Set(Object.values(existing).map(address));
   const kept: Candidate[] = [];
   const context = {
+    ports,
+    answers,
     read: (file: string) => read(join(root, file)),
     isKnown: (service: RawConfig) => addresses.has(address(service)),
   };
@@ -54,6 +56,8 @@ export async function detectServices(
 export function systemDeps(env: NodeJS.ProcessEnv): DetectDeps {
   return {
     read: (path) => readFile(path, "utf8").catch(() => null),
-    sources: allSources({ ports: detectPorts(env), answers: answersHttp }),
+    sources: SOURCES,
+    ports: detectPorts(env),
+    answers: answersHttp,
   };
 }

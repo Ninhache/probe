@@ -1,7 +1,8 @@
 import type { RawConfig } from "../../config/migrations";
-import { DEFAULT_HOST, DEFAULT_NAME, ENV_FILES, parseEnvFile, serviceName } from "../shared";
+import { DEFAULT_HOST, DEFAULT_NAME, parseEnvFile, serviceName } from "../shared";
 import type { Candidate, Source } from "../types";
 
+const ENV_FILES = [".env", ".env.local"];
 const LOCAL_HOSTS = [DEFAULT_HOST, "127.0.0.1", "::1"];
 const URL_KEY = /^(?:VITE_|NEXT_PUBLIC_|REACT_APP_|PUBLIC_)?(.*)_URL$/;
 

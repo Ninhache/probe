@@ -3,24 +3,22 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { detectServices, systemDeps } from "../src/detect";
-import { allSources } from "../src/detect/registry";
-import { answersHttp, detectPorts, type PortProbe } from "../src/detect/sources/ports";
+import { detectServices, type Machine, systemDeps } from "../src/detect";
+import { answersHttp, detectPorts } from "../src/detect/sources/ports";
 import { tempDir } from "./helpers";
 
 const SECRET = "S3CRET";
-const NO_PORTS: PortProbe = { answers: async () => false, ports: [] };
+const NO_PORTS: Machine = { answers: async () => false, ports: [] };
 
 /** An example project made of `files`, searched with the real file reader. */
 async function detectIn(
   files: Record<string, string>,
   existing = {},
-  probe: Partial<PortProbe> = {},
+  machine: Partial<Machine> = {},
 ) {
   const root = await tempDir();
   for (const [name, text] of Object.entries(files)) await writeFile(join(root, name), text);
-  const sources = allSources({ ...NO_PORTS, ...probe });
-  return detectServices(root, existing, { ...systemDeps({}), sources });
+  return detectServices(root, existing, { ...systemDeps({}), ...NO_PORTS, ...machine });
 }
 
 describe("detectServices in .env", () => {
@@ -118,6 +116,64 @@ services:
     ]);
   });
 
+  it("should read the first compose file only, as docker compose does", async () => {
+    const found = await detectIn({
+      "compose.yaml": 'services: { web: { ports: ["8080:80"] } }',
+      "docker-compose.yml": 'services: { old: { ports: ["8081:80"] } }',
+    });
+
+    expect(found.map(({ name }) => name)).toEqual(["web"]);
+  });
+
+  it("should add the ports of the override file", async () => {
+    const found = await detectIn({
+      "compose.yml": "services: { web: { image: nginx }, api: { ports: ['4000:4000'] } }",
+      "compose.override.yml": 'services: { web: { ports: ["8080:80"] } }',
+    });
+
+    expect(found).toEqual([
+      { name: "api", service: { port: 4000 }, source: "compose.yml (api service)" },
+      { name: "web", service: { port: 8080 }, source: "compose.override.yml (web service)" },
+    ]);
+  });
+
+  it("should not take variables from .env.local, which compose does not read", async () => {
+    const found = await detectIn({
+      "compose.yml": `services: { web: { ports: ["\${WEB_PORT:-8080}:80"] } }`,
+      ".env.local": "WEB_PORT=9000\n",
+    });
+
+    expect(found.map(({ service }) => service.port)).toEqual([8080]);
+  });
+
+  it.each([
+    [`\${WEB_PORT:-8080}`, 8080],
+    [`\${WEB_PORT-8080}`, undefined],
+  ])("should read %s with an empty WEB_PORT as port %s", async (port, expected) => {
+    const found = await detectIn({
+      "compose.yml": `services: { web: { ports: ["${port}:80"] } }`,
+      ".env": "WEB_PORT=\n",
+    });
+
+    expect(found[0]?.service.port).toBe(expected);
+  });
+
+  it("should leave out a port published for https", async () => {
+    const found = await detectIn({
+      "compose.yml": 'services: { proxy: { ports: ["80:80", "443:443"] } }',
+    });
+
+    expect(found.map(({ service }) => service.port)).toEqual([80]);
+  });
+
+  it("should follow a YAML merge key", async () => {
+    const compose = 'x-web: &web\n  ports: ["8080:80"]\nservices:\n  web:\n    <<: *web\n';
+
+    const found = await detectIn({ "compose.yml": compose });
+
+    expect(found.map(({ name }) => name)).toEqual(["web"]);
+  });
+
   it("should find nothing in a compose file that is not valid YAML", async () => {
     expect(await detectIn({ "compose.yml": "services: [" })).toEqual([]);
   });
@@ -138,7 +194,7 @@ describe("detectServices with a source of its own", () => {
     const found = await detectServices(
       "/nowhere",
       {},
-      { read: async () => null, sources: [custom] },
+      { ...NO_PORTS, read: async () => null, sources: [custom] },
     );
 
     expect(found.map(({ name }) => name)).toEqual(["ok", "ok-2"]);

@@ -1,7 +1,7 @@
 import { composeSource } from "./sources/compose";
 import { envSource } from "./sources/env";
 import { packageJsonSource } from "./sources/package-json";
-import { type PortProbe, portsSource } from "./sources/ports";
+import { portsSource } from "./sources/ports";
 import type { Source } from "./types";
 
 /**
@@ -10,6 +10,9 @@ import type { Source } from "./types";
  * host and port, the first keeps it. Files that name their services come first, the ports
  * that merely answer come last.
  */
-export function allSources(probe: PortProbe): Source[] {
-  return [composeSource, envSource, packageJsonSource, portsSource(probe)];
-}
+export const SOURCES: readonly Source[] = [
+  composeSource,
+  envSource,
+  packageJsonSource,
+  portsSource,
+];

@@ -9,8 +9,16 @@ export interface Candidate {
   source: string;
 }
 
+/** What the machine lends to the sources. Tests pass their own. */
+export interface Machine {
+  /** Local ports worth trying. */
+  ports: readonly number[];
+  /** Tells whether an HTTP server answers on that local port. */
+  answers: (port: number) => Promise<boolean>;
+}
+
 /** What a source may use to look at the project. */
-export interface SourceContext {
+export interface SourceContext extends Machine {
   /** Returns the text of a file of the project, by its path from the project root; null when unreadable. */
   read: (file: string) => Promise<string | null>;
   /** Tells whether the config or an earlier source already has a service at that host and port. */

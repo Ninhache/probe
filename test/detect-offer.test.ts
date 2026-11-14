@@ -46,6 +46,17 @@ describe.skipIf(!hasPython())("probe init on a terminal", () => {
     expect(list).toContain("package.json (dev script)");
   });
 
+  it("should propose the services of a compose file", async () => {
+    const root = await tempDir();
+    await writeFile(join(root, "compose.yml"), 'services: { web: { ports: ["8080:80"] } }');
+
+    const { screen } = await onTerminal(root, ["init"], [[LIST, `${SPACE}${ENTER}`]]);
+
+    expect(screen).toContain("compose.yml (web service)");
+    expect(screen).toContain("Added web.");
+    expect(await configOf(root)).toContain("web: { port: 8080 }");
+  });
+
   it("should propose a local port where a server answers", async () => {
     const server = createServer((_request, response) => response.end());
     await new Promise<void>((done) => server.listen(0, "localhost", done));

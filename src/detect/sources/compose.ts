@@ -1,11 +1,20 @@
 import { parse } from "yaml";
-import { ENV_FILES, isHttpPort, parseEnvFile, serviceName } from "../shared";
+import { isHttpPort, parseEnvFile, serviceName } from "../shared";
 import type { Candidate, Source } from "../types";
 
-// The names `docker compose` looks for, in its order of preference.
+// The names `docker compose` looks for, in its order of preference: it reads the first one
+// there is, then the first override, which is where the ports of a dev setup often are.
 const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
-// ${VAR}, ${VAR:-default}, ${VAR-default} and $VAR, as compose substitutes them.
-const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::?-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const OVERRIDE_FILES = [
+  "compose.override.yaml",
+  "compose.override.yml",
+  "docker-compose.override.yaml",
+  "docker-compose.override.yml",
+];
+// The one file compose takes its variables from.
+const VARIABLES_FILE = ".env";
+// ${VAR}, ${VAR:-default}, ${VAR-default} and $VAR.
+const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
 const PORT = /^\d+$/;
 
 interface Published {
@@ -18,8 +27,11 @@ interface Published {
 type Variables = Map<string, string>;
 
 const substituted = (text: string, variables: Variables) =>
-  text.replace(VARIABLE, (_match, braced, fallback, bare) => {
-    return variables.get(braced ?? bare) ?? fallback ?? "";
+  text.replace(VARIABLE, (_match, braced, operator, fallback, bare) => {
+    const value = variables.get(braced ?? bare);
+    // `:-` also replaces an empty value, `-` only a missing one.
+    const missing = value === undefined || (operator === ":-" && value === "");
+    return missing ? (fallback ?? "") : value;
   });
 
 /** Reads one entry of `ports:`; null when it opens no fixed TCP port on the machine. */
@@ -48,7 +60,7 @@ function published(entry: unknown, variables: Variables): Published | null {
 function inFile(file: string, text: string, variables: Variables): Candidate[] {
   let document: { services?: unknown };
   try {
-    document = parse(text) ?? {};
+    document = parse(text, { merge: true }) ?? {};
   } catch {
     return [];
   }
@@ -75,19 +87,21 @@ function inFile(file: string, text: string, variables: Variables): Candidate[] {
 
 /**
  * The ports the services of a compose file publish on the machine.
- * Variables in a port (`"${WEB_PORT:-8080}:80"`) take their value from `.env`, as compose does.
+ * Variables in a port (`"${WEB_PORT:-8080}:80"`) take their value from `.env`; those of the shell
+ * are not looked at.
  */
 export const composeSource: Source = {
   id: "compose",
   async find({ read }) {
-    const variables: Variables = new Map();
-    for (const file of ENV_FILES) {
-      for (const [key, value] of parseEnvFile((await read(file)) ?? "")) variables.set(key, value);
-    }
+    const variables: Variables = new Map(parseEnvFile((await read(VARIABLES_FILE)) ?? ""));
     const found: Candidate[] = [];
-    for (const file of COMPOSE_FILES) {
-      const text = await read(file);
-      if (text !== null) found.push(...inFile(file, text, variables));
+    for (const names of [COMPOSE_FILES, OVERRIDE_FILES]) {
+      for (const file of names) {
+        const text = await read(file);
+        if (text === null) continue;
+        found.push(...inFile(file, text, variables));
+        break;
+      }
     }
     return found;
   },

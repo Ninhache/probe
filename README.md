@@ -70,8 +70,9 @@ Enter alone keeps the default, Ctrl+C adds nothing. Off a terminal it needs its 
 On a terminal, `probe init` and `probe add` alone first show the services they find in the project, as a list to
 tick. Nothing is ticked at first, and nothing is written unless you tick it. They look at:
 
-- `compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`: the ports a service publishes
-  (`"8080:80"`), under the name of the service.
+- the compose file (`compose.yaml`, `compose.yml`, `docker-compose.yaml` or `docker-compose.yml`) and its
+  `override` file: the ports a service publishes (`"8080:80"`), under the name of the service. A variable in a
+  port takes its value from `.env`. Ports 443 and 8443, databases, caches and brokers are left out.
 - `.env` and `.env.local`: `PORT`, and the `*_URL` that point to `http://localhost`. Only the host, the port and
   the path are kept: no other value is kept, shown or written.
 - `package.json`: the port a script names (`--port 4000`), or the usual one of its dev server (vite, next, nuxt,

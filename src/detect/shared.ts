@@ -3,8 +3,8 @@ import type { RawConfig } from "../config/migrations";
 export const DEFAULT_HOST = "localhost";
 export const DEFAULT_NAME = "app";
 
-// The check is an HTTP GET: databases, caches and brokers would always be reported down.
-const NOT_HTTP_PORTS = [1433, 2181, 3306, 5432, 5672, 6379, 9092, 11211, 27017];
+// The check is a plain HTTP GET: https, databases, caches and brokers would always be reported down.
+const NOT_HTTP_PORTS = [443, 1433, 2181, 3306, 5432, 5672, 6379, 8443, 9092, 11211, 27017];
 
 export const isHttpPort = (port: number) => !NOT_HTTP_PORTS.includes(port);
 
@@ -19,7 +19,6 @@ export function serviceName(text: string): string {
   return name || DEFAULT_NAME;
 }
 
-export const ENV_FILES = [".env", ".env.local"];
 const ENV_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/;
 
 function unquoted(value: string): string {

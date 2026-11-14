@@ -4,13 +4,6 @@ import { DETECT_PORTS, DETECT_PORTS_ENV, DETECT_TIMEOUT_MS } from "../../constan
 import { DEFAULT_HOST } from "../shared";
 import type { Candidate, Source } from "../types";
 
-export interface PortProbe {
-  /** Local ports to try. */
-  ports: readonly number[];
-  /** Tells whether an HTTP server answers on that local port. */
-  answers: (port: number) => Promise<boolean>;
-}
-
 /** Ports to try: `PROBE_DETECT_PORTS` (comma-separated, empty for none) when set, else the usual ones. */
 export function detectPorts(env: NodeJS.ProcessEnv): number[] {
   const listed = env[DETECT_PORTS_ENV];
@@ -40,23 +33,21 @@ export async function answersHttp(port: number): Promise<boolean> {
 }
 
 /** The local ports where an HTTP server answers right now, among those no file already gave. */
-export function portsSource({ ports, answers }: PortProbe): Source {
-  return {
-    id: "ports",
-    async find({ isKnown }) {
-      const tried = ports.filter((port) => !isKnown({ port }));
-      const open = await Promise.all(
-        tried.map(async (port) => ((await answers(port)) ? port : null)),
+export const portsSource: Source = {
+  id: "ports",
+  async find({ ports, answers, isKnown }) {
+    const tried = ports.filter((port) => !isKnown({ port }));
+    const open = await Promise.all(
+      tried.map(async (port) => ((await answers(port)) ? port : null)),
+    );
+    return open
+      .filter((port) => port !== null)
+      .map(
+        (port): Candidate => ({
+          name: `port-${port}`,
+          service: { port },
+          source: `answers on ${DEFAULT_HOST}:${port}`,
+        }),
       );
-      return open
-        .filter((port) => port !== null)
-        .map(
-          (port): Candidate => ({
-            name: `port-${port}`,
-            service: { port },
-            source: `answers on ${DEFAULT_HOST}:${port}`,
-          }),
-        );
-    },
-  };
-}
+  },
+};
