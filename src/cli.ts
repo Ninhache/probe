@@ -20,6 +20,11 @@ import wait from "./commands/wait";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { loadConfig } from "./config/loader";
 import {
+  type DashboardPreferences,
+  readDashboardPreferences,
+  writeDashboardPreferences,
+} from "./config/local";
+import {
   DASHBOARD_INTERVAL_SECONDS,
   DEFAULT_TIMEOUT_SECONDS,
   EXIT_ERROR,
@@ -96,12 +101,14 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
  * `probe` alone on a terminal, inside a project with services, opens the dashboard.
  * The interactive libraries are imported here only, so every other path starts without them.
  * With `--interval` there is nothing to fall back to: what prevents the dashboard is an error.
+ * Settings come from `--interval`, then `local.yml`, then the defaults; those changed in the
+ * options panel are saved to `local.yml`.
  */
 async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const interval = dashboardInterval(rawArgs);
   if (interval === null) return false;
   const asked = interval !== undefined;
-  const intervalMs = secondsToMs(INTERVAL_OPTION, interval ?? String(DASHBOARD_INTERVAL_SECONDS));
+  const askedMs = asked ? secondsToMs(INTERVAL_OPTION, interval) : undefined;
   if (!isInteractive(process.stdin, process.stdout, process.env)) {
     if (!asked) return false;
     throw new ProbeError(
@@ -117,10 +124,22 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
   }
   const { openDashboard } = await import("./dashboard/open");
-  await openDashboard(config, stdoutTerminal(), {
-    intervalMs,
-    timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000,
+  const saved = await readDashboardPreferences(paths);
+  let settings = {
+    intervalMs: askedMs ?? (saved.interval ?? DASHBOARD_INTERVAL_SECONDS) * 1000,
+    timeoutMs: (saved.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
+  };
+  let saving: Promise<unknown> = Promise.resolve();
+  await openDashboard(config, stdoutTerminal(), settings, (next) => {
+    // Only what the panel changed is saved: an interval given by --interval stays a one-off.
+    const changed: DashboardPreferences = {};
+    if (next.intervalMs !== settings.intervalMs) changed.interval = next.intervalMs / 1000;
+    if (next.timeoutMs !== settings.timeoutMs) changed.timeout = next.timeoutMs / 1000;
+    settings = next;
+    // A read-only project must not break the dashboard: a failed save is dropped.
+    saving = saving.then(() => writeDashboardPreferences(paths, changed)).catch(() => {});
   });
+  await saving;
   return true;
 }
 
