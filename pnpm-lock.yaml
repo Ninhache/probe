@@ -11,12 +11,6 @@ importers:
       citty:
         specifier: ^0.2.2
         version: 0.2.2
-      ink:
-        specifier: ^8.0.0
-        version: 8.0.0(@types/react@19.3.0)(react@19.3.1)
-      react:
-        specifier: ^19.3.1
-        version: 19.3.1
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -33,9 +27,15 @@ importers:
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
+      ink:
+        specifier: ^8.0.0
+        version: 8.0.0(@types/react@19.3.0)(react@19.3.1)
       ink-testing-library:
         specifier: ^4.0.0
         version: 4.0.0(@types/react@19.3.0)
+      react:
+        specifier: ^19.3.1
+        version: 19.3.1
       tsup:
         specifier: ^9.0.0
         version: 9.0.0(postcss@8.5.32)(typescript@7.0.2)(yaml@2.9.1)
