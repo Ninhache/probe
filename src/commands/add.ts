@@ -1,7 +1,6 @@
 import { defineCommand } from "citty";
-import type { z } from "zod";
 import type { RawConfig } from "../config/migrations";
-import { SERVICE_NAME_PATTERN, serviceSchemaV1 } from "../config/schema";
+import { expectProblem, nameProblem, pathProblem, portProblem } from "../config/service-input";
 import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
 import { ask } from "../ui/prompt";
@@ -20,34 +19,7 @@ function parseExpect(value: string): number | number[] {
   return codes.length === 1 ? (codes[0] as number) : codes;
 }
 
-const INTEGER = /^\d+$/;
 const DEFAULT_PATH = "/";
-
-/** What the config schema finds wrong with a value, in one line; undefined when it accepts it. */
-function schemaProblem(schema: z.ZodType, value: unknown): string | undefined {
-  const result = schema.safeParse(value);
-  return result.success ? undefined : result.error.issues[0]?.message;
-}
-
-function nameProblem(name: string, services: Record<string, RawConfig>): string | undefined {
-  if (!SERVICE_NAME_PATTERN.test(name)) return "Letters, digits, _ and - only, e.g. api";
-  if (Object.hasOwn(services, name)) return `${name} already exists`;
-  return undefined;
-}
-
-function portProblem(port: string): string | undefined {
-  if (!INTEGER.test(port)) return "A port number, e.g. 3000";
-  return schemaProblem(serviceSchemaV1.shape.port, Number(port)) && "A port between 1 and 65535";
-}
-
-function expectProblem(expect: string): string | undefined {
-  const codes = expect.split(",").map((code) => code.trim());
-  if (!codes.every((code) => INTEGER.test(code))) return "A status, or several: 200 or 200,204";
-  return (
-    schemaProblem(serviceSchemaV1.shape.expect, parseExpect(expect)) &&
-    "Statuses go from 100 to 599"
-  );
-}
 
 /**
  * `probe add` alone on a terminal: proposes the services found in the project, and when none is
@@ -68,14 +40,14 @@ export async function guidedAdd(): Promise<void> {
     {
       message: "Service name",
       placeholder: "api",
-      validate: (v: string) => nameProblem(v, services),
+      validate: (v: string) => nameProblem(v, Object.keys(services)),
     },
     { message: "Port", placeholder: "3000", validate: portProblem },
     {
       message: "Path to request",
       placeholder: DEFAULT_PATH,
       defaultValue: DEFAULT_PATH,
-      validate: (v: string) => schemaProblem(serviceSchemaV1.shape.path, v),
+      validate: pathProblem,
     },
     {
       message: "Expected status",

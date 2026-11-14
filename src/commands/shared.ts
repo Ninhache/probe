@@ -51,14 +51,25 @@ export async function saveServices(
   loaded: LoadedConfig,
   services: Record<string, RawConfig>,
 ): Promise<void> {
+  const { warning } = await writeServices(loaded, services);
+  if (warning) console.error(`probe: ${warning}`);
+}
+
+/** `saveServices` for a caller that owns the screen: what there is to say is returned, not printed. */
+export async function writeServices(
+  loaded: LoadedConfig,
+  services: Record<string, RawConfig>,
+): Promise<{ saved: LoadedConfig; warning?: string }> {
   const block = await blockState(loaded.paths, loaded.config);
   const saved = await saveConfig(loaded, { ...loaded.raw, services });
-  if (block === "missing") return;
+  if (block === "missing") return { saved };
   if (block !== "modified") {
     await syncMakefile(saved.paths, saved.config);
-    return;
+    return { saved };
   }
-  console.error(
-    "probe: the Makefile block was edited by hand, left as is. Run `probe sync` to regenerate it.",
-  );
+  return {
+    saved,
+    warning:
+      "the Makefile block was edited by hand, left as is. Run `probe sync` to regenerate it.",
+  };
 }
