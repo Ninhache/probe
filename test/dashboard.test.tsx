@@ -317,6 +317,27 @@ describe("dashboard", () => {
     ]);
   });
 
+  it("shows a service as skipped before the pass that skips it ends", async () => {
+    let passes = 0;
+    const check = (signal: AbortSignal) => {
+      passes += 1;
+      if (passes === 1) return Promise.resolve([api, db]);
+      return new Promise<CheckResult[]>((resolve) => {
+        signal.addEventListener("abort", () => resolve([api, db]));
+      });
+    };
+    const { lastFrame, stdin } = open({ check });
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(passes).toBe(2);
+    expect(lastFrame()).toContain("probe · 1/1 up · 1 skipped · every 60s");
+  });
+
   it("starts with the services already set aside", async () => {
     const { lastFrame } = open({ check: checkUnlessSkipped, skipped: ["db"] });
     await tick();

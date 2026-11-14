@@ -54,7 +54,7 @@ export function Dashboard({
 }: DashboardProps) {
   const { exit } = useApp();
   const { columns } = useWindowSize();
-  const [results, setResults] = useState<CheckResult[] | null>(null);
+  const [latest, setLatest] = useState<CheckResult[] | null>(null);
   const [selected, setSelected] = useState(0);
   const [settings, setSettings] = useState(initial);
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set(initiallySkipped));
@@ -69,7 +69,7 @@ export function Dashboard({
       while (!signal.aborted) {
         const next = await check(signal, timeoutMs, skipped);
         if (signal.aborted) return;
-        setResults(next);
+        setLatest(next);
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, intervalMs);
           skipPause.current = () => {
@@ -84,7 +84,7 @@ export function Dashboard({
     return () => controller.abort();
   }, [check, intervalMs, timeoutMs, skipped]);
 
-  const last = (results?.length ?? 1) - 1;
+  const last = (latest?.length ?? 1) - 1;
   const current = Math.min(selected, last);
 
   const change = (rowIndex: number, direction: 1 | -1) => {
@@ -110,7 +110,7 @@ export function Dashboard({
     const down = key.downArrow || input === "j";
     const left = key.leftArrow || input === "h";
     const right = key.rightArrow || input === "l";
-    const selectedName = results?.[current]?.name;
+    const selectedName = latest?.[current]?.name;
     if (input === "q") exit();
     else if (panel === null) {
       if (input === "r") skipPause.current();
@@ -136,7 +136,14 @@ export function Dashboard({
   const marker = unicode ? "› " : "> ";
   const cut = (text: string) => truncate(text, Math.max(1, columns));
 
-  if (!results) return <Text>{cut("probe: checking…")}</Text>;
+  if (!latest) return <Text>{cut("probe: checking…")}</Text>;
+
+  // A service just set aside is shown as such at once, not when the pass that skips it ends.
+  const results = latest.map((result): CheckResult => {
+    if (result.skipped || !skipped.has(result.name)) return result;
+    const { name, type, target } = result;
+    return { name, type, target, ok: true, skipped: true, latencyMs: 0 };
+  });
 
   const checked = results.filter((result) => !result.skipped);
   const up = checked.filter((result) => result.ok).length;
