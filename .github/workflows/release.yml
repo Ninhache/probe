@@ -37,6 +37,18 @@ jobs:
       - run: npm install -g npm@latest
       - run: npm publish --access public
 
+  # The GitHub Release is the changelog: its notes list the pull requests merged since the previous tag.
+  notes:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+
   # Opens a PR on the tap with the new url + sha256. It merges itself once the tap's CI has installed the formula.
   # Needs the secret HOMEBREW_TAP_TOKEN: a fine-grained token on ninhache/homebrew-tap
   # with "Contents" and "Pull requests" set to read and write.
