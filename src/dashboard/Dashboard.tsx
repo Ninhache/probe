@@ -33,6 +33,13 @@ export interface DashboardProps {
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   /** Called each time the service panel sets a service aside or brings it back. */
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
+  /** Opens the URL of a service; resolves to the line that says what happened. */
+  onOpen?: (name: string) => Promise<string>;
+  /**
+   * Copies the curl command of a service, with the timeout it has now, in seconds.
+   * Resolves to the line that says what happened: the command itself when it could not be copied.
+   */
+  onCopy?: (name: string, timeout: number | undefined) => Promise<string>;
 }
 
 export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
@@ -53,7 +60,8 @@ const seconds = (ms: number) => `${ms / 1000}s`;
 
 /**
  * Live list of the services, checked again `intervalMs` after each pass ends; `o` opens the options,
- * enter the settings of the selected service, `?` the list of every key.
+ * enter the settings of the selected service, `u` its URL in the browser, `c` copies its curl
+ * command, `?` the list of every key.
  * Colours come from `terminal`, never from ink props: ink does not honour `NO_COLOR`.
  */
 export function Dashboard({
@@ -65,6 +73,8 @@ export function Dashboard({
   onSettingsChange,
   onSkipChange,
   onTimeoutChange,
+  onOpen,
+  onCopy,
 }: DashboardProps) {
   const { exit } = useApp();
   const { columns } = useWindowSize();
@@ -76,6 +86,8 @@ export function Dashboard({
   const [panel, setPanel] = useState<Panel | null>(null);
   const [help, setHelp] = useState(false);
   const [unsaved, setUnsaved] = useState<string>();
+  // What the last `u` or `c` did, until the next key.
+  const [notice, setNotice] = useState<string>();
   const skipPause = useRef(() => {});
   // A change stays in effect for this run even when saving it failed: the failure is shown instead.
   const track = (saved: Saved | undefined) => {
@@ -140,6 +152,7 @@ export function Dashboard({
     const right = key === "right" || input === "l";
     const enter = key === "return";
     const selectedName = latest?.[current]?.name;
+    setNotice(undefined);
     if (input === "q") exit();
     else if (help) {
       if (input === "?" || key === "escape") setHelp(false);
@@ -148,6 +161,9 @@ export function Dashboard({
       if (input === "r") skipPause.current();
       else if (input === "o") setPanel({ kind: "options", row: 0 });
       else if (enter && selectedName) setPanel({ kind: "service", name: selectedName, row: 0 });
+      else if (input === "u" && selectedName) void onOpen?.(selectedName).then(setNotice);
+      else if (input === "c" && selectedName)
+        void onCopy?.(selectedName, timeouts[selectedName]).then(setNotice);
       else if (up) setSelected(Math.max(0, current - 1));
       else if (down) setSelected(Math.min(last, current + 1));
     } else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter))
@@ -286,6 +302,8 @@ export function Dashboard({
           })}
         </Box>
       )}
+      {/* Not cut: a command that could not be copied must be readable whole. */}
+      {notice !== undefined && <Text>{notice}</Text>}
       {unsaved !== undefined && <Text>{colors.yellow(cut(`not saved: ${unsaved}`))}</Text>}
       <Text>{colors.dim(cut(hint))}</Text>
     </Box>

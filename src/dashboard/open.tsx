@@ -2,6 +2,7 @@ import { render } from "ink";
 import { runChecks } from "../checkers/run";
 import type { Config } from "../config/schema";
 import type { Terminal } from "../ui/terminal";
+import { serviceActions } from "./actions";
 import { Dashboard, type DashboardProps } from "./Dashboard";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
@@ -39,7 +40,13 @@ export async function openDashboard(
     ),
   );
   const app = render(
-    <Dashboard terminal={terminal} check={check} timeouts={timeouts} {...state} />,
+    <Dashboard
+      terminal={terminal}
+      check={check}
+      timeouts={timeouts}
+      {...serviceActions(config)}
+      {...state}
+    />,
     { alternateScreen: true },
   );
   await app.waitUntilExit();

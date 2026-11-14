@@ -20,13 +20,27 @@ interface Binding {
  */
 const BINDINGS: readonly Binding[] = [
   { screens: ["list"], keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 1 },
-  { screens: ["list"], keys: "r", action: "refresh", help: "Check now", drop: 2 },
+  { screens: ["list"], keys: "r", action: "check", help: "Check now", drop: 2 },
   {
     screens: ["list"],
     keys: "↵",
     ascii: "enter",
     action: "service",
     help: "Settings of the selected service",
+    drop: 5,
+  },
+  {
+    screens: ["list"],
+    keys: "u",
+    action: "open",
+    help: "Open its URL in the browser",
+    drop: 4,
+  },
+  {
+    screens: ["list"],
+    keys: "c",
+    action: "copy",
+    help: "Copy its curl command",
     drop: 3,
   },
   {
@@ -34,7 +48,7 @@ const BINDINGS: readonly Binding[] = [
     keys: "o",
     action: "options",
     help: "Options: interval and timeout",
-    drop: 4,
+    drop: 6,
   },
   { screens: ["panel"], keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 1 },
   {
