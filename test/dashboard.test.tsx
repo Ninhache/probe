@@ -59,9 +59,9 @@ function open(options: {
   skipped?: string[];
   timeouts?: ServiceTimeouts;
   check?: DashboardProps["check"];
-  onTimeoutChange?: (name: string, seconds: number | undefined) => void;
-  onSettingsChange?: (settings: DashboardSettings) => void;
-  onSkipChange?: (name: string, skip: boolean) => void;
+  onTimeoutChange?: DashboardProps["onTimeoutChange"];
+  onSettingsChange?: DashboardProps["onSettingsChange"];
+  onSkipChange?: DashboardProps["onSkipChange"];
 }) {
   app = render(
     <Dashboard
@@ -205,7 +205,11 @@ describe("dashboard", () => {
 
   it("changes the interval from the options, within the choices", async () => {
     const changes: DashboardSettings[] = [];
-    const { lastFrame, stdin } = open({ onSettingsChange: (next) => changes.push(next) });
+    const { lastFrame, stdin } = open({
+      onSettingsChange: (next) => {
+        changes.push(next);
+      },
+    });
     await tick();
     stdin.write("o");
     await tick();
@@ -293,7 +297,9 @@ describe("dashboard", () => {
     const changes: [string, boolean][] = [];
     const { lastFrame, stdin } = open({
       check: checkUnlessSkipped,
-      onSkipChange: (name, skip) => changes.push([name, skip]),
+      onSkipChange: (name, skip) => {
+        changes.push([name, skip]);
+      },
     });
     await tick();
     stdin.write("j");
@@ -322,7 +328,9 @@ describe("dashboard", () => {
         passes.push(timeouts);
         return [api, db];
       },
-      onTimeoutChange: (name, seconds) => changes.push([name, seconds]),
+      onTimeoutChange: (name, seconds) => {
+        changes.push([name, seconds]);
+      },
     });
     await tick();
     stdin.write(ENTER);
@@ -356,7 +364,9 @@ describe("dashboard", () => {
     const changes: [string, number | undefined][] = [];
     const { lastFrame, stdin } = open({
       timeouts: { api: 7 },
-      onTimeoutChange: (name, seconds) => changes.push([name, seconds]),
+      onTimeoutChange: (name, seconds) => {
+        changes.push([name, seconds]);
+      },
     });
     await tick();
     stdin.write(ENTER);
@@ -368,6 +378,44 @@ describe("dashboard", () => {
     await tick();
     expect(lastFrame()).toContain("› Timeout  ‹ 10s ›");
     expect(changes).toEqual([["api", 10]]);
+  });
+
+  it("says so when a change could not be saved, until a save goes through", async () => {
+    const outcomes: (string | undefined)[] = [
+      ".probe/local.yml cannot be edited safely",
+      undefined,
+    ];
+    const { lastFrame, stdin } = open({ onSkipChange: async () => outcomes.shift() });
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("l");
+    await tick();
+    expect(lastFrame()).toContain("› Skip     ‹ yes ›");
+    expect(lastFrame()).toContain("not saved: .probe/local.yml cannot be edited safely");
+    stdin.write("h");
+    await tick();
+    expect(lastFrame()).not.toContain("not saved");
+  });
+
+  it("cuts an unsaved notice wider than the terminal", async () => {
+    const { lastFrame, stdin } = open({
+      onTimeoutChange: async () =>
+        `EACCES: permission denied, open '/home/someone/${"deep/".repeat(20)}.probe/config.yml'`,
+    });
+    await tick();
+    stdin.write(ENTER);
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write("l");
+    await tick();
+    const notice = lastFrame()
+      ?.split("\n")
+      .find((line) => line.startsWith("not saved"));
+    expect(notice).toBeDefined();
+    expect(notice?.length).toBeLessThanOrEqual(plain.columns ?? 0);
+    expect(notice?.endsWith("…")).toBe(true);
   });
 
   it("shows a service as skipped before the pass that skips it ends", async () => {

@@ -3,6 +3,7 @@ import { runChecks } from "../checkers/run";
 import type { Config } from "../config/schema";
 import type { Terminal } from "../ui/terminal";
 import { Dashboard, type DashboardProps } from "./Dashboard";
+import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
 
 export interface DashboardState {
@@ -10,11 +11,11 @@ export interface DashboardState {
   /** Services set aside when the dashboard opens. */
   skipped: ReadonlySet<string>;
   /** Called each time the service panel sets the timeout of a service, in seconds; `undefined`: back to the default. */
-  onTimeoutChange?: (name: string, seconds: number | undefined) => void;
+  onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   /** Receives the settings each time the options panel changes one. */
-  onSettingsChange?: (settings: DashboardSettings) => void;
+  onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   /** Called each time the service panel sets a service aside or brings it back. */
-  onSkipChange?: (name: string, skip: boolean) => void;
+  onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
 }
 
 /** Shows the dashboard on the alternate screen; resolves once it is closed (`q` or Ctrl+C). */

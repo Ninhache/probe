@@ -4,6 +4,7 @@ import type { CheckResult } from "../checkers/types";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
+import type { Saved } from "./saves";
 import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
 
 export interface DashboardProps {
@@ -25,11 +26,11 @@ export interface DashboardProps {
     timeouts: ServiceTimeouts,
   ) => Promise<CheckResult[]>;
   /** Called each time the service panel sets a timeout, in seconds; `undefined`: back to the default. */
-  onTimeoutChange?: (name: string, seconds: number | undefined) => void;
+  onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   /** Called with the new settings each time the options panel changes one. */
-  onSettingsChange?: (settings: DashboardSettings) => void;
+  onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   /** Called each time the service panel sets a service aside or brings it back. */
-  onSkipChange?: (name: string, skip: boolean) => void;
+  onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
 }
 
 export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
@@ -71,7 +72,12 @@ export function Dashboard({
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set(initiallySkipped));
   const [timeouts, setTimeouts] = useState(initialTimeouts);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [unsaved, setUnsaved] = useState<string>();
   const skipPause = useRef(() => {});
+  // A change stays in effect for this run even when saving it failed: the failure is shown instead.
+  const track = (saved: Saved | undefined) => {
+    void saved?.then(setUnsaved);
+  };
   const { intervalMs, timeoutMs } = settings;
 
   useEffect(() => {
@@ -106,7 +112,7 @@ export function Dashboard({
     if (value === settings[row.key]) return;
     const next = { ...settings, [row.key]: value };
     setSettings(next);
-    onSettingsChange?.(next);
+    track(onSettingsChange?.(next));
   };
 
   const toggleSkip = (name: string) => {
@@ -114,14 +120,14 @@ export function Dashboard({
     const skip = !next.delete(name);
     if (skip) next.add(name);
     setSkipped(next);
-    onSkipChange?.(name, skip);
+    track(onSkipChange?.(name, skip));
   };
 
   const changeTimeout = (name: string, direction: 1 | -1) => {
     const value = stepServiceTimeout(timeouts[name], direction);
     if (value === timeouts[name]) return;
     setTimeouts({ ...timeouts, [name]: value });
-    onTimeoutChange?.(name, value);
+    track(onTimeoutChange?.(name, value));
   };
 
   useInput((input, key) => {
@@ -239,6 +245,7 @@ export function Dashboard({
           })}
         </Box>
       )}
+      {unsaved !== undefined && <Text>{colors.yellow(cut(`not saved: ${unsaved}`))}</Text>}
       <Text>{colors.dim(cut(hint))}</Text>
     </Box>
   );
