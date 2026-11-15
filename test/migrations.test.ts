@@ -10,7 +10,7 @@ import {
   type RawConfig,
   runMigrations,
 } from "../src/config/migrations";
-import { type SchemaTable, schemas, serviceSchemaV1 } from "../src/config/schema";
+import { type SchemaTable, schemas, serviceObjectV1 } from "../src/config/schema";
 import { tempProject } from "./helpers";
 
 const fixture = (name: string) =>
@@ -19,7 +19,7 @@ const fixture = (name: string) =>
 // A pretend V2: every service gains `type: http`.
 const configSchemaV2 = z.strictObject({
   schemaVersion: z.literal(2),
-  services: z.record(z.string(), serviceSchemaV1.extend({ type: z.enum(["http", "tcp"]) })),
+  services: z.record(z.string(), serviceObjectV1.extend({ type: z.enum(["http", "tcp"]) })),
 });
 
 const addHttpType = (config: RawConfig): RawConfig => ({

@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import type { RawConfig } from "../config/migrations";
+import { urlProblem } from "../config/schema";
 import { expectProblem, nameProblem, pathProblem, portProblem } from "../config/service-input";
 import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
@@ -20,6 +21,36 @@ function parseExpect(value: string): number | number[] {
 }
 
 const DEFAULT_PATH = "/";
+const ADDRESS_FLAGS = ["port", "host", "path"] as const;
+
+/** Where the service is, as the flags say it: `--url` alone, or `--port` with `--host` and `--path`. */
+function addressFrom(args: {
+  url?: string;
+  port?: string;
+  host?: string;
+  path?: string;
+}): RawConfig {
+  if (args.url !== undefined) {
+    const extra = ADDRESS_FLAGS.filter((flag) => args[flag] !== undefined);
+    if (extra.length > 0) {
+      const flags = extra.map((flag) => `--${flag}`).join(", ");
+      throw new ProbeError("USAGE", `--url already says where the service is: remove ${flags}.`);
+    }
+    const problem = urlProblem(String(args.url));
+    if (problem) throw new ProbeError("USAGE", `--url expects ${problem}.`);
+    return { url: String(args.url) };
+  }
+  if (args.port === undefined) {
+    throw new ProbeError(
+      "USAGE",
+      "say where the service is: --port 3000, or --url https://localhost:8443/health.",
+    );
+  }
+  const service: RawConfig = { port: parseInteger(String(args.port), "--port") };
+  if (args.host) service.host = args.host;
+  if (args.path) service.path = args.path;
+  return service;
+}
 
 /**
  * `probe add` alone on a terminal: proposes the services found in the project, and when none is
@@ -77,9 +108,13 @@ export default defineCommand({
   meta: { name: "add", description: "Add a service" },
   args: {
     name: { type: "positional", description: "Service name", required: true },
-    port: { type: "string", alias: "p", description: "Port", required: true },
+    port: { type: "string", alias: "p", description: "Port" },
     host: { type: "string", description: "Host (default: localhost)" },
     path: { type: "string", description: "Path to request (default: /)" },
+    url: {
+      type: "string",
+      description: "Full URL, http or https, instead of --port, --host and --path",
+    },
     expect: { type: "string", description: "Expected status, e.g. 200 or 200,204 (default: 2xx)" },
     timeout: {
       type: "string",
@@ -95,9 +130,7 @@ export default defineCommand({
         `service "${args.name}" already exists. Remove it first: probe rm ${args.name}`,
       );
     }
-    const service: RawConfig = { port: parseInteger(String(args.port), "--port") };
-    if (args.host) service.host = args.host;
-    if (args.path) service.path = args.path;
+    const service = addressFrom(args);
     if (args.expect) service.expect = parseExpect(String(args.expect));
     if (args.timeout !== undefined) {
       secondsToMs("--timeout", String(args.timeout));

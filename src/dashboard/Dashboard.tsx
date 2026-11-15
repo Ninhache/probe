@@ -59,7 +59,7 @@ export interface DashboardProps {
    */
   onNotify?: (message: string) => Promise<string | undefined>;
   /** What a service has now, to fill the form that edits it. */
-  serviceFields?: (name: string) => ServiceFields | undefined;
+  serviceFields?: (name: string) => ServiceFields | string | undefined;
   /**
    * Adds, edits or removes a service in the config. Resolves to why it was not saved, or to a
    * warning to show next to what was done. Unset: the keys that change the config do nothing.
@@ -313,6 +313,7 @@ export function Dashboard({
         return onServiceWrite ? setDialog({ kind: "form", row: 0, values: EMPTY_FORM }) : undefined;
       case "edit": {
         const fields = onServiceWrite && name ? serviceFields?.(name) : undefined;
+        if (typeof fields === "string") return setNotice(fields);
         if (fields) setDialog({ kind: "form", editing: name, row: 0, values: formValues(fields) });
         return;
       }

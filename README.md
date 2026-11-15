@@ -41,6 +41,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `probe init`                                              | Create `.probe/` and the `.gitignore` entries                          |
 | `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` gives it its own timeout)         |
+| `probe add <name> --url <url> [--expect]`                 | Add a service by its full URL, `http` or `https`                       |
 | `probe rm <name> [--yes]`                                 | Remove a service                                                       |
 | `probe ls`                                                | List services                                                          |
 | `probe check [name...] [--json] [--timeout <seconds>]`    | Check all services, or the named ones                                  |
@@ -171,6 +172,7 @@ services:
   api: { port: 3000, path: /health }
   front: { port: 5173 }
   admin: { host: 127.0.0.1, port: 8080, expect: [200, 204] }
+  secure: { url: https://localhost:8443/health }
   db: { port: 5432, timeout: 10 }
 ```
 
@@ -179,11 +181,23 @@ services:
 | `port`    | required    | TCP port                                |
 | `host`    | `localhost` | Host name or IP                         |
 | `path`    | `/`         | Path requested with `GET`               |
+| `url`     | none        | Full URL, instead of the three above    |
 | `expect`  | any 2xx     | Expected status, or a list of statuses  |
 | `timeout` | 3           | Seconds given to this service to answer |
 
 Which timeout applies: `--timeout` when you pass it, else the service's `timeout`, else 3 s (in the dashboard,
 the timeout set in its options). A config with a `timeout` needs `probe` 0.4.0 or later: older versions refuse it.
+
+A service is found by `port` (with `host` and `path`, over `http`) or by `url`, never both. `url` is the way to
+check `https`: `url: https://localhost:8443/health`. It takes no user or password: `config.yml` is shared. A
+config with a `url` needs `probe` 0.12.0 or later: older versions refuse it. The dashboard does not edit a
+service declared by `url`: change it in `config.yml`.
+
+Over `https` the certificate is checked, against what Node trusts and what the system trusts, so a local CA
+installed on the machine (`mkcert -install`) works as it does in a browser (on a Node that can read the system
+store: the latest 22, 24 or later). A certificate that is expired, made
+for another host or not trusted makes the service down, with the reason. For a CA that is only in a file, set
+`NODE_EXTRA_CA_CERTS=/path/to/ca.pem`.
 
 Redirects are followed and the final status is judged, unless `expect` contains a 3xx: then the first response
 is judged as is.

@@ -42,8 +42,9 @@ function withFields(service: RawConfig, fields: ServiceFields, current?: Service
  * Adds, edits or removes one service in `config.yml`, the way `probe add` and `probe rm` do:
  * comments kept, Makefile block regenerated when the project has one.
  * The file is read again first, so an edit made since the caller loaded it is kept.
- * Returns null, writing nothing, when the service to add is already there, or the one to edit or
- * remove no longer is.
+ * Returns null, writing nothing, when the service to add is already there, when the one to edit or
+ * remove no longer is, or when the one to edit is declared by `url`: the fields have no host,
+ * port or path to put in its place.
  */
 export async function writeService(
   paths: ProbePaths,
@@ -54,6 +55,7 @@ export async function writeService(
   const exists = Object.hasOwn(services, write.name);
   if (exists === (write.kind === "add")) return null;
   const { [write.name]: previous, ...others } = services;
+  if (write.kind === "edit" && previous?.url !== undefined) return null;
   const next =
     write.kind === "remove"
       ? others

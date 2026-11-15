@@ -1329,6 +1329,17 @@ describe("dashboard service changes", () => {
     expect(onServiceWrite).not.toHaveBeenCalled();
   });
 
+  it("says where to edit a service the form cannot hold, instead of opening it", async () => {
+    const serviceFields = () => "api is declared by `url`: edit it in .probe/config.yml";
+    const { lastFrame, stdin } = open({ ...project(), serviceFields });
+    await tick();
+
+    stdin.write("e");
+
+    await shows(lastFrame, "api is declared by `url`: edit it in .probe/config.yml");
+    expect(lastFrame()).not.toContain("Edit api");
+  });
+
   it("opens the form of the selected service on e, filled with what it has", async () => {
     const { lastFrame, stdin } = open(project());
     await tick();
