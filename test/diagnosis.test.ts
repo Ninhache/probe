@@ -123,6 +123,20 @@ describe("diagnoseStatus", () => {
     });
   });
 
+  it("points at the method on a 405", () => {
+    expect(diagnoseStatus({ ...service, method: "DELETE" }, 405).hint).toBe(
+      "the service refuses DELETE there: check `method` in .probe/config.yml",
+    );
+    expect(diagnoseStatus(service, 405).hint).toContain("refuses GET there");
+  });
+
+  it("says a redirect is not followed with a method other than GET or HEAD", () => {
+    expect(diagnoseStatus({ ...service, method: "POST" }, 302).hint).toBe(
+      "a POST is sent once, redirects are not followed: check `path` in .probe/config.yml",
+    );
+    expect(diagnoseStatus({ ...service, method: "HEAD" }, 302).hint).toContain("check `path` and");
+  });
+
   it("points at path and expect on any other status", () => {
     const strict = { ...service, expect: [200, 204] };
 

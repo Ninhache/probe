@@ -6,6 +6,11 @@ export const CURRENT_SCHEMA_VERSION = 1;
 
 export const SERVICE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
+// A closed list: the method is written as is in the curl command that gets copied.
+export const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
+export type Method = (typeof METHODS)[number];
+export const DEFAULT_METHOD: Method = "GET";
+
 const statusCode = z.number().int().min(100).max(599);
 
 const DEFAULT_HOST = "localhost";
@@ -34,6 +39,7 @@ export interface Service {
   path: string;
   expect?: number | number[];
   timeout?: number;
+  method?: Method;
   headers?: Record<string, string>;
 }
 
@@ -74,6 +80,12 @@ export const serviceObjectV1 = z.strictObject({
   path: z.string().startsWith("/").optional(),
   expect: z.union([statusCode, z.array(statusCode).min(1)]).optional(),
   timeout: z.number().positive().max(MAX_TIMEOUT_SECONDS).optional(),
+  method: z
+    .string()
+    // `fetch` sends a lowercase method as typed, and servers refuse it.
+    .transform((method) => method.toUpperCase())
+    .pipe(z.enum(METHODS))
+    .optional(),
   headers: headersSchema.optional(),
 });
 

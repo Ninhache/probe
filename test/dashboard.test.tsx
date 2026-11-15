@@ -1571,7 +1571,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}${ACCEPT}`);
+    stdin.write(`e${DOWN.repeat(5)}${ACCEPT}`);
     await shows(lastFrame, `│ › Header  ${ACCEPT}_`);
     expect(lastFrame()).toContain("Name: value. Emptied, it is removed.");
     stdin.write(ENTER);
@@ -1589,7 +1589,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}${CLEAR}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(5)}${CLEAR}${ENTER}`);
 
     await shows(lastFrame, "Saved api");
     expect(onServiceWrite).toHaveBeenCalledWith({
@@ -1604,7 +1604,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}accept: text/html${TAB}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(6)}accept: text/html${TAB}${ENTER}`);
 
     await shows(lastFrame, "accept is given twice");
     expect(lastFrame()).toContain("│ › Header  accept: text/html_");
@@ -1616,7 +1616,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}Authorization: Bearer ${SECRET}`);
+    stdin.write(`e${DOWN.repeat(5)}Authorization: Bearer ${SECRET}`);
     await shows(lastFrame, `Authorization: Bearer ${"•".repeat(SECRET.length)}`.slice(-20));
     stdin.write(ENTER);
     await shows(lastFrame, "│ Authorization holds a secret");
@@ -1645,7 +1645,7 @@ describe("dashboard headers and variables", () => {
     });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}X-Api-Key: ${SECRET}`);
+    stdin.write(`e${DOWN.repeat(5)}X-Api-Key: ${SECRET}`);
     await shows(lastFrame, "*****_");
     stdin.write("$" + "{");
     await shows(lastFrame, `${"*".repeat(SECRET.length + 2)}_`);
@@ -1661,7 +1661,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}X-Api-Key: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(5)}X-Api-Key: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(`${CLEAR}MINE${ENTER}`);
     await shows(lastFrame, taken);
@@ -1686,7 +1686,7 @@ describe("dashboard headers and variables", () => {
     await tick();
 
     stdin.write(
-      `e${DOWN.repeat(4)}Authorization: Basic ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`,
+      `e${DOWN.repeat(5)}Authorization: Basic ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`,
     );
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ENTER);
@@ -1715,7 +1715,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`aweb${TAB}8080${DOWN.repeat(4)}X-Api-Key: ${SECRET}${ENTER}`);
+    stdin.write(`aweb${TAB}8080${DOWN.repeat(5)}X-Api-Key: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  WEB_TOKEN_");
     stdin.write(ENTER);
 
@@ -1742,7 +1742,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}Authorization: Bearer ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(6)}Authorization: Bearer ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  OTHER_");
     stdin.write(`${CLEAR}API_TOKEN${ENTER}`);
 
@@ -1755,7 +1755,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ENTER);
     await shows(lastFrame, "│ Cookie holds a secret");
@@ -1778,7 +1778,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ESCAPE);
 
@@ -1793,7 +1793,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open(props);
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ENTER);
 
@@ -1806,7 +1806,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open(props);
     await tick();
 
-    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${ENTER}`);
 
     await shows(lastFrame, "X-Token expects a reference");
     expect(props.onServiceWrite).not.toHaveBeenCalled();

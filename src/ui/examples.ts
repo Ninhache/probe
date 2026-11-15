@@ -24,6 +24,7 @@ export const EXAMPLES: Record<string, Example[]> = {
     { command: "probe add api -p 3000 --path /health", note: "Check another path" },
     { command: "probe add admin -p 8080 --expect 200,204", note: "Accept these statuses only" },
     { command: "probe add db -p 5432 --timeout 10", note: "Give it 10 s to answer" },
+    { command: "probe add hook -p 8080 -X POST", note: "Send a POST instead of a GET" },
     {
       command: `probe add api -p 3000 -H 'X-Api-Key: ${reference("API_KEY")}'`,
       note: "Send a header",

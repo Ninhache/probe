@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { SERVICE_NAME_PATTERN, serviceShapeV1 } from "./schema";
+import { METHODS, SERVICE_NAME_PATTERN, serviceShapeV1 } from "./schema";
 
 const INTEGER = /^\d+$/;
 
@@ -30,6 +30,10 @@ export function hostProblem(host: string): string | undefined {
 
 export function pathProblem(path: string): string | undefined {
   return schemaProblem(serviceShapeV1.path, path) && "A path that starts with /";
+}
+
+export function methodProblem(method: string): string | undefined {
+  return schemaProblem(serviceShapeV1.method, method) && `One of ${METHODS.join(", ")}`;
 }
 
 export function expectProblem(expect: string): string | undefined {

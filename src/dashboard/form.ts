@@ -10,16 +10,18 @@ import {
   splitSecret,
   variableValueProblem,
 } from "../config/headers";
+import { DEFAULT_METHOD, type Method } from "../config/schema";
 import {
   expectProblem,
   hostProblem,
+  methodProblem,
   nameProblem,
   parseExpectList,
   pathProblem,
   portProblem,
 } from "../config/service-input";
 
-export type FieldKey = "name" | "port" | "host" | "path" | "expect";
+export type FieldKey = "name" | "port" | "host" | "path" | "expect" | "method";
 
 export type FormValues = Readonly<Record<FieldKey, string>> & {
   readonly headers: readonly string[];
@@ -44,6 +46,7 @@ const ROWS: readonly FormRow[] = [
   { key: "host", label: "Host", placeholder: "localhost" },
   { key: "path", label: "Path", placeholder: "/" },
   { key: "expect", label: "Expect", placeholder: "any 2xx" },
+  { key: "method", label: "Method", placeholder: DEFAULT_METHOD },
 ];
 
 export const HEADER_LABEL = "Header";
@@ -55,6 +58,7 @@ export const EMPTY_FORM: FormValues = {
   host: "",
   path: "",
   expect: "",
+  method: "",
   headers: [],
 };
 
@@ -62,13 +66,21 @@ export function formRows(adding: boolean): readonly FormRow[] {
   return adding ? ROWS : ROWS.filter(({ key }) => key !== "name");
 }
 
-export function formValues({ host, port, path, expect, headers }: ServiceFields): FormValues {
+export function formValues({
+  host,
+  port,
+  path,
+  expect,
+  method,
+  headers,
+}: ServiceFields): FormValues {
   return {
     name: "",
     port: String(port),
     host,
     path,
     expect: [expect ?? []].flat().join(","),
+    method: method ?? "",
     headers: Object.entries(headers ?? {}).map(([name, value]) => `${name}: ${value}`),
   };
 }
@@ -90,6 +102,7 @@ export function formFields(values: FormValues): ServiceFields {
     host: values.host || "localhost",
     path: values.path || "/",
     expect: values.expect ? parseExpectList(values.expect) : undefined,
+    method: values.method ? (values.method.toUpperCase() as Method) : undefined,
     headers: formHeaders(values),
   };
 }
@@ -147,6 +160,7 @@ export function formProblem(
     host: () => (values.host ? hostProblem(values.host) : undefined),
     path: () => (values.path ? pathProblem(values.path) : undefined),
     expect: () => (values.expect ? expectProblem(values.expect) : undefined),
+    method: () => (values.method ? methodProblem(values.method) : undefined),
   };
   for (const [row, { key }] of rows.entries()) {
     const message = problems[key]();
