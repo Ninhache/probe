@@ -3,6 +3,7 @@ import { diagnoseFailure, diagnoseStatus } from "../src/checkers/diagnosis";
 import { serviceSchemaV1 } from "../src/config/schema";
 
 const service = serviceSchemaV1.parse({ host: "api.test", port: 3000, path: "/health" });
+const secure = serviceSchemaV1.parse({ url: "https://secure.test:8443/health" });
 const fetchError = (cause: unknown) => new TypeError("fetch failed", { cause });
 
 describe("diagnoseFailure", () => {
@@ -45,15 +46,48 @@ describe("diagnoseFailure", () => {
     expect(diagnosis.hint).toContain(hint);
   });
 
-  it.each(["CERT_HAS_EXPIRED", "DEPTH_ZERO_SELF_SIGNED_CERT", "ERR_TLS_CERT_ALTNAME_INVALID"])(
-    "keeps the code and explains the redirect to https on %s",
-    (code) => {
-      const diagnosis = diagnoseFailure(fetchError({ code }), service, 3000);
+  it.each([
+    ["CERT_HAS_EXPIRED", "certificate expired", "renew the certificate"],
+    ["CERT_NOT_YET_VALID", "certificate not valid yet", "clock of this machine"],
+    ["ERR_TLS_CERT_ALTNAME_INVALID", "certificate for another host", '"secure.test"'],
+    [
+      "DEPTH_ZERO_SELF_SIGNED_CERT",
+      "certificate not trusted (DEPTH_ZERO_SELF_SIGNED_CERT)",
+      "NODE_EXTRA_CA_CERTS",
+    ],
+  ])("gives the reason of %s in words, for an https service", (code, error, hint) => {
+    const diagnosis = diagnoseFailure(fetchError({ code }), secure, 3000);
 
-      expect(diagnosis.error).toBe(`certificate rejected (${code})`);
-      expect(diagnosis.hint).toContain("NODE_EXTRA_CA_CERTS");
-    },
-  );
+    expect(diagnosis.error).toBe(error);
+    expect(diagnosis.hint).toContain(hint);
+    expect(diagnosis.hint).not.toContain("redirect");
+  });
+
+  it("says a redirect led to https when an http service meets a certificate", () => {
+    const diagnosis = diagnoseFailure(fetchError({ code: "CERT_HAS_EXPIRED" }), service, 3000);
+
+    expect(diagnosis).toEqual({
+      error: "certificate expired",
+      hint: "a redirect led to https: renew the certificate of the service",
+    });
+  });
+
+  it("points at `url`, the only address key of a service declared by one", () => {
+    const wrongName = fetchError({ code: "ERR_TLS_CERT_ALTNAME_INVALID" });
+
+    expect(diagnoseFailure(wrongName, secure, 3000).hint).toContain("check `url` in");
+    expect(diagnoseFailure(fetchError({ code: "ENOTFOUND" }), secure, 3000).hint).toContain(
+      "check `url` in",
+    );
+    expect(diagnoseStatus(secure, 404).hint).toContain("check `url` in");
+    expect(diagnoseStatus(service, 404).hint).toContain("check `path` in");
+  });
+
+  it("asks whether the port speaks https when an https service hangs up", () => {
+    const diagnosis = diagnoseFailure(fetchError({ code: "ECONNRESET" }), secure, 3000);
+
+    expect(diagnosis.hint).toContain("does it speak https?");
+  });
 
   it("shows an unknown code as is, without a hint", () => {
     expect(diagnoseFailure(fetchError({ code: "EPIPE" }), service, 3000)).toEqual({

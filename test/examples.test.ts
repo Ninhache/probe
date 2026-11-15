@@ -78,8 +78,8 @@ describe("help examples", () => {
     expect(() => parseArgs(rawArgs, args)).not.toThrow();
   });
 
-  it("rejects a command line that misses a required option, so the check above means something", () => {
-    expect(() => parseArgs(["api"], (add.args ?? {}) as ArgsDef)).toThrow();
+  it("rejects a command line that misses a required argument, so the check above means something", () => {
+    expect(() => parseArgs([], (add.args ?? {}) as ArgsDef)).toThrow();
   });
 
   it.each(Object.keys(EXAMPLES))("fits the examples of %s in 80 columns", (name) => {

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { SERVICE_NAME_PATTERN, serviceSchemaV1 } from "./schema";
+import { SERVICE_NAME_PATTERN, serviceShapeV1 } from "./schema";
 
 const INTEGER = /^\d+$/;
 
@@ -24,7 +24,7 @@ export function nameProblem(name: string, taken: Iterable<string>): string | und
 
 export function portProblem(port: string): string | undefined {
   if (!INTEGER.test(port)) return "A port number, e.g. 3000";
-  return schemaProblem(serviceSchemaV1.shape.port, Number(port)) && "A port between 1 and 65535";
+  return schemaProblem(serviceShapeV1.port, Number(port)) && "A port between 1 and 65535";
 }
 
 export function hostProblem(host: string): string | undefined {
@@ -32,14 +32,13 @@ export function hostProblem(host: string): string | undefined {
 }
 
 export function pathProblem(path: string): string | undefined {
-  return schemaProblem(serviceSchemaV1.shape.path, path) && "A path that starts with /";
+  return schemaProblem(serviceShapeV1.path, path) && "A path that starts with /";
 }
 
 export function expectProblem(expect: string): string | undefined {
   const codes = expect.split(",").map((code) => code.trim());
   if (!codes.every((code) => INTEGER.test(code))) return "A status, or several: 200 or 200,204";
   return (
-    schemaProblem(serviceSchemaV1.shape.expect, parseExpectList(expect)) &&
-    "Statuses go from 100 to 599"
+    schemaProblem(serviceShapeV1.expect, parseExpectList(expect)) && "Statuses go from 100 to 599"
   );
 }

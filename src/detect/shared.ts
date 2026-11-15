@@ -11,7 +11,14 @@ const NOT_HTTP_PORTS = [
 
 export const isHttpPort = (port: number) => !NOT_HTTP_PORTS.includes(port);
 
-export const address = (service: RawConfig) => `${service.host ?? DEFAULT_HOST}:${service.port}`;
+/** Where a service of the config listens, to tell that a found one is already declared. */
+export function address(service: RawConfig): string {
+  if (typeof service.url === "string" && URL.canParse(service.url)) {
+    const { hostname, port, protocol } = new URL(service.url);
+    return `${hostname}:${port || (protocol === "https:" ? 443 : 80)}`;
+  }
+  return `${service.host ?? DEFAULT_HOST}:${service.port}`;
+}
 
 /** Turns any text (a script name, a variable name) into a valid service name. */
 export function serviceName(text: string): string {

@@ -9,22 +9,73 @@ export interface Diagnosis {
 
 const CONFIG = `${PROBE_DIR}/${CONFIG_FILE}`;
 
-const CERTIFICATE_CODES = new Set([
-  "CERT_HAS_EXPIRED",
-  "CERT_NOT_YET_VALID",
+/** The certificate is fine in itself; nothing trusted here signed it. */
+const UNKNOWN_ISSUER_CODES = [
   "CERT_UNTRUSTED",
   "DEPTH_ZERO_SELF_SIGNED_CERT",
   "SELF_SIGNED_CERT_IN_CHAIN",
   "UNABLE_TO_GET_ISSUER_CERT",
   "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
   "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+];
+
+const CERTIFICATE_CODES = new Set([
+  ...UNKNOWN_ISSUER_CODES,
+  "CERT_HAS_EXPIRED",
+  "CERT_NOT_YET_VALID",
   "ERR_TLS_CERT_ALTNAME_INVALID",
 ]);
 
+/** The code of the socket error under a failed fetch, when it has one. */
+function failureCode(error: unknown): string | undefined {
+  // fetch wraps the socket error in `cause`; with both IPv4 and IPv6 tried it is an AggregateError.
+  const cause = (error as { cause?: { code?: string; errors?: { code?: string }[] } })?.cause;
+  return cause?.code ?? cause?.errors?.[0]?.code;
+}
+
+/** Whether a check failed because nothing trusted here signed the certificate. */
+export function hasUnknownIssuer(error: unknown): boolean {
+  return UNKNOWN_ISSUER_CODES.includes(failureCode(error) ?? "");
+}
+
+/** Where to look in the config: a service declared by `url` has no `host` or `path` key. */
+const check = (service: Service, key: "host" | "path") =>
+  `check \`${service.url === undefined ? key : "url"}\` in ${CONFIG}`;
+
+const isHttps = (service: Service) => service.url?.startsWith("https:") === true;
+
 const hostNotFound = (service: Service): Diagnosis => ({
   error: "host not found",
-  hint: `"${service.host}" does not resolve: check \`host\` in ${CONFIG}`,
+  hint: `"${service.host}" does not resolve: ${check(service, "host")}`,
 });
+
+/** Explains a certificate that was refused: the reason first, the code only when it adds to it. */
+function diagnoseCertificate(code: string, service: Service): Diagnosis {
+  // Over http, a certificate can only come from a redirect to https.
+  const lead = isHttps(service) ? "" : "a redirect led to https: ";
+  if (code === "CERT_HAS_EXPIRED") {
+    return { error: "certificate expired", hint: `${lead}renew the certificate of the service` };
+  }
+  if (code === "CERT_NOT_YET_VALID") {
+    return {
+      error: "certificate not valid yet",
+      hint: `${lead}check the dates of the certificate and the clock of this machine`,
+    };
+  }
+  if (code === "ERR_TLS_CERT_ALTNAME_INVALID") {
+    return {
+      error: "certificate for another host",
+      hint: `${lead}the certificate does not name "${service.host}": ${check(service, "host")}`,
+    };
+  }
+  return {
+    error: `certificate not trusted (${code})`,
+    hint: `${lead}self-signed, or from a local CA: add the CA to the system store, or give its file in NODE_EXTRA_CA_CERTS`,
+  };
+}
+
+/** Start of the codes OpenSSL gives when the other side does not speak TLS. */
+const TLS_PROTOCOL_PREFIX = "ERR_SSL_";
 
 const NETWORK: Record<string, (service: Service) => Diagnosis> = {
   ECONNREFUSED: (service) => ({
@@ -33,7 +84,7 @@ const NETWORK: Record<string, (service: Service) => Diagnosis> = {
   }),
   ECONNRESET: (service) => ({
     error: "connection reset",
-    hint: `:${service.port} closed the connection without answering: does it speak plain http?`,
+    hint: `:${service.port} closed the connection without answering: does it speak ${isHttps(service) ? "https" : "plain http"}?`,
   }),
   ENOTFOUND: hostNotFound,
   EAI_AGAIN: hostNotFound,
@@ -54,15 +105,14 @@ export function diagnoseFailure(error: unknown, service: Service, timeoutMs: num
       hint: `still starting, or stuck? Give it more time: \`timeout\` in ${CONFIG}`,
     };
   }
-  // fetch wraps the socket error in `cause`; with both IPv4 and IPv6 tried it is an AggregateError.
-  const cause = (error as { cause?: { code?: string; errors?: { code?: string }[] } })?.cause;
-  const code = cause?.code ?? cause?.errors?.[0]?.code;
+  const code = failureCode(error);
   if (!code) return { error: error instanceof Error ? error.message : String(error) };
-  if (CERTIFICATE_CODES.has(code)) {
+  if (CERTIFICATE_CODES.has(code)) return diagnoseCertificate(code, service);
+  // The code changes with the Node version; all of them mean the answer was not TLS.
+  if (code.startsWith(TLS_PROTOCOL_PREFIX)) {
     return {
-      error: `certificate rejected (${code})`,
-      // Services are checked over http: a certificate can only come from a redirect to https.
-      hint: "a redirect led to https with a certificate that is not trusted: renew it, or add its CA with NODE_EXTRA_CA_CERTS",
+      error: "no https on this port",
+      hint: `:${service.port} does not answer in https: does it speak plain http?`,
     };
   }
   return NETWORK[code]?.(service) ?? { error: code };
@@ -78,7 +128,8 @@ export function diagnoseStatus(service: Service, status: number): Diagnosis {
   const error = `expected ${describeExpected(service.expect)}, got ${status}`;
   if (status >= 500) return { error, hint: "the service answers with an error: look at its logs" };
   if (status === 404) {
-    return { error, hint: `nothing at ${service.path}: check \`path\` in ${CONFIG}` };
+    return { error, hint: `nothing at ${service.path}: ${check(service, "path")}` };
   }
-  return { error, hint: `the service answers: check \`path\` and \`expect\` in ${CONFIG}` };
+  const address = service.url === undefined ? "path" : "url";
+  return { error, hint: `the service answers: check \`${address}\` and \`expect\` in ${CONFIG}` };
 }

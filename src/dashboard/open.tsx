@@ -2,6 +2,7 @@ import { render } from "ink";
 import { runChecks } from "../checkers/run";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import type { Config, Service } from "../config/schema";
+import { CONFIG_FILE, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { serviceActions } from "./actions";
 import { Dashboard, type DashboardProps } from "./Dashboard";
@@ -65,6 +66,9 @@ export async function openDashboard(
       {...state}
       serviceFields={(name) => {
         const service = config.services[name];
+        if (service?.url !== undefined) {
+          return `${name} is declared by \`url\`: edit it in ${PROBE_DIR}/${CONFIG_FILE}`;
+        }
         return service && pickFields(service);
       }}
       onServiceWrite={

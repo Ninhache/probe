@@ -111,7 +111,15 @@ describe("completionSpec", () => {
   it("lists the long options of a command, not its positional arguments", () => {
     const options = spec.find(({ name }) => name === "add")?.options;
 
-    expect(options).toEqual(["--port", "--host", "--path", "--expect", "--timeout", "--help"]);
+    expect(options).toEqual([
+      "--port",
+      "--host",
+      "--path",
+      "--url",
+      "--expect",
+      "--timeout",
+      "--help",
+    ]);
   });
 
   it("marks the commands that take service names", () => {
