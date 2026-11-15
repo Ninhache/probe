@@ -80,10 +80,44 @@ describe("writeService", () => {
     await writeService(paths, {
       kind: "edit",
       name: "front",
-      fields: { host: "localhost", port: 5174, path: "/", expect: undefined },
+      fields: {
+        host: "localhost",
+        port: 5174,
+        path: "/",
+        expect: undefined,
+        headers: { Accept: "text/plain", "X-Api-Key": "$" + "{API_KEY}" },
+      },
     });
 
     expect(await readFile(paths.config, "utf8")).toBe(config.replace("5173", "5174"));
+  });
+
+  it("should write the headers an edit adds, and drop the key with the last one", async () => {
+    const paths = await tempProject(CONFIG);
+    const edit = (headers: ServiceFields["headers"]) =>
+      writeService(paths, { kind: "edit", name: "api", fields: fields({ headers }) });
+
+    const added = await edit({ Authorization: "Bearer $" + "{API_TOKEN}" });
+    expect(added?.config.services.api?.headers).toEqual({
+      Authorization: "Bearer $" + "{API_TOKEN}",
+    });
+    expect(await readFile(paths.config, "utf8")).toContain("timeout: 10");
+
+    await edit(undefined);
+    expect(await readFile(paths.config, "utf8")).toBe(CONFIG);
+  });
+
+  it("should refuse a secret in clear, leaving the file as it was", async () => {
+    const paths = await tempProject(CONFIG);
+
+    await expect(
+      writeService(paths, {
+        kind: "edit",
+        name: "api",
+        fields: fields({ headers: { Authorization: "Bearer s3cr3t-value" } }),
+      }),
+    ).rejects.toThrow();
+    expect(await readFile(paths.config, "utf8")).toBe(CONFIG);
   });
 
   it("should drop a key that an edit puts back to its default", async () => {

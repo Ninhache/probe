@@ -1,4 +1,12 @@
-export type Screen = "list" | "panel" | "filter" | "palette" | "form" | "confirm" | "help";
+export type Screen =
+  | "list"
+  | "panel"
+  | "filter"
+  | "palette"
+  | "form"
+  | "input"
+  | "confirm"
+  | "help";
 
 export type Command =
   | "check"
@@ -71,6 +79,15 @@ const BINDINGS: readonly Binding[] = [
     help: "Change the value",
     drop: 2,
   },
+  {
+    screens: ["panel"],
+    section: "Panels",
+    keys: "↵",
+    ascii: "enter",
+    action: "set",
+    help: "Set the variable",
+    barless: true,
+  },
   { screens: ["panel"], section: "Panels", keys: "esc", action: "close", help: "Close" },
   {
     screens: ["filter"],
@@ -103,14 +120,28 @@ const BINDINGS: readonly Binding[] = [
     drop: 1,
   },
   {
-    screens: ["form"],
+    screens: ["form", "input"],
     section: "Add and edit",
     keys: "↵",
     ascii: "enter",
     action: "save",
     help: "Save",
   },
-  { screens: ["form"], section: "Add and edit", keys: "esc", action: "cancel", help: "Cancel" },
+  {
+    screens: ["form", "input"],
+    section: "Add and edit",
+    keys: "ctrl+u",
+    action: "empty",
+    help: "Empty the field",
+    drop: 2,
+  },
+  {
+    screens: ["form", "input"],
+    section: "Add and edit",
+    keys: "esc",
+    action: "cancel",
+    help: "Cancel",
+  },
   { screens: ["confirm"], keys: "y", action: "remove" },
   { screens: ["confirm"], keys: "n esc", action: "keep" },
   { screens: ["help"], keys: "? esc", action: "close" },

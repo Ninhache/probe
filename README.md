@@ -132,15 +132,24 @@ The bar at the bottom shows the keys you need first; `?` lists them all.
 `c` uses `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the command is shown instead,
 to copy by hand.
 
-`a` and `e` open a form: name, port, host, path, expected status. `↑` `↓` or `Tab` change field, `Enter` saves,
-`Esc` cancels. A field left empty takes its default. `d` asks first: only `y` removes. All three write
+`a` and `e` open a form: name, port, host, path, expected status, then one line per [header](#headers) as
+`Name: value`, with an empty one at the end to add another. `↑` `↓` or `Tab` change field, `Enter` saves, `Esc`
+cancels, `Ctrl+U` empties the field: a header left empty is removed. A field left empty takes its default.
+
+A secret typed in a header (`Authorization: Bearer abc123`) is drawn as dots and never reaches `config.yml`:
+on `Enter` the form asks under which variable to keep it, proposes a name (`API_TOKEN`), writes
+`Bearer ${API_TOKEN}` in `config.yml` and the value in `.probe/local.yml`. `d` asks first: only `y` removes. All three write
 `.probe/config.yml` the way `probe add` and `probe rm` do: comments kept, [Makefile](#makefile) block kept up to
 date. While you type, in the filter, the form or the command palette, `q` and `?` are letters.
 
-`Enter` shows the last answer of the selected service above its two settings: status, latencies of this
+`Enter` shows the last answer of the selected service above its settings: status, latencies of this
 session, headers and the first lines of the body; for a service that is down, what failed and what to try. The
 value of a header that can carry a secret (`Authorization`, `Set-Cookie`, anything named after a token or a key)
 is replaced by `(hidden)`. None of it is written anywhere, and `probe check --json` prints what it printed before.
+
+Under the two settings, the panel lists the variables the headers of the service use, and where each is set.
+`Enter` on one asks for its value, hidden, and keeps it in `.probe/local.yml`, as `probe var` does. A variable
+set in the environment is not changed there: the environment is read first.
 
 The panels save what you change in `.probe/local.yml`, for your machine only:
 
@@ -229,6 +238,9 @@ probe var API_TOKEN            # asks for the value, hidden, and keeps it in .pr
 probe var API_TOKEN < key.txt  # or reads it from a file or a pipe
 probe var                      # which variables are used, and where each is set
 ```
+
+The [dashboard](#dashboard) does both: `e` edits the headers of a service, `Enter` then `Enter` on a variable
+sets its value.
 
 - A header whose name says secret (`Authorization`, `Cookie`, `X-Api-Key`, anything with `token`, `key`,
   `secret`...) must use a variable: a value written as is makes the config invalid.

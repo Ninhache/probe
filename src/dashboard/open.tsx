@@ -1,14 +1,16 @@
 import { render } from "ink";
 import { runChecks } from "../checkers/run";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
+import { serviceVariables } from "../config/headers";
 import type { Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { serviceActions } from "./actions";
-import { Dashboard, type DashboardProps } from "./Dashboard";
+import { Dashboard, type DashboardProps, type Secrets } from "./Dashboard";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
+import { type VariableSources, variableTools } from "./variables";
 
 export interface DashboardState {
   settings: DashboardSettings;
@@ -20,20 +22,24 @@ export interface DashboardState {
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
   onServiceWrite?: (
     write: ServiceWrite,
+    secrets?: Secrets,
   ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
+  variableSources?: VariableSources;
+  onVariableWrite?: (name: string, value: string) => Saved;
 }
 
-const pickFields = ({ host, port, path, expect }: Service): ServiceFields => ({
+const pickFields = ({ host, port, path, expect, headers }: Service): ServiceFields => ({
   host,
   port,
   path,
   expect,
+  headers,
 });
 
 export async function openDashboard(
   initial: Config,
   terminal: Terminal,
-  { onServiceWrite, variables: readVariables, ...state }: DashboardState,
+  { onServiceWrite, variables: readVariables, variableSources, ...state }: DashboardState,
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
   let config = initial;
@@ -57,6 +63,14 @@ export async function openDashboard(
       timeout === undefined ? [] : [[name, timeout]],
     ),
   );
+  const tools = variableSources && variableTools(() => config, variableSources);
+  const unsetNote = async (name: string) => {
+    const sent = serviceVariables(config.services[name]?.headers);
+    const found = (await variableSources?.(sent)) ?? {};
+    const unset = sent.filter((variable) => !found[variable]);
+    if (!variableSources || unset.length === 0) return undefined;
+    return `${unset.join(", ")} not set: open ${name} with enter, then enter on the variable`;
+  };
   const app = render(
     <Dashboard
       terminal={terminal}
@@ -73,12 +87,15 @@ export async function openDashboard(
       }}
       onServiceWrite={
         onServiceWrite &&
-        (async (write) => {
-          const { config: written, ...outcome } = await onServiceWrite(write);
+        (async (write, secrets) => {
+          const { config: written, ...outcome } = await onServiceWrite(write, secrets);
           if (written) config = written;
-          return { ...outcome, saved: written !== undefined };
+          const notes = [outcome.warning, written && (await unsetNote(write.name))];
+          const warning = notes.filter(Boolean).join("\n") || undefined;
+          return { ...outcome, warning, saved: written !== undefined };
         })
       }
+      variables={tools}
     />,
     { alternateScreen: true },
   );
