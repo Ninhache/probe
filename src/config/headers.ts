@@ -33,13 +33,18 @@ export function holdsSecret(name: string, value: string): boolean {
   return isSensitiveHeader(name) && !value.includes("${");
 }
 
+// Only a closed reference is drawn: a secret followed by `${` stays hidden while the name is typed.
 export function hiddenHeaderLine(line: string, bullet: string): string {
   const colon = line.indexOf(":");
-  if (colon < 1) return line;
+  if (colon < 1 || !isSensitiveHeader(line.slice(0, colon).trim())) return line;
   const value = line.slice(colon + 1).trimStart();
-  if (!holdsSecret(line.slice(0, colon).trim(), value)) return line;
   const { scheme, secret } = splitSecret(value);
-  return `${line.slice(0, line.length - value.length)}${scheme}${bullet.repeat(secret.length)}`;
+  const hidden = templateParts(secret).map(({ text, variable }) =>
+    variable !== undefined && VARIABLE_NAME.test(variable)
+      ? reference(variable)
+      : bullet.repeat((text ?? reference(variable ?? "")).length),
+  );
+  return `${line.slice(0, line.length - value.length)}${scheme}${hidden.join("")}`;
 }
 
 export function isSensitiveHeader(name: string): boolean {

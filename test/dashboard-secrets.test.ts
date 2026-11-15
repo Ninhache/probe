@@ -9,7 +9,7 @@ const DOWN = "\u001b[B";
 const CONFIG = "schemaVersion: 1\nservices:\n  api: { port: 1 }\n";
 const REFERENCE = "$" + "{API_TOKEN}";
 // ink draws nothing once CI is in the environment, even empty.
-const ON_SCREEN = { CI: undefined };
+const ON_SCREEN = { CI: undefined, CONTINUOUS_INTEGRATION: undefined };
 const read = (file: string) => readFile(file, "utf8").catch(() => "");
 
 describe.skipIf(!hasPython())("a secret typed in the dashboard", () => {

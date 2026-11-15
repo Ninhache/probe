@@ -143,6 +143,15 @@ describe("a secret typed in a header", () => {
 
     expect(hiddenHeaderLine(line, "*")).toBe(line);
   });
+
+  it("keeps hidden a secret followed by a reference, closed or not", () => {
+    const open = "$" + "{";
+
+    expect(hiddenHeaderLine(`X-Api-Key: abc${open}`, "*")).toBe("X-Api-Key: *****");
+    expect(hiddenHeaderLine(`X-Api-Key: abc${open}KEY`, "*")).toBe("X-Api-Key: ********");
+    expect(hiddenHeaderLine(`X-Api-Key: abc${open}KEY}`, "*")).toBe(`X-Api-Key: ***${open}KEY}`);
+    expect(hiddenHeaderLine(`X-Api-Key: ${open}a b}`, "*")).toBe("X-Api-Key: ******");
+  });
 });
 
 describe("parseHeaderLine", () => {

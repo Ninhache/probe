@@ -1504,6 +1504,7 @@ describe("dashboard headers and variables", () => {
   const SECRET = "s3cr3t-token-0123456789";
   const reference = (name: string) => `$\{${name}}`;
   const DOWN = `${ESCAPE}[B`;
+  const UP = `${ESCAPE}[A`;
   const CLEAR = String.fromCharCode(21);
   const ACCEPT = "Accept: text/plain";
   const fields = { host: "localhost", port: 3000, path: "/health", expect: undefined };
@@ -1646,6 +1647,8 @@ describe("dashboard headers and variables", () => {
 
     stdin.write(`e${DOWN.repeat(4)}X-Api-Key: ${SECRET}`);
     await shows(lastFrame, "*****_");
+    stdin.write("$" + "{");
+    await shows(lastFrame, `${"*".repeat(SECRET.length + 2)}_`);
     stdin.write(`${CLEAR}X-Api-Key: ${reference("KEY")}`);
 
     await shows(lastFrame, `> Header  X-Api-Key: ${reference("KEY")}_`);
@@ -1705,6 +1708,69 @@ describe("dashboard headers and variables", () => {
       },
       { API_TOKEN: SECRET, SID: `sid=${SECRET}` },
     );
+  });
+
+  it("keeps the secret of a service that is added", async () => {
+    const { onServiceWrite, ...props } = project(undefined);
+    const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`aweb${TAB}8080${DOWN.repeat(4)}X-Api-Key: ${SECRET}${ENTER}`);
+    await shows(lastFrame, "│ › Variable  WEB_TOKEN_");
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "Added web, WEB_TOKEN kept in .probe/local.yml");
+    expect(onServiceWrite).toHaveBeenCalledWith(
+      {
+        kind: "add",
+        name: "web",
+        fields: {
+          host: "localhost",
+          port: 8080,
+          path: "/",
+          expect: undefined,
+          headers: { "X-Api-Key": reference("WEB_TOKEN") },
+        },
+      },
+      { WEB_TOKEN: SECRET },
+    );
+    expect(frames.join("\n")).not.toContain(SECRET);
+  });
+
+  it("refuses for a secret the variable another header of the service sends", async () => {
+    const { onServiceWrite, ...props } = project({ "X-Token": reference("API_TOKEN") });
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(5)}Authorization: Bearer ${SECRET}${ENTER}`);
+    await shows(lastFrame, "│ › Variable  OTHER_");
+    stdin.write(`${CLEAR}API_TOKEN${ENTER}`);
+
+    await shows(lastFrame, "API_TOKEN already keeps another header");
+    expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
+  it("keeps no secret whose header was removed after it got its name", async () => {
+    const { onServiceWrite, ...props } = project(undefined);
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`);
+    await shows(lastFrame, "│ › Variable  API_TOKEN_");
+    stdin.write(ENTER);
+    await shows(lastFrame, "│ Cookie holds a secret");
+    await shows(lastFrame, "│ › Variable  OTHER_");
+    stdin.write(ESCAPE);
+    await shows(lastFrame, "│ Edit api");
+    stdin.write(`${CLEAR}${UP}${CLEAR}${ACCEPT}${ENTER}`);
+
+    await shows(lastFrame, "Saved api");
+    expect(lastFrame()).not.toContain("kept in");
+    expect(onServiceWrite).toHaveBeenCalledWith({
+      kind: "edit",
+      name: "api",
+      fields: { ...fields, headers: { Accept: "text/plain" } },
+    });
   });
 
   it("comes back to the form on escape, the secret still hidden and nothing written", async () => {

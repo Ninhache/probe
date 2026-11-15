@@ -6,6 +6,7 @@ import {
   holdsSecret,
   parseHeaderLine,
   reference,
+  referencedVariables,
   splitSecret,
   variableValueProblem,
 } from "../config/headers";
@@ -92,6 +93,10 @@ export function formFields(values: FormValues): ServiceFields {
     expect: values.expect ? parseExpectList(values.expect) : undefined,
     headers: formHeaders(values),
   };
+}
+
+export function formVariables(values: FormValues): string[] {
+  return typedHeaders(values).flatMap(({ line }) => referencedVariables(line));
 }
 
 export function withHeaderLine(values: FormValues, index: number, line: string): FormValues {

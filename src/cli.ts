@@ -201,7 +201,7 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
       );
       // After the config: a service that was not written leaves no secret behind.
       for (const [name, value] of written ? Object.entries(secrets) : [])
-        failure = await saveLocal(() => keepVariable(name, value));
+        failure = (await saveLocal(() => keepVariable(name, value))) ?? failure;
       return { failure, ...(written as ServiceWritten | null) };
     },
   });

@@ -2,7 +2,7 @@ import { Box, Text, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "../checkers/types";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
-import { hiddenHeaderLine, variableValueProblem } from "../config/headers";
+import { hiddenHeaderLine, serviceVariables, variableValueProblem } from "../config/headers";
 import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
@@ -18,6 +18,7 @@ import {
   formRows,
   formSecret,
   formValues,
+  formVariables,
   HEADER_LABEL,
   HEADER_PLACEHOLDER,
   withHeaderLine,
@@ -262,17 +263,21 @@ export function Dashboard({
       const step: SecretStep = { kind: "secret", form: { ...form, row }, ...secret };
       setDialog(step);
       looking.current = true;
-      const named = Object.keys(form.secrets ?? {});
-      return void variables.variableName(service, secret.header, named).then((variable) => {
+      const used = formVariables(form.values);
+      return void variables.variableName(service, secret.header, used).then((variable) => {
         looking.current = false;
         setDialog({ ...step, variable });
       });
     }
     setDialog(null);
     const fields = formFields(form.values);
+    // A secret named before its header was retyped or removed is kept nowhere.
+    const sent = serviceVariables(fields.headers);
+    const kept = Object.entries(form.secrets ?? {}).filter(([name]) => sent.includes(name));
+    const secrets = kept.length > 0 ? Object.fromEntries(kept) : undefined;
     if (form.editing === undefined)
-      void write({ kind: "add", name: service, fields }, `Added ${service}`, form.secrets);
-    else void write({ kind: "edit", name: service, fields }, `Saved ${service}`, form.secrets);
+      void write({ kind: "add", name: service, fields }, `Added ${service}`, secrets);
+    else void write({ kind: "edit", name: service, fields }, `Saved ${service}`, secrets);
   };
 
   const typeInForm = (form: Form, keystroke: Keystroke) => {
@@ -312,7 +317,8 @@ export function Dashboard({
     else if (key === "clear") rename("");
     else if (typed) rename(variable + typed);
     else if (key === "return") {
-      if (Object.hasOwn(form.secrets ?? {}, variable))
+      // Under a name another header of the form sends, that header would send this secret.
+      if (formVariables(form.values).includes(variable))
         return setDialog({ ...step, problem: `${variable} already keeps another header` });
       looking.current = true;
       const service = form.editing ?? form.values.name;
