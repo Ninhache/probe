@@ -103,7 +103,7 @@ async function fetchWithHeaders(
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     const response = await fetch(url, { ...init, redirect: "manual" });
     const location = response.headers.get("location");
-    const next = location === null ? null : URL.parse(location, url);
+    const next = location !== null && URL.canParse(location, url) ? new URL(location, url) : null;
     if (!follow || !isRedirect(response.status) || !next) return { response };
     if (next.origin !== new URL(url).origin) return { response, leftFor: next.origin };
     await response.body?.cancel();

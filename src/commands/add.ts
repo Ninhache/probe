@@ -61,7 +61,9 @@ function addressFrom(args: {
   return service;
 }
 
-const HEADER_FLAGS = ["--header", "-H"];
+const LONG_HEADER = "--header";
+const SHORT_HEADER = "-H";
+const HEADER_FLAGS = [LONG_HEADER, SHORT_HEADER];
 const HEADER_EXAMPLE = "--header 'Accept: application/json'";
 
 /** Every `--header` of the command line: the argument parser keeps the last one only. */
@@ -70,7 +72,11 @@ function headerLines(rawArgs: string[]): string[] {
   for (const [index, arg] of rawArgs.entries()) {
     if (arg === "--") break;
     if (HEADER_FLAGS.includes(arg)) lines.push(rawArgs[index + 1] ?? "");
-    else if (arg.startsWith(`${HEADER_FLAGS[0]}=`)) lines.push(arg.slice(arg.indexOf("=") + 1));
+    else if (arg.startsWith(`${LONG_HEADER}=`)) lines.push(arg.slice(LONG_HEADER.length + 1));
+    // `-HAccept: x`, as curl takes it.
+    else if (arg.startsWith(SHORT_HEADER) && !arg.startsWith("--")) {
+      lines.push(arg.slice(SHORT_HEADER.length).replace(/^=/, ""));
+    }
   }
   return lines;
 }
@@ -97,9 +103,7 @@ function headersFrom(lines: string[]): Record<string, string> | undefined {
     const problem = headerValueProblem(name, value);
     if (problem) {
       // Between double quotes the shell fills the variable in before probe sees it.
-      const quotes = isSensitiveHeader(name)
-        ? ` Keep the single quotes: --header '${name}: ${reference("API_TOKEN")}'`
-        : "";
+      const quotes = isSensitiveHeader(name) ? " Keep the single quotes around the header." : "";
       throw new ProbeError("USAGE", `--header ${name} expects ${problem}.${quotes}`);
     }
     headers[name] = value;
@@ -198,6 +202,10 @@ export default defineCommand({
       service.timeout = Number(args.timeout);
     }
     const headers = headersFrom(headerLines(rawArgs));
+    // Never a service saved without a header that was asked for.
+    if (args.header !== undefined && !headers) {
+      throw new ProbeError("USAGE", `--header expects "Name: value", e.g. ${HEADER_EXAMPLE}.`);
+    }
     if (headers) service.headers = headers;
 
     await saveServices(loaded, { ...services, [args.name]: service });

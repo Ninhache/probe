@@ -76,6 +76,8 @@ describe("probe add --header", () => {
       "-H",
       HEADER,
       "--header=Accept: application/json",
+      "-HX-Tenant: acme",
+      "-H=X-Mode:dev",
     ]);
 
     expect(run).toMatchObject({
@@ -83,7 +85,7 @@ describe("probe add --header", () => {
       stdout: "Added api. It sends API_KEY, not set yet: probe var API_KEY\n",
     });
     expect(await config(root)).toContain(
-      "headers:\n      X-Api-Key: ${API_KEY}\n      Accept: application/json\n",
+      "headers:\n      X-Api-Key: ${API_KEY}\n      Accept: application/json\n      X-Tenant: acme\n      X-Mode: dev\n",
     );
   });
 
@@ -95,7 +97,7 @@ describe("probe add --header", () => {
 
     expect(run.code).toBe(2);
     expect(run.stderr).toContain("--header X-Api-Key expects a reference instead of the secret");
-    expect(run.stderr).toContain("Keep the single quotes: --header 'X-Api-Key: ${API_TOKEN}'");
+    expect(run.stderr).toContain("config.yml is shared. Keep the single quotes around the header.");
     expect(run.stdout + run.stderr).not.toContain(SECRET);
     expect(await config(root)).toBe(before);
   });

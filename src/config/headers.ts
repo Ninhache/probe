@@ -57,7 +57,7 @@ export function headerValueProblem(name: string, value: string): string | undefi
   }
   // config.yml is shared: nothing secret goes in it.
   if (isSensitiveHeader(name) && referencedVariables(value).length === 0) {
-    return `a reference instead of the secret, e.g. Bearer ${reference("API_TOKEN")}: this file is shared`;
+    return `a reference instead of the secret, e.g. Bearer ${reference("API_TOKEN")}: config.yml is shared`;
   }
   return undefined;
 }

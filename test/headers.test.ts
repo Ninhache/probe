@@ -218,9 +218,11 @@ describe("variables in local.yml", () => {
 
   it("keeps a value in an owner-only file, beside what is already there", async () => {
     const paths = await tempProject("schemaVersion: 1\nservices: {}\n");
-    await writeFile(paths.local, "# mine\ndashboard:\n  interval: 5\n");
+    await writeFile(paths.local, "# mine\ndashboard:\n  interval: 5\n", { mode: 0o644 });
 
     expect(await writeVariable(paths, "API_TOKEN", SECRET)).toBe(true);
+    // Made by hand and readable by all: not once it holds a secret.
+    expect((await stat(paths.local)).mode & 0o777).toBe(0o600);
     expect(await writeVariable(paths, "OTHER", "1234")).toBe(true);
 
     expect(await readFile(paths.local, "utf8")).toBe(
@@ -270,6 +272,9 @@ describe("http checker with headers", () => {
       switch (request.url) {
         case "/hop":
           response.writeHead(302, { location: "/private" }).end();
+          break;
+        case "/moved":
+          response.writeHead(301, { location: foreign.replace("localhost", "127.0.0.1") }).end();
           break;
         case "/away":
           response.writeHead(302, { location: `${foreign}/login` }).end();
@@ -352,6 +357,19 @@ describe("http checker with headers", () => {
       error: `redirected to ${foreign}`,
     });
     expect(result.hint).toContain("headers stay on the host they are for");
+    expect(seenElsewhere).toEqual([]);
+  });
+
+  it("says the address moved when the redirect stays on the same host", async () => {
+    const moved = `http://127.0.0.1:${(elsewhere.address() as AddressInfo).port}`;
+    const result = await httpChecker.check(
+      "api",
+      { host: "127.0.0.1", port, path: "/moved", headers: { "X-Api-Key": "${API_KEY}" } },
+      { timeoutMs: 2_000, variables },
+    );
+
+    expect(result).toMatchObject({ ok: false, error: `redirected to ${moved}` });
+    expect(result.hint).toContain("set `url` to it in .probe/config.yml");
     expect(seenElsewhere).toEqual([]);
   });
 

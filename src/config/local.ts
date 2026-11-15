@@ -92,7 +92,7 @@ type LocalEdit = (doc: Document) => boolean | null;
 
 /**
  * Applies `edit` to `local.yml`, leaving every other key and comment as is.
- * The file keeps its permissions (a new one is owner-only) and, when it is a symlink, its target
+ * The file keeps its permissions (a new one, or one with variables, is owner-only) and, when it is a symlink, its target
  * is the file replaced. Returns false, writing nothing, when the file exists but cannot be edited
  * safely (invalid YAML, a top level that is not a map, or `edit` returning false).
  * Throws when the file cannot be written; no copy of it is left behind.
@@ -109,7 +109,9 @@ async function editLocal(paths: ProbePaths, edit: LocalEdit): Promise<boolean> {
   const text = empty && !doc.comment && !doc.commentBefore ? "" : doc.toString();
   const target = await realpath(paths.local).catch(() => paths.local);
   const existing = await stat(target).catch(() => null);
-  const mode = existing ? existing.mode & 0o777 : LOCAL_FILE_MODE;
+  const kept = existing ? existing.mode & 0o777 : LOCAL_FILE_MODE;
+  // A file that holds variables holds secrets: nobody else reads it, whatever it allowed before.
+  const mode = doc.has(LOCAL_VARIABLES_KEY) ? kept & LOCAL_FILE_MODE : kept;
   // Written beside then renamed: a crash never leaves a half-written local.yml.
   const draft = join(dirname(target), LOCAL_DRAFT_FILE);
   try {

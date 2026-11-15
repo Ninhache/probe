@@ -187,8 +187,17 @@ export function diagnoseUnsendable(names: string[]): Diagnosis {
 
 /** Explains a redirect to another origin, where the headers of the service are not sent. */
 export function diagnoseForeignRedirect(service: Service, origin: string): Diagnosis {
+  const error = `redirected to ${origin}`;
+  const bare = (host: string) => host.replace(/^www\./, "");
+  // The same site under another scheme, port or `www.`: the address moved, nobody asks to log in.
+  if (bare(new URL(origin).hostname) === bare(service.host)) {
+    return {
+      error,
+      hint: `the service moved there, and headers stay on the address they are for: set \`url\` to it in ${CONFIG}`,
+    };
+  }
   return {
-    error: `redirected to ${origin}`,
+    error,
     hint: `headers stay on the host they are for. A login page? Check ${sentBy(service)}`,
   };
 }
