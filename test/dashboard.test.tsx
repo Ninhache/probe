@@ -53,12 +53,14 @@ const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, 
   );
 const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// A long value is some fifty keys, one per render: over a second on a slow CI runner.
+const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 10_000 });
 /** Waits for the screen to show a text: keys are handled one per render. */
 const shows = (lastFrame: () => string | undefined, text: string) =>
-  vi.waitFor(() => expect(lastFrame()).toContain(text));
+  waitFor(() => expect(lastFrame()).toContain(text));
 /** Waits for a text to leave the screen. */
 const hides = (lastFrame: () => string | undefined, text: string) =>
-  vi.waitFor(() => expect(lastFrame()).not.toContain(text));
+  waitFor(() => expect(lastFrame()).not.toContain(text));
 
 let app: ReturnType<typeof render> | undefined;
 afterEach(() => app?.unmount());
@@ -401,22 +403,22 @@ describe("dashboard", () => {
   it("moves down twice when two keys are read together", async () => {
     const cache: CheckResult = { ...api, name: "cache" };
     const { lastFrame, stdin } = open({ check: async () => [api, db, cache] });
-    await vi.waitFor(() => expect(lastFrame()).toContain("cache"));
+    await waitFor(() => expect(lastFrame()).toContain("cache"));
 
     stdin.write("jj");
 
-    await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
+    await waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
   });
 
   it("moves down twice when a second key arrives before the screen is redrawn", async () => {
     const cache: CheckResult = { ...api, name: "cache" };
     const { lastFrame, stdin } = open({ check: async () => [api, db, cache] });
-    await vi.waitFor(() => expect(lastFrame()).toContain("cache"));
+    await waitFor(() => expect(lastFrame()).toContain("cache"));
 
     stdin.write("j");
     stdin.write("j");
 
-    await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
+    await waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
   });
 
   it("moves down twice when the keys arrive while the list is being drawn", async () => {
@@ -432,7 +434,7 @@ describe("dashboard", () => {
       stdin.write("jj");
     };
 
-    await vi.waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
+    await waitFor(() => expect(lastFrame()).toContain("› ✓ cache"));
   });
 
   it("handles keys read together in order: open the panel, change twice, close", async () => {
@@ -442,11 +444,11 @@ describe("dashboard", () => {
         changes.push([name, seconds]);
       },
     });
-    await vi.waitFor(() => expect(lastFrame()).toContain("db"));
+    await waitFor(() => expect(lastFrame()).toContain("db"));
 
     stdin.write("j\rjll\r");
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(changes).toEqual([
         ["db", 1],
         ["db", 2],
@@ -802,7 +804,7 @@ describe("dashboard filter", () => {
 
     stdin.write(`/d${ENTER}u`);
 
-    await vi.waitFor(() => expect(onOpen).toHaveBeenCalledWith("db"));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("db"));
     expect(lastFrame()).toContain("probe · 1/2 up · every 60s · filter: d");
   });
 
@@ -885,7 +887,7 @@ describe("dashboard service changes", () => {
 
     stdin.write(`/d${ENTER}dy`);
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(onServiceWrite).toHaveBeenCalledWith({ kind: "remove", name: "db" }),
     );
   });
@@ -995,7 +997,7 @@ describe("dashboard service changes", () => {
 
     stdin.write(`aweb${TAB}80${TAB}127.0.0.1${TAB}/up${TAB}200,204${ENTER}`);
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(onServiceWrite).toHaveBeenCalledWith({
         kind: "add",
         name: "web",
@@ -1088,7 +1090,7 @@ describe("dashboard service changes", () => {
 
     stdin.write("dy");
 
-    await vi.waitFor(() => expect(passes.mock.calls.length).toBe(before + 1));
+    await waitFor(() => expect(passes.mock.calls.length).toBe(before + 1));
   });
 
   it("leaves a, e and d without effect when the config cannot be written from here", async () => {
