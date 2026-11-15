@@ -48,6 +48,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | `probe wait [name...] [--json] [--timeout <seconds>]`     | Check again until every service is up, or give up after the timeout    |
 | `probe open <name>`                                       | Open the URL of a service in the browser                               |
 | `probe curl <name>`                                       | Print the curl command that requests a service                         |
+| `probe var [name] [--unset]`                              | List the variables the headers use, or set one for this machine        |
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
 | `probe sync`                                              | Add or regenerate the Makefile block (optional)                        |
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
@@ -184,6 +185,7 @@ services:
 | `url`     | none        | Full URL, instead of the three above    |
 | `expect`  | any 2xx     | Expected status, or a list of statuses  |
 | `timeout` | 3           | Seconds given to this service to answer |
+| `headers` | none        | Headers sent with the request           |
 
 Which timeout applies: `--timeout` when you pass it, else the service's `timeout`, else 3 s (in the dashboard,
 the timeout set in its options). A config with a `timeout` needs `probe` 0.4.0 or later: older versions refuse it.
@@ -202,11 +204,48 @@ for another host or not trusted makes the service down, with the reason. For a C
 Redirects are followed and the final status is judged, unless `expect` contains a 3xx: then the first response
 is judged as is.
 
+### Headers
+
+A service behind an API key or a login gets its headers in `config.yml`:
+
+```yaml
+services:
+  api:
+    url: https://dev.example.com/health
+    headers:
+      Accept: application/json
+      Authorization: Bearer ${API_TOKEN}
+```
+
+`probe add api --url https://dev.example.com/health -H 'Authorization: Bearer ${API_TOKEN}'` writes the same
+(`-H` can be repeated; keep the single quotes, or the shell fills the variable in).
+Written on one line between `{ }`, a value with a variable needs quotes: `headers: { X-Api-Key: '${API_KEY}' }`.
+
+`${API_TOKEN}` is a variable: its value is never written in `config.yml`. `probe` takes it from the environment,
+else from `.probe/local.yml`, which stays on your machine:
+
+```sh
+probe var API_TOKEN            # asks for the value, hidden, and keeps it in .probe/local.yml
+probe var API_TOKEN < key.txt  # or reads it from a file or a pipe
+probe var                      # which variables are used, and where each is set
+```
+
+- A header whose name says secret (`Authorization`, `Cookie`, `X-Api-Key`, anything with `token`, `key`,
+  `secret`...) must use a variable: a value written as is makes the config invalid.
+- A variable that is not set makes the service down, with the command that sets it. No request is sent.
+- The value is never printed: not by `check`, `--json`, `probe curl` (which writes `$API_TOKEN` for the shell
+  to fill in) nor the dashboard, which masks it if the service repeats it in its response.
+- With headers, a redirect is followed on the same host and port only. One that leaves for another origin
+  makes the service down and names it: the headers are never sent there.
+
+A config with `headers` needs `probe` 0.13.0 or later: older versions refuse it.
+
 Files in `.probe/`:
 
 - `config.yml`: services. Commit it.
 - `lock.yml`: CLI version and hash of the Makefile block. Only there once `probe sync` has run. Commit it.
-- `local.yml`: per-machine values (dashboard settings, skipped services). Ignored by git.
+- `local.yml`: per-machine values (dashboard settings, skipped services, variables). Ignored by git, readable
+  by you only.
 
 Never put secrets in `config.yml` or `lock.yml`.
 
