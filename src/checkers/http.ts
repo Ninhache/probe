@@ -1,6 +1,7 @@
 import type { Service } from "../config/schema";
 import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { diagnoseFailure, diagnoseStatus } from "./diagnosis";
+import { describeResponse } from "./response";
 import type { Checker } from "./types";
 
 export function targetUrl(service: Service): string {
@@ -32,7 +33,7 @@ function expectsRedirect(expect: Service["expect"]): boolean {
 
 export const httpChecker: Checker = {
   type: "http",
-  async check(name, service, { timeoutMs, signal }) {
+  async check(name, service, { timeoutMs, signal, detail }) {
     const target = targetUrl(service);
     const base = { name, type: "http", target };
     const started = performance.now();
@@ -45,10 +46,21 @@ export const httpChecker: Checker = {
         redirect: expectsRedirect(service.expect) ? "manual" : "follow",
       });
       const latencyMs = elapsed();
-      await response.body?.cancel();
       const { status } = response;
-      if (isExpected(service.expect, status)) return { ...base, ok: true, status, latencyMs };
-      return { ...base, ok: false, status, latencyMs, ...diagnoseStatus(service, status) };
+      // The latency is taken before the body: reading it changes neither the time nor the verdict.
+      const described = detail ? { response: await describeResponse(response) } : {};
+      if (!detail) await response.body?.cancel();
+      if (isExpected(service.expect, status)) {
+        return { ...base, ok: true, status, latencyMs, ...described };
+      }
+      return {
+        ...base,
+        ok: false,
+        status,
+        latencyMs,
+        ...diagnoseStatus(service, status),
+        ...described,
+      };
     } catch (error) {
       const diagnosis = diagnoseFailure(error, service, timeoutMs);
       return { ...base, ok: false, latencyMs: elapsed(), ...diagnosis };

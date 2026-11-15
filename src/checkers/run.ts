@@ -14,6 +14,8 @@ export interface RunOptions {
   maxTimeoutMs?: number;
   /** Cancels the checks still running, e.g. when the dashboard closes. */
   signal?: AbortSignal;
+  /** Also describe each response, for the detail of the dashboard. */
+  detail?: boolean;
 }
 
 /** Time one service gets: the forced value, else its own `timeout`, else the default; never above the bound. */
@@ -62,6 +64,7 @@ export async function runChecks(
       return getChecker(type).check(name, service, {
         timeoutMs: resolveTimeoutMs(service, options),
         signal: options.signal,
+        detail: options.detail,
       });
     }),
   );

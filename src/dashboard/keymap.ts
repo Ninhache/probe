@@ -33,7 +33,7 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
 const BINDINGS: readonly Binding[] = [
   list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 1 }),
   list({ keys: "r", action: "check", help: "Check now", barless: true }),
-  list({ keys: "↵", ascii: "enter", action: "service", help: "Service settings", drop: 4 }),
+  list({ keys: "↵", ascii: "enter", action: "service", help: "Service detail", drop: 4 }),
   list({ keys: "u", action: "open", help: "Open its URL", barless: true }),
   list({ keys: "c", action: "copy", help: "Copy curl command", barless: true }),
   list({ keys: "e", action: "edit", help: "Edit the service", barless: true }),
