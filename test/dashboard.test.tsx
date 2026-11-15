@@ -1446,7 +1446,7 @@ describe("dashboard desktop notifications", () => {
         return undefined;
       },
     });
-    await tick(150);
+    await shows(lastFrame, "0/2 up");
 
     stdin.write("o");
     await shows(lastFrame, "Options");
@@ -1465,19 +1465,25 @@ describe("dashboard desktop notifications", () => {
   it("warns once when no notification can be shown, and keeps checking", async () => {
     const warning = "notify-send could not show a desktop notification";
     const { told, onNotify } = listener(warning);
+    let ok = true;
     const { lastFrame, stdin } = open({
       intervalMs: 20,
       notify: true,
       onNotify,
-      check: flapping([true, false, true, false, true, false]),
+      check: async () => [{ ...api, ok }, db],
     });
+    await shows(lastFrame, "1/2 up");
 
+    ok = false;
     await shows(lastFrame, warning);
-    await waitFor(() => expect(told).toHaveLength(5));
+    expect(told).toEqual(["api is down"]);
     stdin.write("j");
     await hides(lastFrame, warning);
+
+    ok = true;
+    await waitFor(() => expect(told).toEqual(["api is down", "api is back up"]));
+    await shows(lastFrame, "1/2 up");
     await tick(150);
     expect(lastFrame()).not.toContain(warning);
-    expect(lastFrame()).toContain("0/2 up");
   });
 });
