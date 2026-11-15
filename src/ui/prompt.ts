@@ -57,6 +57,27 @@ export async function ask(
   return answer || (defaultValue ?? "");
 }
 
+/**
+ * Asks for a value that must not show: what is typed is drawn as dots.
+ * @param message the question, e.g. `Value of API_TOKEN`
+ * @param validate returns what is wrong with the answer, or undefined to accept it
+ * @param streams streams to use instead of the process terminal
+ * @returns the answer, or null when cancelled (Ctrl+C, Escape)
+ */
+export async function askSecret(
+  message: string,
+  validate: (answer: string) => string | undefined,
+  streams: PromptStreams = {},
+): Promise<string | null> {
+  const { password, isCancel } = await import("@clack/prompts");
+  const answer = await password({
+    message,
+    validate: (typed) => validate(typed ?? ""),
+    ...streams,
+  });
+  return isCancel(answer) ? null : answer;
+}
+
 /** One line of a checklist. */
 export interface Choice {
   label: string;

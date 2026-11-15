@@ -1,3 +1,4 @@
+import type { Variables } from "../config/local";
 import type { Service } from "../config/schema";
 import type { ResponseDetail } from "./response";
 
@@ -8,6 +9,8 @@ export interface CheckContext {
   signal?: AbortSignal;
   /** Also describe the response (headers, start of the body): the dashboard shows it. */
   detail?: boolean;
+  /** Values of the variables the headers refer to; none when left out. */
+  variables?: Variables;
 }
 
 export interface CheckResult {

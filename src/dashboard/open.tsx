@@ -1,6 +1,7 @@
 import { render } from "ink";
 import { runChecks } from "../checkers/run";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
+import type { Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
@@ -13,6 +14,8 @@ export interface DashboardState {
   settings: DashboardSettings;
   /** Services set aside when the dashboard opens. */
   skipped: ReadonlySet<string>;
+  /** Reads the variables the headers refer to, before each pass: one set meanwhile is then seen. */
+  variables?: () => Promise<Variables>;
   /** Called each time the service panel sets the timeout of a service, in seconds; `undefined`: back to the default. */
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   /** Receives the settings each time the options panel changes one. */
@@ -39,18 +42,24 @@ const pickFields = ({ host, port, path, expect }: Service): ServiceFields => ({
 export async function openDashboard(
   initial: Config,
   terminal: Terminal,
-  { onServiceWrite, ...state }: DashboardState,
+  { onServiceWrite, variables: readVariables, ...state }: DashboardState,
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
   let config = initial;
-  const check: DashboardProps["check"] = (signal, timeoutMs, skipped, timeouts) => {
+  const check: DashboardProps["check"] = async (signal, timeoutMs, skipped, timeouts) => {
     const services = Object.fromEntries(
       Object.entries(config.services).map(([name, service]) => [
         name,
         { ...service, timeout: timeouts[name] },
       ]),
     );
-    return runChecks({ ...config, services }, [], { timeoutMs, signal, detail: true }, skipped);
+    const variables = await readVariables?.();
+    return runChecks(
+      { ...config, services },
+      [],
+      { timeoutMs, signal, detail: true, variables },
+      skipped,
+    );
   };
   const timeouts = Object.fromEntries(
     Object.entries(config.services).flatMap(([name, { timeout }]) =>

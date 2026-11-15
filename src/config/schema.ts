@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_TIMEOUT_SECONDS } from "../constants";
+import { headerNameProblem, headerValueProblem } from "./headers";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -37,7 +38,37 @@ export interface Service {
   path: string;
   expect?: number | number[];
   timeout?: number;
+  /** Sent with the request; a value may refer to variables as `${NAME}`. */
+  headers?: Record<string, string>;
 }
+
+/**
+ * The headers of a service. A YAML number or boolean is read as its text. What is wrong is said
+ * without the value: it may be a secret pasted where a reference is expected.
+ */
+const headersSchema = z
+  .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+  .transform((headers, ctx) => {
+    const seen = new Map<string, string>();
+    const texts: Record<string, string> = {};
+    for (const [name, value] of Object.entries(headers)) {
+      const twin = seen.get(name.toLowerCase());
+      seen.set(name.toLowerCase(), name);
+      const problem = twin
+        ? `declared twice, also as ${twin}: header names ignore case`
+        : (headerNameProblem(name) ?? headerValueProblem(name, String(value)));
+      if (problem) {
+        ctx.issues.push({
+          code: "custom",
+          message: twin ? problem : `expected ${problem}`,
+          input: name,
+          path: [name],
+        });
+      }
+      texts[name] = String(value);
+    }
+    return texts;
+  });
 
 /** The keys a service may have in the file, before they are read as a whole. */
 export const serviceObjectV1 = z.strictObject({
@@ -54,6 +85,8 @@ export const serviceObjectV1 = z.strictObject({
   expect: z.union([statusCode, z.array(statusCode).min(1)]).optional(),
   /** Seconds given to this service to answer, instead of the default. */
   timeout: z.number().positive().max(MAX_TIMEOUT_SECONDS).optional(),
+  /** Headers sent with the request, e.g. `Authorization: Bearer ${API_TOKEN}`. */
+  headers: headersSchema.optional(),
 });
 
 /** What each key of a service accepts, to check one typed value at a time. */

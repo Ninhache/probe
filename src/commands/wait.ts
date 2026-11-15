@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import { pollUntilUp } from "../checkers/poll";
 import { runChecks } from "../checkers/run";
 import type { CheckResult } from "../checkers/types";
-import { readSkippedServices } from "../config/local";
+import { loadVariables, readSkippedServices } from "../config/local";
 import {
   DEFAULT_TIMEOUT_SECONDS,
   DEFAULT_WAIT_INTERVAL_SECONDS,
@@ -12,7 +12,7 @@ import {
 } from "../constants";
 import { ProbeError } from "../errors";
 import { formatCheckResults } from "../ui/report";
-import { openProject, secondsToMs, stdoutTerminal } from "./shared";
+import { openProject, requireVariables, secondsToMs, stdoutTerminal } from "./shared";
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
@@ -70,6 +70,8 @@ export default defineCommand({
     }
     const { config, paths } = await openProject();
     const skipped = await readSkippedServices(paths);
+    const variables = await loadVariables(paths);
+    requireVariables(config, args._, variables, skipped);
     const report = progressReporter();
 
     const { results, timedOut } = await pollUntilUp(
@@ -78,7 +80,7 @@ export default defineCommand({
         runChecks(
           config,
           args._,
-          { timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000, maxTimeoutMs: remainingMs },
+          { timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000, maxTimeoutMs: remainingMs, variables },
           skipped,
         ),
       {

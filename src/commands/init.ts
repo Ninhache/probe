@@ -17,7 +17,8 @@ schemaVersion: ${CURRENT_SCHEMA_VERSION}
 services: {}
 `;
 
-async function ignoreLocalFiles(root: string): Promise<void> {
+/** Adds the per-machine files of `.probe/` to the `.gitignore` of `root`, when they are not there. */
+export async function ignoreLocalFiles(root: string): Promise<void> {
   const file = join(root, ".gitignore");
   const current = existsSync(file) ? await readFile(file, "utf8") : "";
   const lines = current.split("\n").map((line) => line.trim());

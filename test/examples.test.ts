@@ -11,6 +11,7 @@ import open from "../src/commands/open";
 import rm from "../src/commands/rm";
 import status from "../src/commands/status";
 import sync from "../src/commands/sync";
+import variable from "../src/commands/var";
 import wait from "../src/commands/wait";
 import { EXAMPLES, formatExamples } from "../src/ui/examples";
 
@@ -23,6 +24,7 @@ const COMMANDS: Record<string, { args?: unknown }> = {
   wait,
   open,
   curl,
+  var: variable,
   status,
   sync,
   migrate,
@@ -33,7 +35,7 @@ const HELP_WIDTH = 80;
 /** Words of the probe command of an example: what comes before a shell operator. */
 function probeWords(command: string): string[] {
   const words = command.split(" ");
-  const operator = words.findIndex((word) => ["&&", "||", "|", ";"].includes(word));
+  const operator = words.findIndex((word) => ["&&", "||", "|", ";", "<"].includes(word));
   return operator === -1 ? words : words.slice(0, operator);
 }
 

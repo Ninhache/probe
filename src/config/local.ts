@@ -6,10 +6,12 @@ import {
   DEFAULT_TIMEOUT_SECONDS,
   LOCAL_DRAFT_FILE,
   LOCAL_FILE_MODE,
+  LOCAL_VARIABLES_KEY,
   MAX_TIMEOUT_SECONDS,
 } from "../constants";
 import type { DashboardSettings } from "../dashboard/settings";
 import type { ProbePaths } from "./discovery";
+import type { VariableLookup } from "./headers";
 
 /** Dashboard settings kept in `local.yml` under `dashboard`, in seconds. */
 export interface DashboardPreferences {
@@ -183,6 +185,85 @@ export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean)
     entry.delete(SKIP);
     if (entry.items.length === 0) services.delete(name);
     if (services.items.length === 0) doc.delete(SERVICES);
+    return true;
+  });
+}
+
+/** Where the values of the variables come from, for the checks of one pass. */
+export interface Variables {
+  lookup: VariableLookup;
+  /** `local.yml` is there but cannot be read: a variable it may hold is not simply "not set". */
+  localUnreadable?: true;
+}
+
+/** Where a variable gets its value: the environment first, as with a `.env` file. */
+export type VariableSource = "environment" | "local";
+
+/**
+ * Reads the variables kept in `local.yml` under `variables`, as text. A missing file holds none;
+ * `unreadable` is true when the file is there but is not a YAML map.
+ */
+export async function readLocalVariables(
+  paths: ProbePaths,
+): Promise<{ values: Record<string, string>; unreadable: boolean }> {
+  const text = await readLocal(paths);
+  if (text === null) return { values: {}, unreadable: false };
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0) return { values: {}, unreadable: true };
+  const section = doc.get(LOCAL_VARIABLES_KEY, true);
+  if (!isMap(section)) return { values: {}, unreadable: false };
+  const values: Record<string, string> = {};
+  for (const { key, value } of section.items) {
+    if (!isScalar(key) || !isScalar(value) || value.value === null) continue;
+    values[String(key.value)] = String(value.value);
+  }
+  return { values, unreadable: false };
+}
+
+/** Says where a variable is set, the environment first; undefined when nothing sets it. */
+export function variableSource(
+  name: string,
+  local: Readonly<Record<string, string>>,
+  env: NodeJS.ProcessEnv,
+): VariableSource | undefined {
+  if (env[name]) return "environment";
+  return local[name] ? "local" : undefined;
+}
+
+/**
+ * The variables as they are now: those of the environment, then those of `local.yml`.
+ * An empty value sets nothing.
+ */
+export async function loadVariables(
+  paths: ProbePaths,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Variables> {
+  const { values, unreadable } = await readLocalVariables(paths);
+  return {
+    lookup: (name) => env[name] || values[name] || undefined,
+    ...(unreadable ? { localUnreadable: true as const } : {}),
+  };
+}
+
+/**
+ * Keeps the value of a variable in `local.yml`; `undefined` removes it. Returns false when the
+ * file or its `variables` key cannot be edited safely.
+ */
+export function writeVariable(
+  paths: ProbePaths,
+  name: string,
+  value: string | undefined,
+): Promise<boolean> {
+  return editLocal(paths, (doc) => {
+    const section = doc.get(LOCAL_VARIABLES_KEY, true);
+    if (section !== undefined && !isMap(section)) return false;
+    if (value !== undefined) {
+      doc.setIn([LOCAL_VARIABLES_KEY, name], value);
+      return true;
+    }
+    if (!section?.has(name)) return null;
+    section.delete(name);
+    if (section.items.length === 0) doc.delete(LOCAL_VARIABLES_KEY);
     return true;
   });
 }

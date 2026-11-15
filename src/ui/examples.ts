@@ -4,6 +4,8 @@ export interface Example {
   note: string;
 }
 
+import { reference } from "../config/headers";
+
 const ROOT = "probe";
 const GAP = "  ";
 const INDENT = "  ";
@@ -24,6 +26,10 @@ export const EXAMPLES: Record<string, Example[]> = {
     { command: "probe add api -p 3000 --path /health", note: "Check another path" },
     { command: "probe add admin -p 8080 --expect 200,204", note: "Accept these statuses only" },
     { command: "probe add db -p 5432 --timeout 10", note: "Give it 10 s to answer" },
+    {
+      command: `probe add api -p 3000 -H 'X-Api-Key: ${reference("API_KEY")}'`,
+      note: "Send a header",
+    },
   ],
   rm: [
     { command: "probe rm api", note: "Remove the service named api" },
@@ -45,6 +51,12 @@ export const EXAMPLES: Record<string, Example[]> = {
   curl: [
     { command: "probe curl api", note: "Print the curl command for api" },
     { command: "probe curl api | sh", note: "Run it" },
+  ],
+  var: [
+    { command: "probe var", note: "List the variables the headers use" },
+    { command: "probe var API_KEY", note: "Type its value, kept in .probe/local.yml" },
+    { command: "probe var API_KEY < key.txt", note: "Read the value from a file or a pipe" },
+    { command: "probe var API_KEY --unset", note: "Forget it" },
   ],
   status: [{ command: "probe status", note: "Version, migration, Makefile block" }],
   sync: [{ command: "probe sync", note: "Write the probe block of the Makefile" }],
