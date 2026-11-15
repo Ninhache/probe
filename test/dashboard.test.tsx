@@ -108,7 +108,7 @@ describe("dashboard", () => {
         "› ✓ api  http://localhost:3000/health  200  4ms",
         "  ✗ db   http://localhost:5432/        connection refused",
         "http://localhost:3000/health",
-        "↑↓ jk move · ↵ service · a add · / filter · ? help · q quit",
+        "↑↓ jk move · ↵ service · a add · / filter · : commands · ? help · q quit",
       ].join("\n"),
     );
   });
@@ -129,7 +129,9 @@ describe("dashboard", () => {
     const { lastFrame } = open({ terminal: { ...plain, unicode: false } });
     await tick();
     expect(lastFrame()).toContain("> ✓ api");
-    expect(lastFrame()).toContain("jk move - enter service - a add - / filter - ? help - q quit");
+    expect(lastFrame()).toContain(
+      "jk move - enter service - a add - / filter - : commands - ? help - q quit",
+    );
   });
 
   it("moves the selection with j, k and the arrows, within the list", async () => {
@@ -629,6 +631,7 @@ describe("dashboard", () => {
       "  d       Remove it",
       "  a       Add a service",
       "  /       Filter by name",
+      "  :       Find a command",
       "  o       Options",
     ];
     const right = [
@@ -921,6 +924,179 @@ describe("dashboard filter", () => {
 
     await hides(lastFrame, "filter: d");
     expect(lastFrame()).toContain("› ✓ api");
+  });
+});
+
+describe("dashboard command palette", () => {
+  it("lists every command with its key", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+
+    stdin.write(":");
+
+    await shows(lastFrame, ": _");
+    expect(lastFrame()).toBe(
+      [
+        "probe · 1/2 up · every 60s",
+        "› ✓ api  http://localhost:3000/health  200  4ms",
+        "  ✗ db   http://localhost:5432/        connection refused",
+        "http://localhost:3000/health",
+        ": _",
+        "› Check now          r",
+        "  Service detail     ↵",
+        "  Open its URL       u",
+        "  Copy curl command  c",
+        "  Edit the service   e",
+        "  Remove it          d",
+        "  Add a service      a",
+        "  Filter by name     /",
+        "  Options            o",
+        "  This help          ?",
+        "  Quit               q",
+        "↑↓ move · ↵ run · esc close",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps the commands that say what is typed, whatever the case", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+
+    stdin.write(":CURL");
+
+    await shows(lastFrame, ": CURL_");
+    expect(lastFrame()).toContain("› Copy curl command  c");
+    expect(lastFrame()).not.toContain("Quit");
+  });
+
+  it("runs the selected command on enter", async () => {
+    const onCopy = vi.fn(async () => "Copied");
+    const { lastFrame, stdin } = open({ onCopy });
+    await tick();
+
+    stdin.write(`j:curl${ENTER}`);
+
+    await shows(lastFrame, "Copied");
+    expect(onCopy).toHaveBeenCalledWith("db", undefined);
+    expect(lastFrame()).not.toContain(": curl");
+  });
+
+  it("moves among the commands with the arrows", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+
+    stdin.write(`:${ESCAPE}[B${ESCAPE}[B${ESCAPE}[A${ENTER}`);
+
+    await shows(lastFrame, "│ api");
+    expect(lastFrame()).toContain("› Skip");
+  });
+
+  it("closes on escape without running anything, the dashboard still open", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write(":quit");
+    await shows(lastFrame, "› Quit");
+
+    stdin.write(ESCAPE);
+
+    await hides(lastFrame, "› Quit");
+    stdin.write("j");
+    await shows(lastFrame, "› ✗ db");
+  });
+
+  it("leaves a kept filter in place on escape", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+    stdin.write(`/d${ENTER}:`);
+    await shows(lastFrame, ": _");
+
+    stdin.write(ESCAPE);
+
+    await hides(lastFrame, ": _");
+    expect(lastFrame()).toContain("filter: d");
+  });
+
+  it("takes q, ? and j as letters", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+
+    stdin.write(":q?j");
+
+    await shows(lastFrame, ": q?j_");
+    expect(lastFrame()).toContain('no command matches "q?j"');
+  });
+
+  it("does nothing on enter when no command matches", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+
+    stdin.write(`:zzz${ENTER}`);
+
+    await shows(lastFrame, 'no command matches "zzz"');
+    await tick();
+    expect(lastFrame()).toContain(": zzz_");
+  });
+
+  it("opens with no service, where the commands of a service do nothing", async () => {
+    const onOpen = vi.fn(async () => "Opened");
+    const { lastFrame, stdin } = open({ check: async () => [], onOpen });
+    await tick();
+
+    stdin.write(":its url");
+    await shows(lastFrame, ": its url_");
+    stdin.write(ENTER);
+
+    await hides(lastFrame, ": its url_");
+    await tick();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain("no service");
+  });
+
+  it("takes : as a character in the filter and in the form", async () => {
+    const { lastFrame, stdin } = open({ onServiceWrite: async () => SAVED });
+    await tick();
+
+    stdin.write("/a:");
+    await shows(lastFrame, "Filter: a:_");
+    stdin.write(ESCAPE);
+    await hides(lastFrame, "Filter:");
+    stdin.write("a:");
+
+    await shows(lastFrame, "› Name    :_");
+  });
+
+  it("opens the help and the filter from the palette", async () => {
+    const { lastFrame, stdin } = open({});
+    await tick();
+
+    stdin.write(`:help${ENTER}`);
+    await shows(lastFrame, "probe · keys");
+    stdin.write(`?:filter${ENTER}d`);
+
+    await shows(lastFrame, "Filter: d_");
+  });
+
+  it("scrolls the commands on a short terminal, the selected one in sight", async () => {
+    const services = Array.from({ length: 14 }, (_, index) => ({ ...api, name: `s${index}` }));
+    const { lastFrame, stdin } = open({ check: async () => services });
+    await tick();
+
+    stdin.write(`:${`${ESCAPE}[B`.repeat(10)}`);
+
+    await shows(lastFrame, "› Quit");
+    expect((lastFrame() ?? "").split("\n").length).toBeLessThan(24);
+    expect(lastFrame()).not.toContain("Check now");
+  });
+
+  it("writes the commands and their keys in ASCII without unicode", async () => {
+    const { lastFrame, stdin } = open({ terminal: { ...plain, unicode: false } });
+    await tick();
+
+    stdin.write(":");
+
+    await shows(lastFrame, "> Check now          r");
+    expect(lastFrame()).toContain("  Service detail     enter");
+    expect(lastFrame()).toContain("arrows move - enter run - esc close");
   });
 });
 

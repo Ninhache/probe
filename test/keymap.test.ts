@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { HELP_GAP, helpBar, helpColumns, helpLines } from "../src/dashboard/keymap";
+import {
+  HELP_GAP,
+  helpBar,
+  helpColumns,
+  helpLines,
+  keyCommand,
+  paletteEntries,
+} from "../src/dashboard/keymap";
 
 describe("helpBar", () => {
   it("should show the keys one needs first in the list", () => {
     expect(helpBar("list", true, 80)).toBe(
-      "↑↓ jk move · ↵ service · a add · / filter · ? help · q quit",
+      "↑↓ jk move · ↵ service · a add · / filter · : commands · ? help · q quit",
     );
   });
 
@@ -16,6 +23,7 @@ describe("helpBar", () => {
 
   it.each([
     ["filter", "↑↓ move · ↵ keep · esc clear"],
+    ["palette", "↑↓ move · ↵ run · esc close"],
     ["form", "↑↓ tab field · ↵ save · esc cancel"],
     ["confirm", "y remove · n esc keep"],
   ] as const)("should show the keys of the %s", (screen, bar) => {
@@ -23,18 +31,29 @@ describe("helpBar", () => {
   });
 
   it("should not offer to quit or to open the help where letters are typed", () => {
-    for (const screen of ["filter", "form"] as const) {
+    for (const screen of ["filter", "palette", "form"] as const) {
       expect(helpBar(screen, true, 80)).not.toMatch(/quit|help/);
     }
   });
 
   it.each([60, 50, 40, 30])("should stay on one line of %i columns", (columns) => {
-    for (const screen of ["list", "panel", "filter", "form", "confirm", "help"] as const) {
+    for (const screen of [
+      "list",
+      "panel",
+      "filter",
+      "palette",
+      "form",
+      "confirm",
+      "help",
+    ] as const) {
       expect(helpBar(screen, true, columns).length).toBeLessThanOrEqual(columns);
     }
   });
 
-  it("should give up moving first when the line is too wide", () => {
+  it("should give up the palette, then moving, when the line is too wide", () => {
+    expect(helpBar("list", true, 60)).toBe(
+      "↑↓ jk move · ↵ service · a add · / filter · ? help · q quit",
+    );
     expect(helpBar("list", true, 50)).toBe("↵ service · a add · / filter · ? help · q quit");
     expect(helpBar("list", true, 40)).toBe("↵ service · / filter · ? help · q quit");
   });
@@ -84,6 +103,46 @@ describe("helpLines", () => {
     const bar = helpBar("list", true, 200).split(" · ");
 
     expect(bar.some((item) => item.startsWith(`${key} `))).toBe(false);
+  });
+});
+
+describe("paletteEntries", () => {
+  it("should offer every key of the list the help names, but moving and itself", () => {
+    const offered = paletteEntries(true).map(({ keys, label }) => `  ${keys.padEnd(7)} ${label}`);
+    const [list = []] = helpColumns(true, 80);
+    const named = list
+      .filter(({ heading, text }) => !heading && !/Move|Find a command/.test(text))
+      .map(({ text }) => text);
+
+    expect(offered.slice(0, named.length)).toEqual(named);
+    expect(offered.slice(named.length)).toEqual(["  ?       This help", "  q       Quit"]);
+  });
+
+  it("should give each command once", () => {
+    const commands = paletteEntries(true).map(({ command }) => command);
+
+    expect(new Set(commands).size).toBe(commands.length);
+  });
+
+  it("should keep the commands that say the query, by what they do or by their word in the bar", () => {
+    expect(paletteEntries(true, "ITS URL").map(({ command }) => command)).toEqual(["open"]);
+    expect(paletteEntries(true, " copy ").map(({ command }) => command)).toEqual(["copy"]);
+    expect(paletteEntries(true, "zzz")).toEqual([]);
+  });
+
+  it("should write the keys in ASCII without unicode", () => {
+    expect(paletteEntries(false, "detail")).toEqual([
+      { command: "detail", label: "Service detail", keys: "enter" },
+    ]);
+  });
+
+  it("should run from its key what it runs from the palette", () => {
+    for (const { command, keys } of paletteEntries(true)) {
+      expect(keyCommand(keys === "↵" ? "" : keys, keys === "↵")).toBe(command);
+    }
+    expect(keyCommand("j", false)).toBeUndefined();
+    expect(keyCommand(":", false)).toBeUndefined();
+    expect(keyCommand("", false)).toBeUndefined();
   });
 });
 
