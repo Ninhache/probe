@@ -32,7 +32,6 @@ function parseExpect(value: string): number | number[] {
 const DEFAULT_PATH = "/";
 const ADDRESS_FLAGS = ["port", "host", "path"] as const;
 
-/** Where the service is, as the flags say it: `--url` alone, or `--port` with `--host` and `--path`. */
 function addressFrom(args: {
   url?: string;
   port?: string;
@@ -73,7 +72,6 @@ function headerLines(rawArgs: string[]): string[] {
     if (arg === "--") break;
     if (HEADER_FLAGS.includes(arg)) lines.push(rawArgs[index + 1] ?? "");
     else if (arg.startsWith(`${LONG_HEADER}=`)) lines.push(arg.slice(LONG_HEADER.length + 1));
-    // `-HAccept: x`, as curl takes it.
     else if (arg.startsWith(SHORT_HEADER) && !arg.startsWith("--")) {
       lines.push(arg.slice(SHORT_HEADER.length).replace(/^=/, ""));
     }
@@ -81,10 +79,7 @@ function headerLines(rawArgs: string[]): string[] {
   return lines;
 }
 
-/**
- * Reads the `--header` lines as the headers of a service. What is refused is said without the
- * value: a secret typed there must not come back on the screen.
- */
+// What is refused is said without the value: a secret typed there must not come back on screen.
 function headersFrom(lines: string[]): Record<string, string> | undefined {
   const headers: Record<string, string> = {};
   const seen = new Set<string>();
@@ -111,11 +106,6 @@ function headersFrom(lines: string[]): Record<string, string> | undefined {
   return lines.length > 0 ? headers : undefined;
 }
 
-/**
- * `probe add` alone on a terminal: proposes the services found in the project, and when none is
- * found or ticked, asks for the name, port, path and expected status, then adds the service.
- * Each answer is asked again until the config schema accepts it. Cancelling writes nothing.
- */
 export async function guidedAdd(): Promise<void> {
   const loaded = await openProject();
   const services = rawServices(loaded);

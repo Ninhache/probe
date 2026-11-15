@@ -12,20 +12,12 @@ import type { DashboardSettings } from "./settings";
 
 export interface DashboardState {
   settings: DashboardSettings;
-  /** Services set aside when the dashboard opens. */
   skipped: ReadonlySet<string>;
   /** Reads the variables the headers refer to, before each pass: one set meanwhile is then seen. */
   variables?: () => Promise<Variables>;
-  /** Called each time the service panel sets the timeout of a service, in seconds; `undefined`: back to the default. */
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
-  /** Receives the settings each time the options panel changes one. */
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
-  /** Called each time the service panel sets a service aside or brings it back. */
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
-  /**
-   * Adds, edits or removes a service in `config.yml`. Resolves to the config as it is now,
-   * or to why nothing was saved; `warning` is something to say next to what was done.
-   */
   onServiceWrite?: (
     write: ServiceWrite,
   ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
@@ -38,7 +30,6 @@ const pickFields = ({ host, port, path, expect }: Service): ServiceFields => ({
   expect,
 });
 
-/** Shows the dashboard on the alternate screen; resolves once it is closed (`q` or Ctrl+C). */
 export async function openDashboard(
   initial: Config,
   terminal: Terminal,

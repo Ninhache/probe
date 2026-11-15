@@ -1,9 +1,6 @@
 import { type CommandSpec, ROOT_OPTIONS, SERVICES_QUERY } from "./spec";
 
-/**
- * Renders the bash completion script. It must run on bash 3.2 (stock macOS): no `mapfile`,
- * no associative array, and it is loaded with `eval`, as `source <(...)` does nothing there.
- */
+// Must run on bash 3.2 (stock macOS): no `mapfile`, no associative array, loaded with `eval`.
 export function bashScript(commands: CommandSpec[]): string {
   const cases = (pick: (command: CommandSpec) => string[]) =>
     commands

@@ -2,7 +2,6 @@ import type { CheckResult } from "../checkers/types";
 import { DASHBOARD_HISTORY_LENGTH } from "../constants";
 import { truncate } from "../ui/terminal";
 
-/** The last latencies of each service, oldest first. */
 export type LatencyHistory = Readonly<Record<string, readonly number[]>>;
 
 export interface DetailLine {
@@ -24,10 +23,6 @@ const TRANSPORT_HEADERS = new Set([
   "transfer-encoding",
 ]);
 
-/**
- * Adds the latencies of one pass. Only an answer counts: a skipped service or a refused
- * connection has no latency to compare. A service absent from the pass loses its history.
- */
 export function recordLatencies(history: LatencyHistory, results: CheckResult[]): LatencyHistory {
   return Object.fromEntries(
     results.map(({ name, status, skipped, latencyMs }) => {
@@ -38,7 +33,6 @@ export function recordLatencies(history: LatencyHistory, results: CheckResult[])
   );
 }
 
-/** The latencies as one line: a bar per check and the range; the range alone without unicode. */
 export function sparkline(values: readonly number[], unicode: boolean, width: number): string {
   if (values.length === 0) return "";
   const low = Math.min(...values);
@@ -55,7 +49,6 @@ export function sparkline(values: readonly number[], unicode: boolean, width: nu
   return `${bars} ${range}`;
 }
 
-/** Cuts a text into lines of `width` at most, between words when it can. */
 function wrap(text: string, width: number, maxLines: number): string[] {
   const lines: string[] = [];
   let line = "";
@@ -71,11 +64,6 @@ function wrap(text: string, width: number, maxLines: number): string[] {
   return kept;
 }
 
-/**
- * The detail of a service: status, diagnosis, latencies, then the headers and the start of the
- * body of the last response, in `room` lines. Status, diagnosis and latencies always show;
- * headers and body share the lines left, and what does not fit is counted.
- */
 export function detailLines(
   result: CheckResult,
   history: readonly number[],

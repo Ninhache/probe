@@ -20,7 +20,6 @@ import { tempProject } from "./helpers";
 const SECRET = "s3cret-value";
 const lookup = (values: Record<string, string>) => (name: string) => values[name];
 
-/** What the schema says of `headers`, as the user reads it. */
 function issues(headers: unknown): string {
   const result = serviceSchemaV1.safeParse({ port: 3000, headers });
   return result.success ? "" : formatIssues(result.error);

@@ -1,6 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
 
-/** The part of `child_process.spawn` used here, so tests can replace it. */
 export type ClipboardSpawn = (
   command: string,
   args: string[],
@@ -19,10 +18,6 @@ type Tool = readonly [command: string, ...args: string[]];
 const WL_COPY: Tool = ["wl-copy"];
 const XCLIP: Tool = ["xclip", "-selection", "clipboard"];
 
-/**
- * The tools that write to the clipboard, the most likely to work first: `pbcopy` on macOS;
- * elsewhere `wl-copy` and `xclip`, `wl-copy` first under Wayland.
- */
 export function clipboardTools(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Tool[] {
   if (platform === "darwin") return [["pbcopy"]];
   return env.WAYLAND_DISPLAY ? [WL_COPY, XCLIP] : [XCLIP, WL_COPY];
@@ -40,10 +35,6 @@ function copiedWith([command, ...args]: Tool, text: string, spawn: ClipboardSpaw
   });
 }
 
-/**
- * Copies a text to the clipboard with the first tool that works.
- * Resolves to `false` when none does (not installed, no display), never rejects.
- */
 export async function copyText(
   text: string,
   platform: NodeJS.Platform = process.platform,

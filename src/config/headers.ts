@@ -1,7 +1,5 @@
-/** Headers a service sends, as the config writes them: a value may hold `${NAME}` references. */
 export type HeaderTemplates = Readonly<Record<string, string>>;
 
-/** Gives the value of a variable; undefined when nothing sets it. */
 export type VariableLookup = (name: string) => string | undefined;
 
 // RFC 9110 `token`: what a header name is made of.
@@ -21,35 +19,27 @@ const SENSITIVE_NAME = /auth|cookie|token|secret|key|session|password|credential
 const MASKED_MIN_LENGTH = 4;
 export const MASK = "***";
 
-/** How a value refers to a variable: `${NAME}`. */
 export const reference = (name: string) => `\${${name}}`;
 
-/** Whether a header of that name carries a secret: its value cannot be written in `config.yml`. */
 export function isSensitiveHeader(name: string): boolean {
   return SENSITIVE_NAME.test(name);
 }
 
-/** The variables a value refers to, in order, each once. */
 export function referencedVariables(value: string): string[] {
   return [...new Set(Array.from(value.matchAll(REFERENCE), (match) => match[1] as string))];
 }
 
-/** The variables the headers of a service refer to. */
 export function serviceVariables(headers: HeaderTemplates | undefined): string[] {
   return [...new Set(Object.values(headers ?? {}).flatMap(referencedVariables))];
 }
 
-/** Why a header name is refused, in words that follow "expected"; undefined when accepted. */
 export function headerNameProblem(name: string): string | undefined {
   if (!HEADER_NAME.test(name)) return "a header name, e.g. Authorization or X-Api-Key";
   if (UNSENDABLE.has(name.toLowerCase())) return "a header a request without a body can carry";
   return undefined;
 }
 
-/**
- * Why the value written for a header is refused, in words that follow "expected"; undefined when
- * accepted. The value is never repeated: it may be the secret that must not be shown.
- */
+// The value is never repeated: it may be the secret.
 export function headerValueProblem(name: string, value: string): string | undefined {
   if (!HEADER_VALUE.test(value)) return "a value on one line, without unusual characters";
   if (value.includes("${") && !referencedVariables(value).every((v) => VARIABLE_NAME.test(v))) {
@@ -62,14 +52,12 @@ export function headerValueProblem(name: string, value: string): string | undefi
   return undefined;
 }
 
-/** Why a variable cannot hold that value, in words that follow "expects"; undefined when it can. */
 export function variableValueProblem(value: string): string | undefined {
   if (value === "") return "a value: an empty one sets nothing";
   if (!HEADER_VALUE.test(value)) return "a value on one line, without unusual characters";
   return undefined;
 }
 
-/** Reads `Name: value` as typed after `--header`; undefined when there is no name before a colon. */
 export function parseHeaderLine(line: string): [name: string, value: string] | undefined {
   const colon = line.indexOf(":");
   if (colon < 1) return undefined;
@@ -78,15 +66,9 @@ export function parseHeaderLine(line: string): [name: string, value: string] | u
 
 export type ResolvedHeaders =
   | { headers: [name: string, value: string][]; secrets: string[] }
-  /** Variables nothing sets. */
   | { unset: string[] }
-  /** Variables whose value a header cannot carry. */
   | { unsendable: string[] };
 
-/**
- * Puts the value of each variable in the headers. `secrets` are those values, to hide wherever the
- * service repeats them.
- */
 export function resolveHeaders(
   templates: HeaderTemplates,
   lookup: VariableLookup,
@@ -115,7 +97,6 @@ export function masked(text: string, secrets: readonly string[]): string {
     .reduce((hidden, secret) => hidden.replaceAll(secret, MASK), text);
 }
 
-/** A value split into what is written as is and the variables referred to, in order. */
 export function templateParts(value: string): { text?: string; variable?: string }[] {
   const parts: { text?: string; variable?: string }[] = [];
   let end = 0;

@@ -1,15 +1,10 @@
 import { type CommandSpec, ROOT_OPTIONS, SERVICES_QUERY } from "./spec";
 
-/** Quotes a `name:description` pair for a zsh array read by `_describe`. */
 function described({ name, description }: CommandSpec): string {
   const text = `${name}:${description.replaceAll(":", "\\:")}`;
   return `'${text.replaceAll("'", "'\\''")}'`;
 }
 
-/**
- * Renders the zsh completion script. It works both ways: loaded with `eval` after `compinit`,
- * or saved as `_probe` in a directory of `$fpath`.
- */
 export function zshScript(commands: CommandSpec[]): string {
   const cases = (pick: (command: CommandSpec) => string[]) =>
     commands

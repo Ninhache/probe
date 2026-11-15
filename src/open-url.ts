@@ -1,6 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
 
-/** The part of `child_process.spawn` used here, so tests can replace it. */
 export type Spawn = (
   command: string,
   args: string[],
@@ -11,16 +10,11 @@ export type Spawn = (
   unref(): void;
 };
 
-/** The command that opens a URL in the default browser: `open` on macOS, `xdg-open` elsewhere. */
 export function openerCommand(platform: NodeJS.Platform): string {
   return platform === "darwin" ? "open" : "xdg-open";
 }
 
-/**
- * Starts the opener of the platform on a URL, without waiting for it: some openers stay in the
- * foreground for as long as the browser runs.
- * Resolves to `false` when the opener cannot be started (not installed), never rejects.
- */
+// Not waited for: some openers stay in the foreground for as long as the browser runs.
 export function openUrl(
   url: string,
   platform: NodeJS.Platform = process.platform,

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { onTestFinished } from "vitest";
 import { type ProbePaths, pathsFor } from "../src/config/discovery";
 
-/** Temp directory removed when the current test ends. */
 export async function tempDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "probe-test-"));
   onTestFinished(() => rm(dir, { recursive: true, force: true }));

@@ -11,7 +11,6 @@ const result = (name: string, ok: boolean): CheckResult => ({
   latencyMs: 1,
 });
 
-/** A clock that only moves when the loop sleeps or when a pass takes time. */
 function fakeTime(passMs = 0) {
   let time = 0;
   const sleeps: number[] = [];

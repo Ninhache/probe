@@ -7,7 +7,6 @@ import type { DashboardProps } from "./Dashboard";
 
 const NOTIFICATION_TITLE = "probe";
 
-/** What the actions reach outside the process, so tests can replace it. */
 export interface ActionDeps {
   platform: NodeJS.Platform;
   env: NodeJS.ProcessEnv;
@@ -24,11 +23,6 @@ const system = (): ActionDeps => ({
   notify: sendNotification,
 });
 
-/**
- * What `u` and `c` do for a service of the config as it is when the key is pressed, each resolving to the lines that say what happened,
- * and how a change of state is notified.
- * When the tool is missing, the URL or the command is alone on its line, to be selected by hand.
- */
 export function serviceActions(
   config: () => Config,
   deps: ActionDeps = system(),

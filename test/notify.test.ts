@@ -5,7 +5,6 @@ import { type NotifySpawn, notifierCommand, notifierName, sendNotification } fro
 
 type Outcome = "shown" | "missing" | "failed" | "silent";
 
-/** A spawn that records its calls and ends the way the test decides: no test reaches the desktop. */
 function fakeSpawn(outcome: Outcome) {
   const calls: { command: string; args: string[]; stdio: string; killed: boolean }[] = [];
   const spawn: NotifySpawn = (command, args, options) => {

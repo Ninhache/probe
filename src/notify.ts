@@ -1,7 +1,6 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { NOTIFY_WAIT_MS } from "./constants";
 
-/** The part of `child_process.spawn` used here, so tests can replace it. */
 export type NotifySpawn = (
   command: string,
   args: string[],
@@ -13,7 +12,6 @@ export type NotifySpawn = (
   kill(): unknown;
 };
 
-/** The tool that shows a desktop notification: `osascript` on macOS, `notify-send` elsewhere. */
 export function notifierName(platform: NodeJS.Platform): string {
   return platform === "darwin" ? "osascript" : "notify-send";
 }
@@ -34,10 +32,6 @@ export function notifierCommand(platform: NodeJS.Platform, title: string, text: 
   ];
 }
 
-/**
- * Shows a desktop notification. Resolves to `false` when it could not (tool not installed, no
- * desktop to show it, no answer in time), never rejects.
- */
 export function sendNotification(
   title: string,
   text: string,

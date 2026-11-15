@@ -2,7 +2,6 @@ import { ProbeError } from "../errors";
 import { httpChecker } from "./http";
 import type { Checker } from "./types";
 
-// A new service type = one checker file + one entry here.
 const checkers = new Map<string, Checker>([httpChecker].map((checker) => [checker.type, checker]));
 
 export function getChecker(type: string): Checker {

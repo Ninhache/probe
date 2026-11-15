@@ -5,11 +5,6 @@ import { detectServices, systemDeps } from "../detect";
 import { choose } from "../ui/prompt";
 import { rawServices, saveServices } from "./shared";
 
-/**
- * Proposes the services found in the project as a checklist, and adds the ticked ones.
- * Call it on an interactive terminal only. Nothing is written unless a line is ticked.
- * @returns the names added (none when nothing was found or ticked), or null when cancelled
- */
 export async function offerDetected(loaded: LoadedConfig): Promise<string[] | null> {
   const services = rawServices(loaded);
   const candidates = await detectServices(loaded.paths.root, services, systemDeps(process.env));

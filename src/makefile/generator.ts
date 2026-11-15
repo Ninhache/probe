@@ -11,10 +11,7 @@ const END_PATTERN = /^# <<< probe[ \t]*$/m;
 
 const HELP_RECIPE = `@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-20s %s\\n", $$1, $$2}' $(MAKEFILE_LIST)`;
 
-/**
- * Renders the block, markers included, without trailing newline.
- * Must stay valid for GNU Make 3.81 and a POSIX shell (stock macOS).
- */
+// Must stay valid for GNU Make 3.81 and a POSIX shell (stock macOS).
 export function renderBlock(serviceNames: string[]): string {
   const targets = serviceNames.map((name) => `check-${name}`);
   const fallback = `npx -y ${PACKAGE_NAME}@latest`;
@@ -60,7 +57,6 @@ export function extractBlock(makefile: string): string | null {
   return found ? makefile.slice(found.start, found.end) : null;
 }
 
-/** Returns the Makefile with its probe block replaced, or appended when it has none. */
 export function replaceBlock(makefile: string | null, block: string): string {
   if (!makefile?.trim()) return `${block}\n`;
   const found = locate(makefile);

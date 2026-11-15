@@ -17,7 +17,6 @@ schemaVersion: ${CURRENT_SCHEMA_VERSION}
 services: {}
 `;
 
-/** Adds the per-machine files of `.probe/` to the `.gitignore` of `root`, when they are not there. */
 export async function ignoreLocalFiles(root: string): Promise<void> {
   const file = join(root, ".gitignore");
   const current = existsSync(file) ? await readFile(file, "utf8") : "";
@@ -28,10 +27,6 @@ export async function ignoreLocalFiles(root: string): Promise<void> {
   await writeFile(file, `${current}${separator}${missing.join("\n")}\n`);
 }
 
-/**
- * Creates `.probe/` with an empty config in `root`, and ignores its per-machine files in git.
- * @throws ProbeError `ALREADY_INITIALIZED` when `root` already has a `.probe/`
- */
 export async function initProject(root: string): Promise<void> {
   const paths = pathsFor(root);
   if (existsSync(paths.dir)) {

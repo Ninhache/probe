@@ -1,21 +1,13 @@
 import { RESPONSE_BODY_BYTES, RESPONSE_BODY_WAIT_MS } from "../constants";
 
-/**
- * What a service answered, safe to draw on a terminal: sensitive header values are replaced,
- * control characters are removed, the body is cut short.
- */
 export interface ResponseDetail {
   statusText: string;
   headers: [name: string, value: string][];
-  /** The start of a text body. */
   body?: string;
-  /** The body goes on after `body`. */
   bodyCut?: true;
-  /** Said in place of a body that is not text. */
   bodyNote?: string;
 }
 
-/** Shown in place of a header value that can carry a secret. */
 export const HIDDEN_VALUE = "(hidden)";
 
 // By name, so a header nobody listed (`x-api-key`, `x-session-id`) is covered too.
@@ -40,10 +32,7 @@ function printable(text: string, kept = ""): string {
     .join("");
 }
 
-/**
- * Reads the first bytes of a body, then lets go of it. It waits a short time only: a body that
- * never ends, or comes drop by drop, must not hold the checks.
- */
+// Waits a short time only: a body that never ends, or comes drop by drop, must not hold the checks.
 async function readStart(
   body: ReadableStream<Uint8Array>,
 ): Promise<{ bytes: Uint8Array; cut: boolean }> {
@@ -81,10 +70,6 @@ async function readStart(
   };
 }
 
-/**
- * Describes a response for the detail of a service. Never throws: a body that cannot be read
- * leaves the status and the headers.
- */
 export async function describeResponse(response: Response): Promise<ResponseDetail> {
   const headers = [...response.headers].map(([name, value]): [string, string] => [
     printable(name),

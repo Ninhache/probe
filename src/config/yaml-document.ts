@@ -51,10 +51,7 @@ function reconcileMap(doc: Document, map: YAMLMap, value: PlainObject): void {
   }
 }
 
-/**
- * Makes `doc` represent `value` while touching only the nodes that differ,
- * so comments and formatting of everything else survive.
- */
+// Touches only the nodes that differ: comments and formatting of the rest survive.
 export function reconcileDocument(doc: Document, value: unknown): void {
   if (isMap(doc.contents) && isPlainObject(value)) {
     reconcileMap(doc, doc.contents, value);

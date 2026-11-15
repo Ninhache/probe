@@ -13,11 +13,9 @@ import type { DashboardSettings } from "../dashboard/settings";
 import type { ProbePaths } from "./discovery";
 import type { VariableLookup } from "./headers";
 
-/** Dashboard settings kept in `local.yml` under `dashboard`, in seconds. */
 export interface DashboardPreferences {
   interval?: number;
   timeout?: number;
-  /** Desktop notifications; off unless `true`. */
   notify?: boolean;
 }
 
@@ -39,10 +37,6 @@ async function readLocal(paths: ProbePaths): Promise<string | null> {
   }
 }
 
-/**
- * Reads the dashboard settings saved in `local.yml`.
- * A missing or unreadable file gives no setting; a key that is not a usable delay is left out.
- */
 export async function readDashboardPreferences(paths: ProbePaths): Promise<DashboardPreferences> {
   const text = await readLocal(paths);
   if (text === null) return {};
@@ -57,10 +51,6 @@ export async function readDashboardPreferences(paths: ProbePaths): Promise<Dashb
   return preferences;
 }
 
-/**
- * Settings the dashboard starts with: `--interval` (`askedIntervalMs`) first, then what
- * `local.yml` holds, then the defaults.
- */
 export function initialDashboardSettings(
   askedIntervalMs: number | undefined,
   saved: DashboardPreferences,
@@ -72,10 +62,7 @@ export function initialDashboardSettings(
   };
 }
 
-/**
- * What to save after a change in the options panel: only the settings that differ from `previous`,
- * so an interval given by `--interval` and left alone is never written.
- */
+// Only what differs from `previous`: an interval given by `--interval` and left alone is never written.
 export function changedPreferences(
   previous: DashboardSettings,
   next: DashboardSettings,
@@ -90,13 +77,7 @@ export function changedPreferences(
 /** Edits the parsed `local.yml`: true to write it, null when nothing changed, false when unsafe. */
 type LocalEdit = (doc: Document) => boolean | null;
 
-/**
- * Applies `edit` to `local.yml`, leaving every other key and comment as is.
- * The file keeps its permissions (a new one, or one with variables, is owner-only) and, when it is a symlink, its target
- * is the file replaced. Returns false, writing nothing, when the file exists but cannot be edited
- * safely (invalid YAML, a top level that is not a map, or `edit` returning false).
- * Throws when the file cannot be written; no copy of it is left behind.
- */
+// Keeps the permissions of the file and the target of a symlink. False: it cannot be edited safely, nothing is written.
 async function editLocal(paths: ProbePaths, edit: LocalEdit): Promise<boolean> {
   const doc = parseDocument((await readLocal(paths)) ?? "");
   if (doc.errors.length > 0) return false;
@@ -126,11 +107,7 @@ async function editLocal(paths: ProbePaths, edit: LocalEdit): Promise<boolean> {
   return true;
 }
 
-/**
- * Saves the given dashboard settings in `local.yml` (see `editLocal` for what is kept and when
- * nothing is written). Notifications turned off leave no key: off is the default. Returns false
- * when the file or its `dashboard` key cannot be edited safely.
- */
+// Notifications turned off leave no key: off is the default.
 export function writeDashboardPreferences(
   paths: ProbePaths,
   preferences: DashboardPreferences,
@@ -150,10 +127,6 @@ export function writeDashboardPreferences(
   });
 }
 
-/**
- * Names of the services set aside on this machine: `services.<name>.skip: true` in `local.yml`.
- * A missing or unreadable file skips nothing.
- */
 export async function readSkippedServices(paths: ProbePaths): Promise<Set<string>> {
   const text = await readLocal(paths);
   if (text === null) return new Set();
@@ -167,11 +140,6 @@ export async function readSkippedServices(paths: ProbePaths): Promise<Set<string
   return new Set(names);
 }
 
-/**
- * Sets a service aside (`skip` true) or brings it back, in `local.yml`; the entry left empty by
- * bringing a service back is removed. Returns false when `services` or the service's entry is
- * not a map, so cannot be edited safely.
- */
 export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean): Promise<boolean> {
   return editLocal(paths, (doc) => {
     const services = doc.get(SERVICES, true);
@@ -191,20 +159,14 @@ export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean)
   });
 }
 
-/** Where the values of the variables come from, for the checks of one pass. */
 export interface Variables {
   lookup: VariableLookup;
   /** `local.yml` is there but cannot be read: a variable it may hold is not simply "not set". */
   localUnreadable?: true;
 }
 
-/** Where a variable gets its value: the environment first, as with a `.env` file. */
 export type VariableSource = "environment" | "local";
 
-/**
- * Reads the variables kept in `local.yml` under `variables`, as text. A missing file holds none;
- * `unreadable` is true when the file is there but is not a YAML map.
- */
 export async function readLocalVariables(
   paths: ProbePaths,
 ): Promise<{ values: Record<string, string>; unreadable: boolean }> {
@@ -222,7 +184,6 @@ export async function readLocalVariables(
   return { values, unreadable: false };
 }
 
-/** Says where a variable is set, the environment first; undefined when nothing sets it. */
 export function variableSource(
   name: string,
   local: Readonly<Record<string, string>>,
@@ -232,10 +193,6 @@ export function variableSource(
   return local[name] ? "local" : undefined;
 }
 
-/**
- * The variables as they are now: those of the environment, then those of `local.yml`.
- * An empty value sets nothing.
- */
 export async function loadVariables(
   paths: ProbePaths,
   env: NodeJS.ProcessEnv = process.env,
@@ -247,10 +204,6 @@ export async function loadVariables(
   };
 }
 
-/**
- * Keeps the value of a variable in `local.yml`; `undefined` removes it. Returns false when the
- * file or its `variables` key cannot be edited safely.
- */
 export function writeVariable(
   paths: ProbePaths,
   name: string,

@@ -3,7 +3,6 @@ import { type CommandSpec, ROOT_OPTIONS, SERVICES_QUERY } from "./spec";
 const quoted = (text: string) => `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const longOption = (option: string) => `-l ${option.replace(/^--/, "")}`;
 
-/** Renders the fish completion script: loaded with `source`, or saved in fish's completions directory. */
 export function fishScript(commands: CommandSpec[]): string {
   const inCommand = (names: string[]) => `-n '__fish_seen_subcommand_from ${names.join(" ")}'`;
   const withServices = commands.filter((command) => command.services).map(({ name }) => name);

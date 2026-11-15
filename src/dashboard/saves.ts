@@ -1,19 +1,12 @@
-/** Resolves once a change is saved, with the failure to show: `undefined` when everything is saved. */
 export type Saved = Promise<string | undefined>;
 
 export interface SaveQueue {
-  /**
-   * Runs `write` after the saves already queued. `write` resolving false means the file was left
-   * alone: `refusal` says why. A failure is remembered per `file` until a later save of it succeeds.
-   */
+  // `write` resolving false means the file was left alone: `refusal` says why.
   save(file: string, write: () => Promise<boolean>, refusal: string): Saved;
-  /** One line per file whose last save failed. */
   failures(): string[];
-  /** Resolves once every queued save has run. */
   idle(): Promise<void>;
 }
 
-/** One line for a write that threw: a system error names the file first, its path can be long. */
 function describe(file: string, error: unknown): string {
   const code = (error as NodeJS.ErrnoException | null)?.code;
   if (typeof code === "string") return `${file} cannot be written (${code})`;

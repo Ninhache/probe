@@ -11,7 +11,6 @@ const NOT_HTTP_PORTS = [
 
 export const isHttpPort = (port: number) => !NOT_HTTP_PORTS.includes(port);
 
-/** Where a service of the config listens, to tell that a found one is already declared. */
 export function address(service: RawConfig): string {
   if (typeof service.url === "string" && URL.canParse(service.url)) {
     const { hostname, port, protocol } = new URL(service.url);
@@ -20,7 +19,6 @@ export function address(service: RawConfig): string {
   return `${service.host ?? DEFAULT_HOST}:${service.port}`;
 }
 
-/** Turns any text (a script name, a variable name) into a valid service name. */
 export function serviceName(text: string): string {
   const name = text
     .toLowerCase()
@@ -37,7 +35,6 @@ function unquoted(value: string): string {
   return quoted ? value.slice(1, -1) : value;
 }
 
-/** Reads the `KEY=value` lines of a dotenv file, in order. */
 export function parseEnvFile(text: string): [key: string, value: string][] {
   const entries: [string, string][] = [];
   for (const line of text.split("\n")) {

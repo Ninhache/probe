@@ -10,13 +10,11 @@ import {
 
 export type FieldKey = "name" | "port" | "host" | "path" | "expect";
 
-/** What is typed in each field of the form; empty means the default. */
 export type FormValues = Readonly<Record<FieldKey, string>>;
 
 export interface FormRow {
   key: FieldKey;
   label: string;
-  /** Shown while the field is empty: an example, or what empty means. */
   placeholder: string;
 }
 
@@ -30,17 +28,14 @@ const ROWS: readonly FormRow[] = [
 
 export const EMPTY_FORM: FormValues = { name: "", port: "", host: "", path: "", expect: "" };
 
-/** The fields of the form: a service being edited keeps its name. */
 export function formRows(adding: boolean): readonly FormRow[] {
   return adding ? ROWS : ROWS.filter(({ key }) => key !== "name");
 }
 
-/** The form filled with what a service has now. */
 export function formValues({ host, port, path, expect }: ServiceFields): FormValues {
   return { name: "", port: String(port), host, path, expect: [expect ?? []].flat().join(",") };
 }
 
-/** What the form says the service is; call it once `formProblem` finds nothing. */
 export function formFields(values: FormValues): ServiceFields {
   return {
     port: Number(values.port),
@@ -50,7 +45,6 @@ export function formFields(values: FormValues): ServiceFields {
   };
 }
 
-/** The first field that cannot be saved as typed, and why; `taken`: the names already used. */
 export function formProblem(
   rows: readonly FormRow[],
   values: FormValues,

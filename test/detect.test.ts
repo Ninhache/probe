@@ -10,7 +10,6 @@ import { tempDir } from "./helpers";
 const SECRET = "S3CRET";
 const NO_PORTS: Machine = { answers: async () => false, ports: [] };
 
-/** An example project made of `files`, searched with the real file reader. */
 async function detectIn(
   files: Record<string, string>,
   existing = {},

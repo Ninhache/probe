@@ -32,7 +32,6 @@ const COMMANDS: Record<string, { args?: unknown }> = {
 };
 const HELP_WIDTH = 80;
 
-/** Words of the probe command of an example: what comes before a shell operator. */
 function probeWords(command: string): string[] {
   const words = command.split(" ");
   const operator = words.findIndex((word) => ["&&", "||", "|", ";", "<"].includes(word));

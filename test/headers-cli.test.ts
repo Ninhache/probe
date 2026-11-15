@@ -15,7 +15,6 @@ interface Run {
   stderr: string;
 }
 
-/** Runs the CLI off a terminal, `stdin` piped in (empty when left out). */
 function probe(
   cwd: string,
   args: string[],

@@ -37,7 +37,6 @@ const ENTER = "\r";
 const BACKSPACE = String.fromCharCode(127);
 const TAB = "\t";
 const SAVED = { saved: true };
-/** Checks like the real runner: a skipped service is reported, not checked. */
 const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, skipped) =>
   [api, db].map((result) =>
     skipped.has(result.name)
@@ -55,10 +54,8 @@ const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // A long value is some fifty keys, one per render: over a second on a slow CI runner.
 const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 10_000 });
-/** Waits for the screen to show a text: keys are handled one per render. */
 const shows = (lastFrame: () => string | undefined, text: string) =>
   waitFor(() => expect(lastFrame()).toContain(text));
-/** Waits for a text to leave the screen. */
 const hides = (lastFrame: () => string | undefined, text: string) =>
   waitFor(() => expect(lastFrame()).not.toContain(text));
 
@@ -1111,7 +1108,6 @@ describe("dashboard command palette", () => {
 describe("dashboard service changes", () => {
   type Outcome = Awaited<ReturnType<NonNullable<DashboardProps["onServiceWrite"]>>>;
 
-  /** A project whose services follow what the dashboard writes. */
   function project(outcome: Outcome = SAVED) {
     let services = [api, db];
     const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async (write) => {
@@ -1395,7 +1391,6 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({});
     await tick();
 
-    // Nothing to wait for: the keys must leave the screen as it is.
     stdin.write("aed");
     await tick(150);
 
@@ -1405,7 +1400,6 @@ describe("dashboard service changes", () => {
 });
 
 describe("dashboard desktop notifications", () => {
-  /** A check where `api` is up or down pass after pass, then stays as in the last one. */
   const flapping = (states: boolean[]): DashboardProps["check"] => {
     let pass = 0;
     return async () => {

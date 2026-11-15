@@ -24,76 +24,45 @@ import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } 
 
 export interface DashboardProps {
   terminal: Terminal;
-  /** Settings the dashboard starts with; the options panel changes them while it runs. */
   settings: DashboardSettings;
-  /** Services set aside when the dashboard opens; the service panel changes them while it runs. */
   skipped?: Iterable<string>;
-  /** Timeout of the services that set their own, in seconds; the service panel changes them. */
   timeouts?: ServiceTimeouts;
-  /**
-   * Runs one pass of checks, leaving the `skipped` services unchecked. `timeoutMs` is for the
-   * services absent from `timeouts`. The signal aborts when the dashboard closes or a setting changes.
-   */
   check: (
     signal: AbortSignal,
     timeoutMs: number,
     skipped: ReadonlySet<string>,
     timeouts: ServiceTimeouts,
   ) => Promise<CheckResult[]>;
-  /** Called each time the service panel sets a timeout, in seconds; `undefined`: back to the default. */
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
-  /** Called with the new settings each time the options panel changes one. */
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
-  /** Called each time the service panel sets a service aside or brings it back. */
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
-  /** Opens the URL of a service; resolves to the line that says what happened. */
   onOpen?: (name: string) => Promise<string>;
-  /**
-   * Copies the curl command of a service, with the timeout it has now, in seconds.
-   * Resolves to the line that says what happened: the command itself when it could not be copied.
-   */
   onCopy?: (name: string, timeout: number | undefined) => Promise<string>;
-  /**
-   * Shows a desktop notification, when the options turn them on and a service went down or came
-   * back. Resolves to a warning when it could not be shown.
-   */
   onNotify?: (message: string) => Promise<string | undefined>;
-  /** What a service has now, to fill the form that edits it. */
   serviceFields?: (name: string) => ServiceFields | string | undefined;
-  /**
-   * Adds, edits or removes a service in the config. Resolves to why it was not saved, or to a
-   * warning to show next to what was done. Unset: the keys that change the config do nothing.
-   */
   onServiceWrite?: (write: ServiceWrite) => Promise<ServiceWriteOutcome>;
 }
 
 export interface ServiceWriteOutcome {
-  /** False: the config was left as it was. */
   saved: boolean;
-  /** What is not saved at this point, this write or an earlier change. */
   failure?: string;
-  /** Something to say next to what was done. */
   warning?: string;
 }
 
 export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
 
-/** The panel open under the list: the options, or the detail and the settings of one service. */
 type Panel = { kind: "options"; row: number } | { kind: "service"; name: string; row: number };
 
-/** What takes the keys over the list: the question before a removal, or the form of a service. */
 type Dialog =
   | { kind: "confirm"; name: string }
   | { kind: "form"; editing?: string; row: number; values: FormValues; problem?: string };
 
-/** The palette: what is typed, and the entry Enter runs among those that match. */
 interface Palette {
   query: string;
   row: number;
 }
 
 const SERVICE_ROWS = ["Skip", "Timeout"];
-// The options: the delays of `SETTING_ROWS`, then the notifications.
 const NOTIFY_ROW = SETTING_ROWS.length;
 const TIMEOUT_ROW = SERVICE_ROWS.indexOf("Timeout");
 const NO_TIMEOUTS: ServiceTimeouts = {};
@@ -104,27 +73,18 @@ const DETAIL_WIDTH = 60;
 // What the screen keeps around the detail when a terminal does not tell its height.
 const DEFAULT_ROWS = 24;
 const FORM_WIDTH = 48;
-// Where the next character goes in a text field.
 const CURSOR = "_";
-// Border and padding on both sides of a panel line.
 const PANEL_FRAME_WIDTH = 4;
 
 const seconds = (ms: number) => `${ms / 1000}s`;
 
-/** The last `max` characters of a text, the cut shown at its start. */
 function ending(text: string, max: number): string {
   const characters = Array.from(text);
   if (characters.length <= max) return text;
   return max <= 1 ? "…" : `…${characters.slice(characters.length - max + 1).join("")}`;
 }
 
-/**
- * Live list of the services, checked again `intervalMs` after each pass ends; `o` opens the options,
- * enter the detail and the settings of the selected service, `u` its URL in the browser, `c` copies its curl
- * command, `/` filters by name, `a` `e` `d` add, edit and remove a service, `:` finds a command by
- * what it does, `?` lists every key.
- * Colours come from `terminal`, never from ink props: ink does not honour `NO_COLOR`.
- */
+// Colours come from `terminal`, never from ink props: ink does not honour `NO_COLOR`.
 export function Dashboard({
   terminal,
   settings: initial,
@@ -151,14 +111,12 @@ export function Dashboard({
   const [panel, setPanel] = useState<Panel | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [filter, setFilter] = useState("");
-  // The filter is being typed: letters go to it, not to the keys of the list.
   const [filtering, setFiltering] = useState(false);
   const [palette, setPalette] = useState<Palette | null>(null);
   // Counts the writes to the config: each one starts a new pass, on the services as they are now.
   const [writes, setWrites] = useState(0);
   const [help, setHelp] = useState(false);
   const [unsaved, setUnsaved] = useState<string>();
-  // What the last `u` or `c` did, until the next key.
   const [notice, setNotice] = useState<string>();
   const skipPause = useRef(() => {});
   // A change stays in effect for this run even when saving it failed: the failure is shown instead.
@@ -209,7 +167,6 @@ export function Dashboard({
   }, [check, intervalMs, timeoutMs, skipped, timeouts, writes]);
 
   const wanted = filter.toLowerCase();
-  // The services on screen: what the keys act on is what is drawn.
   const shown = (latest ?? []).filter(({ name }) => name.toLowerCase().includes(wanted));
   const last = Math.max(0, shown.length - 1);
   const current = Math.min(selected, last);
@@ -293,7 +250,6 @@ export function Dashboard({
     track(onTimeoutChange?.(name, value));
   };
 
-  /** Runs a command on the selected service, from its key or from the palette. */
   const run = (command: Command) => {
     const name = shown[current]?.name;
     switch (command) {
@@ -478,7 +434,6 @@ export function Dashboard({
   const focused = results[current];
   const panelWidth = Math.min(panel?.kind === "service" ? DETAIL_WIDTH : PANEL_WIDTH, columns);
   const panelRoom = Math.max(1, panelWidth - PANEL_FRAME_WIDTH);
-  // The panel follows its service, whatever the filter or the selection.
   const detailed =
     panel?.kind === "service" ? latest.find(({ name }) => name === panel.name) : undefined;
   // Around the detail: summary, list, target, border, title, rule, the two settings, the bar.
@@ -530,14 +485,12 @@ export function Dashboard({
   const hint = helpBar(screen, unicode, columns);
   const commands = palette ? paletteEntries(unicode, palette.query) : [];
   const commandWidth = Math.max(0, ...commands.map(({ label }) => label.length));
-  // Around the commands: summary, list, target, hint, what is typed, the bar, and the free line.
   const paletteRoom = Math.max(
     1,
     (windowRows || DEFAULT_ROWS) -
       (1 + Math.max(1, rows.length) + (focused ? 1 : 0) + (focused?.hint ? 1 : 0) + 1 + 1 + 1) -
       (unsaved === undefined ? 0 : 1),
   );
-  // The selected command stays in sight: the lines scroll once it passes the last one.
   const firstCommand = Math.max(0, (palette?.row ?? 0) - paletteRoom + 1);
   const formWidth = Math.min(FORM_WIDTH, columns);
   const formLabels = dialog?.kind === "form" ? formRows(dialog.editing === undefined) : [];
@@ -621,7 +574,6 @@ export function Dashboard({
             const value = dialog.values[key];
             const room = Math.max(1, formWidth - PANEL_FRAME_WIDTH);
             const prefix = `${active ? marker : "  "}${label.padEnd(formLabelWidth)}  `;
-            // The field being typed shows its end, where the next character goes.
             const typed = active
               ? `${prefix}${ending(value, Math.max(1, room - prefix.length - CURSOR.length))}${CURSOR}`
               : truncate(`${prefix}${value}`, room);

@@ -10,20 +10,10 @@ import type { Candidate, Machine, Source } from "./types";
 export type { Candidate, Machine, Source, SourceContext } from "./types";
 
 export interface DetectDeps extends Machine {
-  /** Returns the text of a file by its absolute path, or null when it cannot be read. */
   read: (path: string) => Promise<string | null>;
-  /** The places to look at, in order. */
   sources: readonly Source[];
 }
 
-/**
- * Asks each source, in order, for the services the project already describes.
- * Keeps only what the config schema accepts, an HTTP check can reach and `existing` does not
- * declare yet; a name already taken gets a suffix.
- * @param root directory of the project
- * @param existing services of `config.yml`, as written
- * @returns the candidates, in the order of the sources
- */
 export async function detectServices(
   root: string,
   existing: Record<string, RawConfig>,
@@ -52,7 +42,6 @@ export async function detectServices(
   return kept;
 }
 
-/** The real thing: files on disk, every source, and the ports `PROBE_DETECT_PORTS` or the defaults name. */
 export function systemDeps(env: NodeJS.ProcessEnv): DetectDeps {
   return {
     read: (path) => readFile(path, "utf8").catch(() => null),

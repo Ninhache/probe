@@ -22,7 +22,6 @@ export function stdoutColors(): Colors {
   return createColors(stdoutTerminal().color);
 }
 
-/** Reads a duration option given in seconds; throws a usage error when it is not a usable delay. */
 export function secondsToMs(option: string, value: string): number {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0 || seconds > MAX_TIMEOUT_SECONDS) {
@@ -34,17 +33,13 @@ export function secondsToMs(option: string, value: string): number {
   return Math.ceil(seconds * 1000);
 }
 
-/** Returns the service of that name; throws the error every command gives for an unknown one. */
 export function namedService(config: Config, name: string): Service {
   const service = Object.hasOwn(config.services, name) ? config.services[name] : undefined;
   if (!service) throw new ProbeError("SERVICE_UNKNOWN", `unknown service "${name}". See: probe ls`);
   return service;
 }
 
-/**
- * Throws when a service about to be waited for sends a variable nothing sets: no amount of
- * waiting brings it up. `names` empty means every service that is not skipped.
- */
+// No amount of waiting brings up a service whose variable nothing sets.
 export function requireVariables(
   config: Config,
   names: string[],
@@ -68,10 +63,7 @@ export function rawServices(loaded: LoadedConfig): Record<string, RawConfig> {
   return (loaded.raw.services ?? {}) as Record<string, RawConfig>;
 }
 
-/**
- * Writes the new service list, then regenerates the Makefile block when the project has one.
- * No block (the Makefile is opt-in, through `probe sync`) or a block edited by hand is left as is.
- */
+// No block (the Makefile is opt-in) or a block edited by hand is left as is.
 export async function saveServices(
   loaded: LoadedConfig,
   services: Record<string, RawConfig>,
@@ -80,7 +72,6 @@ export async function saveServices(
   if (warning) console.error(`probe: ${warning}`);
 }
 
-/** `saveServices` for a caller that owns the screen: what there is to say is returned, not printed. */
 export async function writeServices(
   loaded: LoadedConfig,
   services: Record<string, RawConfig>,

@@ -17,7 +17,6 @@ import { openProject } from "./shared";
 
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
-/** The variables the services refer to, each with the services that send it. */
 function usedVariables(config: Config): Map<string, string[]> {
   const used = new Map<string, string[]>();
   for (const [service, { headers }] of Object.entries(config.services)) {
@@ -30,7 +29,6 @@ function usedVariables(config: Config): Map<string, string[]> {
 const unreadable = () =>
   new ProbeError("CONFIG_INVALID", `${LOCAL} is not valid YAML: fix it, then run this again.`);
 
-/** One line per variable: where it is set, never what it holds. */
 function listing(
   used: Map<string, string[]>,
   local: Readonly<Record<string, string>>,
@@ -50,11 +48,7 @@ function listing(
     .join("\n");
 }
 
-/**
- * The value to keep: read from stdin when it is piped, asked without showing it on a terminal.
- * It never comes from the command line, where the shell history and `ps` would keep it.
- * @returns the value, or null when the question is cancelled
- */
+// Never from the command line: the shell history and `ps` would keep it.
 async function readValue(name: string): Promise<string | null> {
   const problem = (value: string) => {
     const reason = variableValueProblem(value);

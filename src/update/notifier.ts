@@ -54,10 +54,7 @@ export function updateNotice(current: string, dir: string): string | null {
   return `probe ${latest} available (you have ${current}) → \`brew upgrade probe\` or \`npm i -g ${PACKAGE_NAME}\``;
 }
 
-/**
- * Starts a detached process that refreshes the cache, at most once per TTL.
- * Never throws and never waits: the notice shows up on a later run.
- */
+// Never throws and never waits: the notice shows up on a later run.
 export function scheduleRefresh(dir: string, cliPath: string, now: number = Date.now()): boolean {
   try {
     const cache = readCache(dir);

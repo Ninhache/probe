@@ -15,7 +15,6 @@ const FIXTURES = resolve(import.meta.dirname, "fixtures");
 const DIST_URL = pathToFileURL(resolve(CLI, "..")).href;
 const RECORDER = pathToFileURL(join(FIXTURES, "record-modules.mjs")).href;
 
-/** Packages that may only load once probe has decided to be interactive. */
 const INTERACTIVE_PACKAGES = [
   "ink",
   "react",
@@ -85,7 +84,6 @@ async function project(): Promise<string> {
   return cwd;
 }
 
-/** Replaces what changes from one run to the next: ports, latencies, the CLI version. */
 function stable(text: string): string {
   return text
     .replaceAll(`:${port}`, ":UP_PORT")
