@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { curlCommand } from "../checkers/http";
+import { curlCommand, curlNote } from "../checkers/http";
 import { namedService, openProject } from "./shared";
 
 export default defineCommand({
@@ -9,6 +9,10 @@ export default defineCommand({
   },
   async run({ args }) {
     const { config } = await openProject();
-    console.log(curlCommand(namedService(config, args.name)));
+    const service = namedService(config, args.name);
+    console.log(curlCommand(service));
+    // On stderr: `probe curl api | sh` must still run the command alone.
+    const note = curlNote(service, process.env);
+    if (note) console.error(`probe: ${note}`);
   },
 });

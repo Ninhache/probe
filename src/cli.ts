@@ -20,6 +20,7 @@ import { type ServiceWritten, writeService } from "./commands/service-writes";
 import { secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
+import variable from "./commands/var";
 import wait from "./commands/wait";
 import { completableServices } from "./completion/services";
 import { COMPLETION_COMMAND } from "./completion/spec";
@@ -28,6 +29,7 @@ import { loadConfig, writeServiceTimeout } from "./config/loader";
 import {
   changedPreferences,
   initialDashboardSettings,
+  loadVariables,
   readDashboardPreferences,
   readSkippedServices,
   writeDashboardPreferences,
@@ -57,7 +59,20 @@ import {
 } from "./update/notifier";
 import { CLI_VERSION } from "./version";
 
-const commands = { init, add, rm, ls, check, wait, open, curl, status, sync, migrate };
+const commands = {
+  init,
+  add,
+  rm,
+  ls,
+  check,
+  wait,
+  open,
+  curl,
+  var: variable,
+  status,
+  sync,
+  migrate,
+};
 
 const main = defineCommand({
   meta: {
@@ -155,6 +170,7 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   await openDashboard(config, stdoutTerminal(), {
     settings,
     skipped: await readSkippedServices(paths),
+    variables: () => loadVariables(paths),
     onSettingsChange: (next) => {
       const changed = changedPreferences(settings, next);
       settings = next;

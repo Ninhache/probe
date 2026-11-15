@@ -52,6 +52,26 @@ describe("serviceActions", () => {
     expect(said).toBe(`Copied: ${seen[0]}`);
   });
 
+  it("should copy a variable as a reference, and say the shell must have it", async () => {
+    const sending = configSchemaV1.parse({
+      schemaVersion: 1,
+      services: { api: { port: 3000, headers: { "X-Api-Key": "$" + "{API_KEY}" } } },
+    });
+    const command = `curl -i --max-time 3 -H "X-Api-Key: $API_KEY" 'http://localhost:3000/'`;
+    const unset = deps(true);
+    const set = deps(true, { env: { API_KEY: "s3cret-value" } });
+
+    const said = await serviceActions(() => sending, unset.deps).onCopy("api", undefined);
+    const saidSet = await serviceActions(() => sending, set.deps).onCopy("api", undefined);
+
+    expect(unset.seen).toEqual([command]);
+    expect(said.split("\n")).toEqual([
+      `Copied: ${command}`,
+      "it reads API_KEY from the shell that runs it: export it there first",
+    ]);
+    expect(saidSet).toBe(`Copied: ${command}`);
+  });
+
   it("should give the command alone on a line when no clipboard tool works", async () => {
     const { seen, deps: system } = deps(false, { env: { WAYLAND_DISPLAY: "wayland-1" } });
 

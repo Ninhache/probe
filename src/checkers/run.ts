@@ -1,3 +1,4 @@
+import type { Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
 import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { ProbeError } from "../errors";
@@ -16,6 +17,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   /** Also describe each response, for the detail of the dashboard. */
   detail?: boolean;
+  /** Values of the variables the headers refer to. */
+  variables?: Variables;
 }
 
 /** Time one service gets: the forced value, else its own `timeout`, else the default; never above the bound. */
@@ -65,6 +68,7 @@ export async function runChecks(
         timeoutMs: resolveTimeoutMs(service, options),
         signal: options.signal,
         detail: options.detail,
+        variables: options.variables,
       });
     }),
   );

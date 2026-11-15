@@ -72,6 +72,20 @@ describe("writeService", () => {
     expect(await readFile(paths.config, "utf8")).toBe(CONFIG.replace("port: 3000", "port: 3001"));
   });
 
+  it("should keep the headers of a service that is edited", async () => {
+    const headers = "headers: { Accept: text/plain, X-Api-Key: '$" + "{API_KEY}' }";
+    const config = CONFIG.replace("front: { port: 5173 }", `front: { port: 5173, ${headers} }`);
+    const paths = await tempProject(config);
+
+    await writeService(paths, {
+      kind: "edit",
+      name: "front",
+      fields: { host: "localhost", port: 5174, path: "/", expect: undefined },
+    });
+
+    expect(await readFile(paths.config, "utf8")).toBe(config.replace("5173", "5174"));
+  });
+
   it("should drop a key that an edit puts back to its default", async () => {
     const paths = await tempProject(CONFIG);
 

@@ -1,4 +1,13 @@
 import { defineCommand } from "citty";
+import {
+  headerNameProblem,
+  headerValueProblem,
+  isSensitiveHeader,
+  parseHeaderLine,
+  reference,
+  serviceVariables,
+} from "../config/headers";
+import { loadVariables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
 import { urlProblem } from "../config/schema";
 import { expectProblem, nameProblem, pathProblem, portProblem } from "../config/service-input";
@@ -50,6 +59,56 @@ function addressFrom(args: {
   if (args.host) service.host = args.host;
   if (args.path) service.path = args.path;
   return service;
+}
+
+const LONG_HEADER = "--header";
+const SHORT_HEADER = "-H";
+const HEADER_FLAGS = [LONG_HEADER, SHORT_HEADER];
+const HEADER_EXAMPLE = "--header 'Accept: application/json'";
+
+/** Every `--header` of the command line: the argument parser keeps the last one only. */
+function headerLines(rawArgs: string[]): string[] {
+  const lines: string[] = [];
+  for (const [index, arg] of rawArgs.entries()) {
+    if (arg === "--") break;
+    if (HEADER_FLAGS.includes(arg)) lines.push(rawArgs[index + 1] ?? "");
+    else if (arg.startsWith(`${LONG_HEADER}=`)) lines.push(arg.slice(LONG_HEADER.length + 1));
+    // `-HAccept: x`, as curl takes it.
+    else if (arg.startsWith(SHORT_HEADER) && !arg.startsWith("--")) {
+      lines.push(arg.slice(SHORT_HEADER.length).replace(/^=/, ""));
+    }
+  }
+  return lines;
+}
+
+/**
+ * Reads the `--header` lines as the headers of a service. What is refused is said without the
+ * value: a secret typed there must not come back on the screen.
+ */
+function headersFrom(lines: string[]): Record<string, string> | undefined {
+  const headers: Record<string, string> = {};
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const parsed = parseHeaderLine(line);
+    if (!parsed) {
+      throw new ProbeError("USAGE", `--header expects "Name: value", e.g. ${HEADER_EXAMPLE}.`);
+    }
+    const [name, value] = parsed;
+    const nameProblem = headerNameProblem(name);
+    if (nameProblem) throw new ProbeError("USAGE", `--header expects ${nameProblem}.`);
+    if (seen.has(name.toLowerCase())) {
+      throw new ProbeError("USAGE", `--header gives ${name} twice.`);
+    }
+    seen.add(name.toLowerCase());
+    const problem = headerValueProblem(name, value);
+    if (problem) {
+      // Between double quotes the shell fills the variable in before probe sees it.
+      const quotes = isSensitiveHeader(name) ? " Keep the single quotes around the header." : "";
+      throw new ProbeError("USAGE", `--header ${name} expects ${problem}.${quotes}`);
+    }
+    headers[name] = value;
+  }
+  return lines.length > 0 ? headers : undefined;
 }
 
 /**
@@ -120,8 +179,14 @@ export default defineCommand({
       type: "string",
       description: `Seconds to wait for this service (default: ${DEFAULT_TIMEOUT_SECONDS})`,
     },
+    header: {
+      type: "string",
+      alias: "H",
+      valueHint: "Name: value",
+      description: `Header to send, repeatable; a secret as a reference: 'X-Api-Key: ${reference("API_KEY")}'`,
+    },
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
     const loaded = await openProject();
     const services = rawServices(loaded);
     if (Object.hasOwn(services, args.name)) {
@@ -136,8 +201,20 @@ export default defineCommand({
       secondsToMs("--timeout", String(args.timeout));
       service.timeout = Number(args.timeout);
     }
+    const headers = headersFrom(headerLines(rawArgs));
+    // Never a service saved without a header that was asked for.
+    if (args.header !== undefined && !headers) {
+      throw new ProbeError("USAGE", `--header expects "Name: value", e.g. ${HEADER_EXAMPLE}.`);
+    }
+    if (headers) service.headers = headers;
 
     await saveServices(loaded, { ...services, [args.name]: service });
-    console.log(`Added ${args.name}. Try: probe check ${args.name}`);
+    const { lookup } = await loadVariables(loaded.paths);
+    const [unset] = serviceVariables(headers).filter((name) => !lookup(name));
+    console.log(
+      unset === undefined
+        ? `Added ${args.name}. Try: probe check ${args.name}`
+        : `Added ${args.name}. It sends ${unset}, not set yet: probe var ${unset}`,
+    );
   },
 });

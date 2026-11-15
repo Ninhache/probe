@@ -82,6 +82,8 @@ export function formatServices(
     notes:
       (service.expect === undefined ? "" : `${GAP}expect ${service.expect}`) +
       (service.timeout === undefined ? "" : `${GAP}timeout ${service.timeout}s`) +
+      // Names only: a value may come from a secret.
+      (service.headers ? `${GAP}sends ${Object.keys(service.headers).join(", ")}` : "") +
       (skipped.has(name) ? `${GAP}${SKIPPED}` : ""),
   }));
   const nameWidth = width(rows.map((row) => row.name));

@@ -1,5 +1,7 @@
 import { requireProbeDir } from "../config/discovery";
+import { serviceVariables } from "../config/headers";
 import { type LoadedConfig, loadConfig, saveConfig } from "../config/loader";
+import type { Variables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
 import type { Config, Service } from "../config/schema";
 import { MAX_TIMEOUT_SECONDS } from "../constants";
@@ -37,6 +39,29 @@ export function namedService(config: Config, name: string): Service {
   const service = Object.hasOwn(config.services, name) ? config.services[name] : undefined;
   if (!service) throw new ProbeError("SERVICE_UNKNOWN", `unknown service "${name}". See: probe ls`);
   return service;
+}
+
+/**
+ * Throws when a service about to be waited for sends a variable nothing sets: no amount of
+ * waiting brings it up. `names` empty means every service that is not skipped.
+ */
+export function requireVariables(
+  config: Config,
+  names: string[],
+  variables: Variables,
+  skipped: ReadonlySet<string>,
+): void {
+  const selected =
+    names.length > 0 ? names : Object.keys(config.services).filter((name) => !skipped.has(name));
+  for (const name of selected) {
+    const service = Object.hasOwn(config.services, name) ? config.services[name] : undefined;
+    const [unset] = serviceVariables(service?.headers).filter((v) => !variables.lookup(v));
+    if (unset === undefined) continue;
+    throw new ProbeError(
+      "VARIABLE_UNSET",
+      `${name} sends ${unset}, which is not set. Set it for this machine: probe var ${unset} (or export it).`,
+    );
+  }
 }
 
 export function rawServices(loaded: LoadedConfig): Record<string, RawConfig> {

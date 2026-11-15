@@ -9,6 +9,10 @@ export const BACKUP_GLOB = "*.bak.yml";
 export const LOCAL_DRAFT_FILE = "local.draft.bak.yml";
 // local.yml is where credentials go: a new one is readable by its owner only.
 export const LOCAL_FILE_MODE = 0o600;
+/** Key of local.yml that holds the values of the variables the config refers to as `${NAME}`. */
+export const LOCAL_VARIABLES_KEY = "variables";
+/** Redirects followed for a service that sends headers, as many as `fetch` follows by itself. */
+export const MAX_REDIRECTS = 20;
 
 export const DEFAULT_MAKEFILE = "Makefile";
 

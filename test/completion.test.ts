@@ -118,6 +118,7 @@ describe("completionSpec", () => {
       "--url",
       "--expect",
       "--timeout",
+      "--header",
       "--help",
     ]);
   });

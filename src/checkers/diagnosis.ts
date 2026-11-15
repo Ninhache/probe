@@ -1,5 +1,6 @@
+import { serviceVariables } from "../config/headers";
 import type { Service } from "../config/schema";
-import { CONFIG_FILE, PROBE_DIR } from "../constants";
+import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
 
 /** Why a check failed, and what to try next when the cause is a known one. */
 export interface Diagnosis {
@@ -8,6 +9,7 @@ export interface Diagnosis {
 }
 
 const CONFIG = `${PROBE_DIR}/${CONFIG_FILE}`;
+const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
 /** The certificate is fine in itself; nothing trusted here signed it. */
 const UNKNOWN_ISSUER_CODES = [
@@ -144,6 +146,66 @@ export function diagnoseStatus(service: Service, status: number): Diagnosis {
   if (status === 404) {
     return { error, hint: `nothing at ${service.path}: ${check(service, "path")}` };
   }
+  if (status === 401 || status === 403) {
+    return {
+      error,
+      hint: service.headers
+        ? `the service refuses what is sent: check ${sentBy(service)}`
+        : `the service asks for credentials: give it \`headers\` in ${CONFIG}`,
+    };
+  }
   const address = service.url === undefined ? "path" : "url";
   return { error, hint: `the service answers: check \`${address}\` and \`expect\` in ${CONFIG}` };
 }
+
+/** What to look at when the headers of a service did not do: its variables, else the headers. */
+function sentBy(service: Service): string {
+  const variables = serviceVariables(service.headers);
+  return variables.length > 0 ? variables.join(", ") : `\`headers\` in ${CONFIG}`;
+}
+
+const setCommand = (name: string) => `probe var ${name}`;
+
+/** Explains headers that refer to variables nothing sets: no request is sent. */
+export function diagnoseUnset(names: string[], localUnreadable: boolean): Diagnosis {
+  const [first = ""] = names;
+  const error = `${names.join(", ")} ${names.length > 1 ? "are" : "is"} not set`;
+  if (localUnreadable) {
+    return { error, hint: `${LOCAL} is not valid YAML: fix it, or export ${first}` };
+  }
+  return { error, hint: `set it for this machine: ${setCommand(first)} (or export it)` };
+}
+
+/** Explains variables whose value cannot go in a header, without showing it. */
+export function diagnoseUnsendable(names: string[]): Diagnosis {
+  const [first = ""] = names;
+  return {
+    error: `${names.join(", ")} cannot go in a header`,
+    hint: `a line break or an unusual character in its value: set it again with ${setCommand(first)}`,
+  };
+}
+
+/** Explains a redirect to another origin, where the headers of the service are not sent. */
+export function diagnoseForeignRedirect(service: Service, origin: string): Diagnosis {
+  const error = `redirected to ${origin}`;
+  const bare = (host: string) => host.replace(/^www\./, "");
+  // The same site under another scheme, port or `www.`: the address moved, nobody asks to log in.
+  if (bare(new URL(origin).hostname) === bare(service.host)) {
+    return {
+      error,
+      hint: `the service moved there, and headers stay on the address they are for: set \`url\` to it in ${CONFIG}`,
+    };
+  }
+  return {
+    error,
+    hint: `headers stay on the host they are for. A login page? Check ${sentBy(service)}`,
+  };
+}
+
+export const TOO_MANY_REDIRECTS: Diagnosis = { error: "too many redirects" };
+
+/** Said when `fetch` refuses the headers themselves: its own message could repeat a value. */
+export const HEADERS_REFUSED: Diagnosis = {
+  error: "headers cannot be sent",
+  hint: `check \`headers\` in ${CONFIG}`,
+};

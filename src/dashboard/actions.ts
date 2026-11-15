@@ -1,4 +1,4 @@
-import { curlCommand, targetUrl } from "../checkers/http";
+import { curlCommand, curlNote, targetUrl } from "../checkers/http";
 import { clipboardTools, copyText } from "../clipboard";
 import type { Config } from "../config/schema";
 import { notifierName, sendNotification } from "../notify";
@@ -47,7 +47,10 @@ export function serviceActions(
       const found = service(name);
       if (!found) return gone(name);
       const command = curlCommand({ ...found, timeout });
-      if (await deps.copyText(command)) return `Copied: ${command}`;
+      if (await deps.copyText(command)) {
+        const note = curlNote(found, deps.env);
+        return note ? `Copied: ${command}\n${note}` : `Copied: ${command}`;
+      }
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy with. The command:\n${command}`;
     },

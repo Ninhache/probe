@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { runChecks } from "../checkers/run";
-import { readSkippedServices } from "../config/local";
+import { loadVariables, readSkippedServices } from "../config/local";
 import { DEFAULT_TIMEOUT_SECONDS, EXIT_DOWN } from "../constants";
 import { formatCheckResults } from "../ui/report";
 import { openProject, secondsToMs, stdoutTerminal } from "./shared";
@@ -20,7 +20,13 @@ export default defineCommand({
     const timeoutMs = secondsToMs("--timeout", args.timeout ?? String(DEFAULT_TIMEOUT_SECONDS));
     const { config, paths } = await openProject();
     const skipped = await readSkippedServices(paths);
-    const results = await runChecks(config, args._, { timeoutMs, forceTimeout }, skipped);
+    const variables = await loadVariables(paths);
+    const results = await runChecks(
+      config,
+      args._,
+      { timeoutMs, forceTimeout, variables },
+      skipped,
+    );
 
     if (args.json) {
       console.log(JSON.stringify(results, null, 2));
