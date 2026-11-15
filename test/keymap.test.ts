@@ -50,7 +50,10 @@ describe("helpBar", () => {
     }
   });
 
-  it("should give up moving first when the line is too wide", () => {
+  it("should give up the palette, then moving, when the line is too wide", () => {
+    expect(helpBar("list", true, 60)).toBe(
+      "↑↓ jk move · ↵ service · a add · / filter · ? help · q quit",
+    );
     expect(helpBar("list", true, 50)).toBe("↵ service · a add · / filter · ? help · q quit");
     expect(helpBar("list", true, 40)).toBe("↵ service · / filter · ? help · q quit");
   });

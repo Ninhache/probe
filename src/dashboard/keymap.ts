@@ -47,7 +47,7 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
  * a new key is one entry here and one branch where keys are handled.
  */
 const BINDINGS: readonly Binding[] = [
-  list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 1 }),
+  list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 2 }),
   list({ keys: "r", action: "check", help: "Check now", barless: true, command: "check" }),
   list({
     keys: "↵",
@@ -63,7 +63,7 @@ const BINDINGS: readonly Binding[] = [
   list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
   list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
   list({ keys: "/", action: "filter", help: "Filter by name", drop: 4, command: "filter" }),
-  list({ keys: ":", action: "commands", help: "Find a command", drop: 2 }),
+  list({ keys: ":", action: "commands", help: "Find a command", drop: 1 }),
   list({ keys: "o", action: "options", help: "Options", barless: true, command: "options" }),
   {
     screens: ["panel"],

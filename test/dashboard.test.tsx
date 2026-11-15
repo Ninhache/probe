@@ -1042,9 +1042,12 @@ describe("dashboard command palette", () => {
     const { lastFrame, stdin } = open({ check: async () => [], onOpen });
     await tick();
 
-    stdin.write(`:url${ENTER}`);
+    stdin.write(":its url");
+    await shows(lastFrame, ": its url_");
+    stdin.write(ENTER);
 
-    await hides(lastFrame, ": url");
+    await hides(lastFrame, ": its url_");
+    await tick();
     expect(onOpen).not.toHaveBeenCalled();
     expect(lastFrame()).toContain("no service");
   });
@@ -1085,7 +1088,7 @@ describe("dashboard command palette", () => {
     expect(lastFrame()).not.toContain("Check now");
   });
 
-  it("cuts the commands to a narrow terminal, in ASCII without unicode", async () => {
+  it("writes the commands and their keys in ASCII without unicode", async () => {
     const { lastFrame, stdin } = open({ terminal: { ...plain, unicode: false } });
     await tick();
 
