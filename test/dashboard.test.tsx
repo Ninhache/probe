@@ -1371,6 +1371,33 @@ describe("dashboard service changes", () => {
     });
   });
 
+  it("adds a service with the method typed, in capitals", async () => {
+    const { onServiceWrite, ...props } = project();
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}post${ENTER}`);
+
+    await shows(lastFrame, "Added web");
+    expect(onServiceWrite).toHaveBeenCalledWith({
+      kind: "add",
+      name: "web",
+      fields: { port: 8080, host: "localhost", path: "/", expect: undefined, method: "POST" },
+    });
+  });
+
+  it("refuses a method it does not know, the form still open", async () => {
+    const { onServiceWrite, ...props } = project();
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}trace${ENTER}`);
+
+    await shows(lastFrame, "One of GET, HEAD, POST, PUT, PATCH");
+    expect(lastFrame()).toContain("› Method  trace_");
+    expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
   it("shows the warning that comes with a write", async () => {
     const warning = "the Makefile block was edited by hand, left as is.";
     const { lastFrame, stdin } = open(project({ saved: true, warning }));

@@ -40,7 +40,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | Command                                                   | What it does                                                           |
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `probe init`                                              | Create `.probe/` and the `.gitignore` entries                          |
-| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>`, `-X <method>` for its own)       |
+| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` and `-X <method>` are its own)    |
 | `probe add <name> --url <url> [--expect]`                 | Add a service by its full URL, `http` or `https`                       |
 | `probe rm <name> [--yes]`                                 | Remove a service                                                       |
 | `probe ls`                                                | List services                                                          |
@@ -208,8 +208,9 @@ service declared by `url`: change it in `config.yml`.
 `method` is one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`: `probe add hook -p 8080 -X POST`.
 The request never has a body.
 
-- Every check sends it again, and the dashboard checks every few seconds: a `POST` or a `DELETE` that changes
-  something changes it at each pass. Point it at a route that is safe to repeat.
+- Every check sends it again: the dashboard every 2 s by default, `probe wait` until the service is up. A
+  `POST` or a `DELETE` that changes something changes it at each pass: point it at a route that is safe to
+  repeat.
 - Only `GET` and `HEAD` follow redirects. Any other method is sent once: a `302` is the answer, add it to
   `expect` if that is what the route gives.
 

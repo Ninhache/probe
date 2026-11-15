@@ -222,10 +222,16 @@ describe("a service with a method", () => {
     expect(run.stderr).toContain("services.hook.method");
   });
 
-  it("leaves `probe ls --json` as it was for a service without one", async () => {
+  it("keeps a method written by hand when another service is added or removed", async () => {
     const root = await project();
-    await probe(root, ["add", "web", "-p", "8080"]);
+    await add(root, "-X", "POST");
+    const written = (await config(root)).replace("method: POST", "method: post");
+    await writeFile(join(root, ".probe", "config.yml"), written);
 
-    expect((await probe(root, ["ls", "--json"])).stdout).not.toContain("method");
+    await probe(root, ["add", "web", "-p", "8080"]);
+    await probe(root, ["rm", "web", "--yes"]);
+
+    expect(await config(root)).toContain("method: post");
+    expect((await probe(root, ["ls"])).stdout).toMatch(/hook\s.*\sPOST/);
   });
 });
