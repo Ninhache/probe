@@ -22,7 +22,7 @@ import status from "./commands/status";
 import sync from "./commands/sync";
 import variable from "./commands/var";
 import wait from "./commands/wait";
-import { completableServices } from "./completion/services";
+import { completableEnvironments, completableServices } from "./completion/services";
 import { COMPLETION_COMMAND } from "./completion/spec";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { loadConfig, writeServiceTimeout } from "./config/loader";
@@ -252,8 +252,12 @@ function flushed(stream: NodeJS.WriteStream): Promise<void> {
 
 /** Answers the completion scripts: one word per line, and never an error, a Tab must stay silent. */
 async function printCompletions(kind: string | undefined): Promise<void> {
-  if (kind !== "services") return;
-  for (const name of await completableServices(process.cwd())) console.log(name);
+  const lists: Record<string, (cwd: string) => Promise<string[]>> = {
+    services: completableServices,
+    environments: completableEnvironments,
+  };
+  const names = kind !== undefined && Object.hasOwn(lists, kind) ? lists[kind] : undefined;
+  for (const name of (await names?.(process.cwd()).catch(() => [])) ?? []) console.log(name);
 }
 
 async function run(rawArgs: string[]): Promise<void> {

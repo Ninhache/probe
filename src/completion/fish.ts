@@ -1,7 +1,14 @@
-import { type CommandSpec, ROOT_OPTIONS, SERVICES_QUERY } from "./spec";
+import {
+  type CommandSpec,
+  ENVIRONMENT_OPTION,
+  ENVIRONMENTS_QUERY,
+  ROOT_OPTIONS,
+  SERVICES_QUERY,
+} from "./spec";
 
 const quoted = (text: string) => `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
-const longOption = (option: string) => `-l ${option.replace(/^--/, "")}`;
+const longOption = (option: string) =>
+  `-l ${option.replace(/^--/, "")}${option === ENVIRONMENT_OPTION ? " -x -a '(__probe_environments)'" : ""}`;
 
 export function fishScript(commands: CommandSpec[]): string {
   const inCommand = (names: string[]) => `-n '__fish_seen_subcommand_from ${names.join(" ")}'`;
@@ -10,6 +17,9 @@ export function fishScript(commands: CommandSpec[]): string {
     "# fish completion for probe. Load it with: probe completion fish | source",
     "function __probe_services",
     `    ${SERVICES_QUERY}`,
+    "end",
+    "function __probe_environments",
+    `    ${ENVIRONMENTS_QUERY}`,
     "end",
     // No file names: probe takes none.
     "complete -c probe -f",

@@ -21,6 +21,9 @@ export const SERVICE_COMMANDS = ["rm", "check", "wait", "open", "curl"];
 export const ROOT_OPTIONS = ["--interval", "--help", "--version"];
 export const SERVICES_QUERY = `probe ${COMPLETE_COMMAND} services 2>/dev/null`;
 
+export const ENVIRONMENT_OPTION = "--env";
+export const ENVIRONMENTS_QUERY = `probe ${COMPLETE_COMMAND} environments 2>/dev/null`;
+
 const HELP_OPTION = "--help";
 
 export function completionSpec(commands: Record<string, CommandLike>): CommandSpec[] {

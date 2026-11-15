@@ -60,6 +60,17 @@ async function project(config = CONFIG): Promise<string> {
   return root;
 }
 
+const ENVIRONMENTS = ["local", "dev", "prod"];
+
+async function projectWithEnvironments(): Promise<string> {
+  const root = await project();
+  await mkdir(join(root, ".probe", "envs"));
+  for (const name of ["prod", "dev"]) {
+    await writeFile(join(root, ".probe", "envs", `${name}.yml`), CONFIG);
+  }
+  return root;
+}
+
 async function pathWithProbe(): Promise<string> {
   const bin = await tempDir();
   const shim = join(bin, "probe");
@@ -248,6 +259,13 @@ describe("bash completion", () => {
     expect(await bashCompletions(root, "probe", command, "f")).toEqual(["front"]);
   });
 
+  it("completes the environments after --env", async () => {
+    const root = await projectWithEnvironments();
+
+    expect(await bashCompletions(root, "probe", "check", "--env", "")).toEqual(ENVIRONMENTS);
+    expect(await bashCompletions(root, "probe", "ls", "--env", "p")).toEqual(["prod"]);
+  });
+
   it("completes the options of a command", async () => {
     const root = await project();
 
@@ -305,6 +323,13 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
 
   it.each(SERVICE_COMMANDS)("offers the service names after %s", async (command) => {
     expect(await zshCompletions(await project(), "probe", command, "")).toEqual(["api", "front"]);
+  });
+
+  it("completes the environments after --env", async () => {
+    const root = await projectWithEnvironments();
+
+    expect(await zshCompletions(root, "probe", "check", "--env", "")).toEqual(ENVIRONMENTS);
+    expect(await zshCompletions(root, "probe", "check", "api", "--env", "")).toEqual(ENVIRONMENTS);
   });
 
   it("offers the options of a command, and the shells after completion", async () => {
@@ -372,6 +397,14 @@ describe.skipIf(!FISH)("fish completion", () => {
 
     expect((await fishCompletions(root, `probe ${command} `)).sort()).toEqual(["api", "front"]);
     expect(await fishCompletions(root, `probe ${command} f`)).toEqual(["front"]);
+  });
+
+  it("completes the environments after --env", async () => {
+    const root = await projectWithEnvironments();
+
+    expect((await fishCompletions(root, "probe check --env ")).sort()).toEqual(
+      [...ENVIRONMENTS].sort(),
+    );
   });
 
   it("offers the options of a command, and the shells after completion", async () => {

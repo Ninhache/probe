@@ -1,4 +1,10 @@
-import { type CommandSpec, ROOT_OPTIONS, SERVICES_QUERY } from "./spec";
+import {
+  type CommandSpec,
+  ENVIRONMENT_OPTION,
+  ENVIRONMENTS_QUERY,
+  ROOT_OPTIONS,
+  SERVICES_QUERY,
+} from "./spec";
 
 // Must run on bash 3.2 (stock macOS): no `mapfile`, no associative array, loaded with `eval`.
 export function bashScript(commands: CommandSpec[]): string {
@@ -17,7 +23,9 @@ export function bashScript(commands: CommandSpec[]): string {
     `      *) cmd="\${COMP_WORDS[i]}"; break ;;`,
     "    esac",
     "  done",
-    '  if [ -z "$cmd" ]; then',
+    `  if [ -n "$cmd" ] && [ "\${COMP_WORDS[COMP_CWORD-1]}" = "${ENVIRONMENT_OPTION}" ]; then`,
+    `    words="$(${ENVIRONMENTS_QUERY})"`,
+    '  elif [ -z "$cmd" ]; then',
     '    case "$cur" in',
     `      -*) words="${ROOT_OPTIONS.join(" ")}" ;;`,
     `      *) words="${commands.map(({ name }) => name).join(" ")}" ;;`,
