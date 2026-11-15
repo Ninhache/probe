@@ -113,7 +113,7 @@ of macOS.
 | --------------- | ---------------------------------------------- |
 | `↑` `↓` `j` `k` | Move                                           |
 | `r`             | Check now                                      |
-| `Enter`         | Open the panel of the selected service         |
+| `Enter`         | Open the detail of the selected service        |
 | `u`             | Open its URL in the browser                    |
 | `c`             | Copy its curl command                          |
 | `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
@@ -133,6 +133,11 @@ to copy by hand.
 `Esc` cancels. A field left empty takes its default. `d` asks first: only `y` removes. All three write
 `.probe/config.yml` the way `probe add` and `probe rm` do: comments kept, [Makefile](#makefile) block kept up to
 date. While you type, in the filter or in the form, `q` and `?` are letters.
+
+`Enter` shows the last answer of the selected service above its two settings: status, latencies of this
+session, headers and the first lines of the body; for a service that is down, what failed and what to try. The
+value of a header that can carry a secret (`Authorization`, `Set-Cookie`, anything named after a token or a key)
+is replaced by `(hidden)`. None of it is written anywhere, and `probe check --json` prints what it printed before.
 
 The panels save what you change in `.probe/local.yml`, for your machine only:
 

@@ -300,11 +300,13 @@ describe("dashboard", () => {
         "  ✓ api  http://localhost:3000/health  200  4ms",
         "› ✗ db   http://localhost:5432/        connection refused",
         "http://localhost:5432/ · connection refused",
-        "┌────────────────────────────┐",
-        "│ db                         │",
-        "│ › Skip     ‹ no ›          │",
-        "│   Timeout  ‹ default ›     │",
-        "└────────────────────────────┘",
+        "┌──────────────────────────────────────────────────────────┐",
+        "│ db                                                       │",
+        "│ connection refused                                       │",
+        "│ ──────────────────────────────────────────────────────── │",
+        "│ › Skip     ‹ no ›                                        │",
+        "│   Timeout  ‹ default ›                                   │",
+        "└──────────────────────────────────────────────────────────┘",
         "↑↓ jk move · ←→ hl change · esc close · ? help · q quit",
       ].join("\n"),
     );
@@ -620,7 +622,7 @@ describe("dashboard", () => {
       "List",
       "  ↑↓ jk   Move",
       "  r       Check now",
-      "  ↵       Service settings",
+      "  ↵       Service detail",
       "  u       Open its URL",
       "  c       Copy curl command",
       "  e       Edit the service",
@@ -686,7 +688,7 @@ describe("dashboard", () => {
     await tick();
     stdin.write("?");
     await tick();
-    expect(lastFrame()).toContain("  enter   Service settings");
+    expect(lastFrame()).toContain("  enter   Service detail");
     expect(lastFrame()).toContain("  arrows  Move");
     expect(lastFrame()).toContain("? esc close - q quit");
     expect(lastFrame()).not.toContain(ESCAPE);
@@ -741,6 +743,106 @@ describe("dashboard", () => {
     } finally {
       ink.unmount();
     }
+  });
+});
+
+describe("dashboard service detail", () => {
+  const answered: CheckResult = {
+    ...api,
+    response: {
+      statusText: "OK",
+      headers: [
+        ["content-type", "application/json"],
+        ["set-cookie", "(hidden)"],
+      ],
+      body: '{"status":"ok"}',
+    },
+  };
+  const refused: CheckResult = {
+    ...db,
+    hint: "nothing listens on :5432: is the service started?",
+  };
+
+  it("shows the last response and the latencies above the settings", async () => {
+    let pass = 0;
+    const { lastFrame, stdin } = open({
+      intervalMs: 20,
+      check: async () => {
+        pass += 1;
+        return [{ ...answered, latencyMs: pass === 1 ? 2 : 8 }, refused];
+      },
+    });
+    await shows(lastFrame, "8ms");
+
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "│ 200 OK · 8ms");
+    const frame = lastFrame() ?? "";
+    expect(frame).toMatch(/│ ▁█+ 2–8ms/);
+    expect(frame).toContain("│ content-type: application/json");
+    expect(frame).toContain("│ set-cookie: (hidden)");
+    expect(frame).toContain('│ {"status":"ok"}');
+    expect(frame).toContain("│ › Skip     ‹ no ›");
+  });
+
+  it("shows the diagnosis of a service that is down, with what to try", async () => {
+    const { lastFrame, stdin } = open({ check: async () => [answered, refused] });
+    await tick();
+
+    stdin.write(`j${ENTER}`);
+
+    await shows(lastFrame, "│ connection refused");
+    expect(lastFrame()).toContain("│ nothing listens on :5432: is the service started?");
+  });
+
+  it("keeps one line per service: the hint of the selected one is under the list", async () => {
+    const { lastFrame, stdin } = open({ check: async () => [refused, answered] });
+    await tick();
+    expect(lastFrame()).toContain(
+      [
+        "› ✗ db   http://localhost:5432/        connection refused",
+        "  ✓ api  http://localhost:3000/health  200  4ms",
+        "http://localhost:5432/ · connection refused",
+        "nothing listens on :5432: is the service started?",
+      ].join("\n"),
+    );
+
+    stdin.write("j");
+
+    await shows(lastFrame, "› ✓ api");
+    expect(lastFrame()).not.toContain("nothing listens");
+  });
+
+  it("says a service set aside is not checked", async () => {
+    const { lastFrame, stdin } = open({ check: async () => [answered, refused] });
+    await tick();
+
+    stdin.write(`${ENTER}l`);
+
+    await shows(lastFrame, "│ skipped: not checked");
+    expect(lastFrame()).not.toContain("content-type");
+  });
+
+  it("gives up headers and body lines on a short terminal, never the settings", async () => {
+    const many: CheckResult = {
+      ...answered,
+      response: {
+        statusText: "OK",
+        headers: Array.from({ length: 6 }, (_, index): [string, string] => [`x-${index}`, "v"]),
+        body: "one\ntwo\nthree\nfour",
+      },
+    };
+    const services = Array.from({ length: 8 }, (_, index) => ({ ...many, name: `s${index}` }));
+    const { lastFrame, stdin } = open({ check: async () => services });
+    await tick();
+
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "› Skip");
+    const lines = (lastFrame() ?? "").split("\n");
+    expect(lines.length).toBeLessThanOrEqual(24);
+    expect(lastFrame()).toMatch(/… \d more headers/);
+    expect(lastFrame()).toContain("Timeout");
   });
 });
 

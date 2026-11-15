@@ -1,10 +1,13 @@
 import type { Service } from "../config/schema";
+import type { ResponseDetail } from "./response";
 
 export interface CheckContext {
   /** Time this service gets, already resolved by `runChecks`. */
   timeoutMs: number;
   /** Cancels the checks still running, e.g. when the dashboard closes. */
   signal?: AbortSignal;
+  /** Also describe the response (headers, start of the body): the dashboard shows it. */
+  detail?: boolean;
 }
 
 export interface CheckResult {
@@ -20,6 +23,8 @@ export interface CheckResult {
   error?: string;
   /** What to try next, when the failure is a known one. */
   hint?: string;
+  /** Only when the check was asked for the detail: never in what `check --json` prints. */
+  response?: ResponseDetail;
 }
 
 export interface Checker {

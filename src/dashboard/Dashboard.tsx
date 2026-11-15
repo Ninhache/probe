@@ -5,6 +5,7 @@ import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
+import { detailLines, type LatencyHistory, recordLatencies } from "./detail";
 import { EMPTY_FORM, type FormValues, formFields, formProblem, formRows, formValues } from "./form";
 import { HELP_GAP, type HelpLine, helpBar, helpColumns, type Screen } from "./keymap";
 import { type Keystroke, splitKeys, typedCharacter } from "./keys";
@@ -62,7 +63,7 @@ export interface ServiceWriteOutcome {
 
 export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
 
-/** The panel open under the list: the options, or the settings of one service. */
+/** The panel open under the list: the options, or the detail and the settings of one service. */
 type Panel = { kind: "options"; row: number } | { kind: "service"; name: string; row: number };
 
 /** What takes the keys over the list: the question before a removal, or the form of a service. */
@@ -76,6 +77,9 @@ const NO_TIMEOUTS: ServiceTimeouts = {};
 
 const MARKER_WIDTH = 2;
 const PANEL_WIDTH = 30;
+const DETAIL_WIDTH = 60;
+// What the screen keeps around the detail when a terminal does not tell its height.
+const DEFAULT_ROWS = 24;
 const FORM_WIDTH = 48;
 // Where the next character goes in a text field.
 const CURSOR = "_";
@@ -93,7 +97,7 @@ function ending(text: string, max: number): string {
 
 /**
  * Live list of the services, checked again `intervalMs` after each pass ends; `o` opens the options,
- * enter the settings of the selected service, `u` its URL in the browser, `c` copies its curl
+ * enter the detail and the settings of the selected service, `u` its URL in the browser, `c` copies its curl
  * command, `/` filters by name, `a` `e` `d` add, edit and remove a service, `?` lists every key.
  * Colours come from `terminal`, never from ink props: ink does not honour `NO_COLOR`.
  */
@@ -112,8 +116,9 @@ export function Dashboard({
   onServiceWrite,
 }: DashboardProps) {
   const { exit } = useApp();
-  const { columns } = useWindowSize();
+  const { columns, rows: windowRows } = useWindowSize();
   const [latest, setLatest] = useState<CheckResult[] | null>(null);
+  const [history, setHistory] = useState<LatencyHistory>({});
   const [selected, setSelected] = useState(0);
   const [settings, setSettings] = useState(initial);
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set(initiallySkipped));
@@ -145,6 +150,7 @@ export function Dashboard({
         const next = await check(signal, timeoutMs, skipped, timeouts);
         if (signal.aborted) return;
         setLatest(next);
+        setHistory((before) => recordLatencies(before, next));
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, intervalMs);
           skipPause.current = () => {
@@ -355,11 +361,12 @@ export function Dashboard({
   if (!latest) return <Text>{cut("probe: checking…")}</Text>;
 
   // A service just set aside is shown as such at once, not when the pass that skips it ends.
-  const results = shown.map((result): CheckResult => {
+  const asShown = (result: CheckResult): CheckResult => {
     if (result.skipped || !skipped.has(result.name)) return result;
     const { name, type, target } = result;
     return { name, type, target, ok: true, skipped: true, latencyMs: 0 };
-  });
+  };
+  const results = shown.map(asShown);
 
   const all = latest.filter((result) => !result.skipped && !skipped.has(result.name));
   const up = all.filter((result) => result.ok).length;
@@ -374,17 +381,39 @@ export function Dashboard({
   const rows =
     results.length === 0
       ? []
-      : formatCheckResults(results, {
-          ...terminal,
-          columns: Math.max(1, columns - MARKER_WIDTH),
-        }).split("\n");
+      : // One line per service: the hint of the selected one goes under the list.
+        formatCheckResults(
+          results.map(({ hint: _, ...result }) => result),
+          { ...terminal, columns: Math.max(1, columns - MARKER_WIDTH) },
+        ).split("\n");
   const empty = filter
     ? `no service matches "${filter}"`
     : onServiceWrite
       ? "no service: press a to add one"
       : "no service";
   const focused = results[current];
-  const panelWidth = Math.min(PANEL_WIDTH, columns);
+  const panelWidth = Math.min(panel?.kind === "service" ? DETAIL_WIDTH : PANEL_WIDTH, columns);
+  const panelRoom = Math.max(1, panelWidth - PANEL_FRAME_WIDTH);
+  // The panel follows its service, whatever the filter or the selection.
+  const detailed =
+    panel?.kind === "service" ? latest.find(({ name }) => name === panel.name) : undefined;
+  // Around the detail: summary, list, target, border, title, rule, the two settings, the bar.
+  const taken = 1 + Math.max(1, rows.length) + 1 + 2 + 1 + 1 + SERVICE_ROWS.length + 1;
+  const detail = detailed
+    ? detailLines(asShown(detailed), history[detailed.name] ?? [], {
+        unicode,
+        width: panelRoom,
+        room: (windowRows || DEFAULT_ROWS) - taken - (unsaved === undefined ? 0 : 1),
+      })
+    : [];
+  const toned = ({ text, tone }: (typeof detail)[number]) =>
+    tone === "good"
+      ? colors.green(text)
+      : tone === "bad"
+        ? colors.red(text)
+        : tone === "dim"
+          ? colors.dim(text)
+          : text;
   const panelRows: [label: string, value: string][] =
     panel?.kind === "options"
       ? SETTING_ROWS.map((row) => [row.label, seconds(settings[row.key])])
@@ -430,6 +459,7 @@ export function Dashboard({
           )}
         </Text>
       )}
+      {focused?.hint && panel?.kind !== "service" && <Text>{colors.dim(cut(focused.hint))}</Text>}
       {panel !== null && (
         <Box
           flexDirection="column"
@@ -438,20 +468,17 @@ export function Dashboard({
           paddingX={1}
         >
           <Text>
-            {colors.bold(
-              truncate(
-                panel.kind === "options" ? "Options" : panel.name,
-                Math.max(1, panelWidth - PANEL_FRAME_WIDTH),
-              ),
-            )}
+            {colors.bold(truncate(panel.kind === "options" ? "Options" : panel.name, panelRoom))}
           </Text>
+          {detail.map((line) => (
+            <Text key={line.id}>{toned(line)}</Text>
+          ))}
+          {detail.length > 0 && <Text>{colors.dim((unicode ? "─" : "-").repeat(panelRoom))}</Text>}
           {panelRows.map(([label, value], index) => {
             const line = `${index === panel.row ? marker : "  "}${label.padEnd(labelWidth)}  ${
               unicode ? `‹ ${value} ›` : `< ${value} >`
             }`;
-            return (
-              <Text key={label}>{truncate(line, Math.max(1, panelWidth - PANEL_FRAME_WIDTH))}</Text>
-            );
+            return <Text key={label}>{truncate(line, panelRoom)}</Text>;
           })}
         </Box>
       )}

@@ -49,7 +49,7 @@ export async function openDashboard(
         { ...service, timeout: timeouts[name] },
       ]),
     );
-    return runChecks({ ...config, services }, [], { timeoutMs, signal }, skipped);
+    return runChecks({ ...config, services }, [], { timeoutMs, signal, detail: true }, skipped);
   };
   const timeouts = Object.fromEntries(
     Object.entries(config.services).flatMap(([name, { timeout }]) =>
