@@ -1,5 +1,19 @@
-/** Where the keys go: the list, a panel under it, the filter being typed, the form, the question, the help. */
-export type Screen = "list" | "panel" | "filter" | "form" | "confirm" | "help";
+/** Where the keys go: the list, a panel under it, the filter or the palette being typed, the form, the question, the help. */
+export type Screen = "list" | "panel" | "filter" | "palette" | "form" | "confirm" | "help";
+
+/** What a key of the list does, and what the palette can run. */
+export type Command =
+  | "check"
+  | "detail"
+  | "open"
+  | "copy"
+  | "edit"
+  | "remove"
+  | "add"
+  | "filter"
+  | "options"
+  | "help"
+  | "quit";
 
 type Section = "List" | "Panels" | "Filter" | "Add and edit" | "Outside a text field";
 
@@ -18,6 +32,8 @@ interface Binding {
   drop?: number;
   /** In the help only: the bar keeps to the keys one needs first. */
   barless?: true;
+  /** What the key runs: set, the palette lists it. */
+  command?: Command;
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
@@ -32,15 +48,23 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
  */
 const BINDINGS: readonly Binding[] = [
   list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 1 }),
-  list({ keys: "r", action: "check", help: "Check now", barless: true }),
-  list({ keys: "↵", ascii: "enter", action: "service", help: "Service detail", drop: 4 }),
-  list({ keys: "u", action: "open", help: "Open its URL", barless: true }),
-  list({ keys: "c", action: "copy", help: "Copy curl command", barless: true }),
-  list({ keys: "e", action: "edit", help: "Edit the service", barless: true }),
-  list({ keys: "d", action: "remove", help: "Remove it", barless: true }),
-  list({ keys: "a", action: "add", help: "Add a service", drop: 2 }),
-  list({ keys: "/", action: "filter", help: "Filter by name", drop: 3 }),
-  list({ keys: "o", action: "options", help: "Options", barless: true }),
+  list({ keys: "r", action: "check", help: "Check now", barless: true, command: "check" }),
+  list({
+    keys: "↵",
+    ascii: "enter",
+    action: "service",
+    help: "Service detail",
+    drop: 5,
+    command: "detail",
+  }),
+  list({ keys: "u", action: "open", help: "Open its URL", barless: true, command: "open" }),
+  list({ keys: "c", action: "copy", help: "Copy curl command", barless: true, command: "copy" }),
+  list({ keys: "e", action: "edit", help: "Edit the service", barless: true, command: "edit" }),
+  list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
+  list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
+  list({ keys: "/", action: "filter", help: "Filter by name", drop: 4, command: "filter" }),
+  list({ keys: ":", action: "commands", help: "Find a command", drop: 2 }),
+  list({ keys: "o", action: "options", help: "Options", barless: true, command: "options" }),
   {
     screens: ["panel"],
     section: "Panels",
@@ -78,6 +102,9 @@ const BINDINGS: readonly Binding[] = [
     help: "Keep the filter",
   },
   { screens: ["filter"], section: "Filter", keys: "esc", action: "clear", help: "Clear it" },
+  { screens: ["palette"], keys: "↑↓", ascii: "arrows", action: "move", drop: 1 },
+  { screens: ["palette"], keys: "↵", ascii: "enter", action: "run" },
+  { screens: ["palette"], keys: "esc", action: "close" },
   {
     screens: ["form"],
     section: "Add and edit",
@@ -105,6 +132,7 @@ const BINDINGS: readonly Binding[] = [
     keys: "?",
     action: "help",
     help: "This help",
+    command: "help",
   },
   {
     screens: ["list", "panel", "help"],
@@ -112,6 +140,7 @@ const BINDINGS: readonly Binding[] = [
     keys: "q",
     action: "quit",
     help: "Quit",
+    command: "quit",
   },
 ];
 
@@ -143,6 +172,30 @@ export function helpBar(screen: Screen, unicode: boolean, columns: number): stri
     shown.splice(shown.indexOf(first), 1);
   }
   return line();
+}
+
+/** The command of a key pressed on the list, if it has one. */
+export function keyCommand(input: string, enter: boolean): Command | undefined {
+  return BINDINGS.find(({ keys, command }) => command && (enter ? keys === "↵" : keys === input))
+    ?.command;
+}
+
+export interface PaletteEntry {
+  command: Command;
+  /** What it does, as the help says it. */
+  label: string;
+  /** The key that runs it without the palette. */
+  keys: string;
+}
+
+/** The commands the palette offers, in the order of the help: those that say `query`, all without one. */
+export function paletteEntries(unicode: boolean, query = ""): PaletteEntry[] {
+  const wanted = query.trim().toLowerCase();
+  return BINDINGS.flatMap((binding) => {
+    const { command, help, action } = binding;
+    if (!command || !help || !`${help} ${action}`.toLowerCase().includes(wanted)) return [];
+    return [{ command, label: help, keys: written(binding, unicode) }];
+  });
 }
 
 export interface HelpLine {

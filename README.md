@@ -120,6 +120,7 @@ of macOS.
 | `a`             | Add a service                                  |
 | `e`             | Edit the selected service                      |
 | `d`             | Remove the selected service, after a question  |
+| `:`             | Find a command by what it does; `Enter` runs   |
 | `o`             | Options: interval and timeout                  |
 | `?`             | Every key; `?` or `Esc` closes                 |
 | `q`             | Quit                                           |
@@ -132,7 +133,7 @@ to copy by hand.
 `a` and `e` open a form: name, port, host, path, expected status. `↑` `↓` or `Tab` change field, `Enter` saves,
 `Esc` cancels. A field left empty takes its default. `d` asks first: only `y` removes. All three write
 `.probe/config.yml` the way `probe add` and `probe rm` do: comments kept, [Makefile](#makefile) block kept up to
-date. While you type, in the filter or in the form, `q` and `?` are letters.
+date. While you type, in the filter, the form or the command palette, `q` and `?` are letters.
 
 `Enter` shows the last answer of the selected service above its two settings: status, latencies of this
 session, headers and the first lines of the body; for a service that is down, what failed and what to try. The

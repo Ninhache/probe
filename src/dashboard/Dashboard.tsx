@@ -7,7 +7,16 @@ import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
 import { detailLines, type LatencyHistory, recordLatencies } from "./detail";
 import { EMPTY_FORM, type FormValues, formFields, formProblem, formRows, formValues } from "./form";
-import { HELP_GAP, type HelpLine, helpBar, helpColumns, type Screen } from "./keymap";
+import {
+  type Command,
+  HELP_GAP,
+  type HelpLine,
+  helpBar,
+  helpColumns,
+  keyCommand,
+  paletteEntries,
+  type Screen,
+} from "./keymap";
 import { type Keystroke, splitKeys, typedCharacter } from "./keys";
 import type { Saved } from "./saves";
 import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
@@ -71,6 +80,12 @@ type Dialog =
   | { kind: "confirm"; name: string }
   | { kind: "form"; editing?: string; row: number; values: FormValues; problem?: string };
 
+/** The palette: what is typed, and the entry Enter runs among those that match. */
+interface Palette {
+  query: string;
+  row: number;
+}
+
 const SERVICE_ROWS = ["Skip", "Timeout"];
 const TIMEOUT_ROW = SERVICE_ROWS.indexOf("Timeout");
 const NO_TIMEOUTS: ServiceTimeouts = {};
@@ -98,7 +113,8 @@ function ending(text: string, max: number): string {
 /**
  * Live list of the services, checked again `intervalMs` after each pass ends; `o` opens the options,
  * enter the detail and the settings of the selected service, `u` its URL in the browser, `c` copies its curl
- * command, `/` filters by name, `a` `e` `d` add, edit and remove a service, `?` lists every key.
+ * command, `/` filters by name, `a` `e` `d` add, edit and remove a service, `:` finds a command by
+ * what it does, `?` lists every key.
  * Colours come from `terminal`, never from ink props: ink does not honour `NO_COLOR`.
  */
 export function Dashboard({
@@ -128,6 +144,7 @@ export function Dashboard({
   const [filter, setFilter] = useState("");
   // The filter is being typed: letters go to it, not to the keys of the list.
   const [filtering, setFiltering] = useState(false);
+  const [palette, setPalette] = useState<Palette | null>(null);
   // Counts the writes to the config: each one starts a new pass, on the services as they are now.
   const [writes, setWrites] = useState(0);
   const [help, setHelp] = useState(false);
@@ -249,6 +266,57 @@ export function Dashboard({
     track(onTimeoutChange?.(name, value));
   };
 
+  /** Runs a command on the selected service, from its key or from the palette. */
+  const run = (command: Command) => {
+    const name = shown[current]?.name;
+    switch (command) {
+      case "check":
+        return skipPause.current();
+      case "options":
+        return setPanel({ kind: "options", row: 0 });
+      case "detail":
+        return name ? setPanel({ kind: "service", name, row: 0 }) : undefined;
+      case "open":
+        return name ? void onOpen?.(name).then(setNotice) : undefined;
+      case "copy":
+        return name ? void onCopy?.(name, timeouts[name]).then(setNotice) : undefined;
+      case "filter":
+        return setFiltering(true);
+      case "add":
+        return onServiceWrite ? setDialog({ kind: "form", row: 0, values: EMPTY_FORM }) : undefined;
+      case "edit": {
+        const fields = onServiceWrite && name ? serviceFields?.(name) : undefined;
+        if (fields) setDialog({ kind: "form", editing: name, row: 0, values: formValues(fields) });
+        return;
+      }
+      case "remove":
+        return onServiceWrite && name ? setDialog({ kind: "confirm", name }) : undefined;
+      case "help":
+        return setHelp(true);
+      case "quit":
+        return exit();
+      default:
+        return command satisfies never;
+    }
+  };
+
+  const typePalette = ({ query, row }: Palette, keystroke: Keystroke) => {
+    const { key } = keystroke;
+    const typed = typedCharacter(keystroke);
+    const entries = paletteEntries(terminal.unicode, query);
+    if (key === "escape") setPalette(null);
+    else if (key === "return") {
+      const entry = entries[row];
+      if (!entry) return;
+      setPalette(null);
+      run(entry.command);
+    } else if (key === "up") setPalette({ query, row: Math.max(0, row - 1) });
+    else if (key === "down")
+      setPalette({ query, row: Math.max(0, Math.min(entries.length - 1, row + 1)) });
+    else if (key === "backspace") setPalette({ query: query.slice(0, -1), row: 0 });
+    else if (typed) setPalette({ query: query + typed, row: 0 });
+  };
+
   const press = (keystroke: Keystroke) => {
     const { input, key } = keystroke;
     const up = key === "up" || input === "k";
@@ -256,7 +324,6 @@ export function Dashboard({
     const left = key === "left" || input === "h";
     const right = key === "right" || input === "l";
     const enter = key === "return";
-    const selectedName = shown[current]?.name;
     setNotice(undefined);
     // A text field takes every character: there `q`, `?` and `j` are letters.
     if (dialog?.kind === "form") typeInForm(dialog, keystroke);
@@ -264,28 +331,17 @@ export function Dashboard({
       setDialog(null);
       if (input === "y")
         void write({ kind: "remove", name: dialog.name }, `Removed ${dialog.name}`);
-    } else if (filtering) typeFilter(keystroke);
+    } else if (palette) typePalette(palette, keystroke);
+    else if (filtering) typeFilter(keystroke);
     else if (input === "q") exit();
     else if (help) {
       if (input === "?" || key === "escape") setHelp(false);
     } else if (input === "?") setHelp(true);
     else if (panel === null) {
-      if (input === "r") skipPause.current();
-      else if (input === "o") setPanel({ kind: "options", row: 0 });
-      else if (enter && selectedName) setPanel({ kind: "service", name: selectedName, row: 0 });
-      else if (input === "u" && selectedName) void onOpen?.(selectedName).then(setNotice);
-      else if (input === "c" && selectedName)
-        void onCopy?.(selectedName, timeouts[selectedName]).then(setNotice);
-      else if (input === "/") setFiltering(true);
+      const command = keyCommand(input, enter);
+      if (command) run(command);
+      else if (input === ":") setPalette({ query: "", row: 0 });
       else if (key === "escape") setFilter("");
-      else if (input === "a" && onServiceWrite)
-        setDialog({ kind: "form", row: 0, values: EMPTY_FORM });
-      else if (input === "e" && onServiceWrite && selectedName) {
-        const fields = serviceFields?.(selectedName);
-        if (fields)
-          setDialog({ kind: "form", editing: selectedName, row: 0, values: formValues(fields) });
-      } else if (input === "d" && onServiceWrite && selectedName)
-        setDialog({ kind: "confirm", name: selectedName });
       else if (up) setSelected(Math.max(0, current - 1));
       else if (down) setSelected(Math.min(last, current + 1));
     } else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter))
@@ -433,12 +489,25 @@ export function Dashboard({
       ? "form"
       : dialog
         ? "confirm"
-        : filtering
-          ? "filter"
-          : panel
-            ? "panel"
-            : "list";
+        : palette
+          ? "palette"
+          : filtering
+            ? "filter"
+            : panel
+              ? "panel"
+              : "list";
   const hint = helpBar(screen, unicode, columns);
+  const commands = palette ? paletteEntries(unicode, palette.query) : [];
+  const commandWidth = Math.max(0, ...commands.map(({ label }) => label.length));
+  // Around the commands: summary, list, target, hint, what is typed, the bar, and the free line.
+  const paletteRoom = Math.max(
+    1,
+    (windowRows || DEFAULT_ROWS) -
+      (1 + Math.max(1, rows.length) + (focused ? 1 : 0) + (focused?.hint ? 1 : 0) + 1 + 1 + 1) -
+      (unsaved === undefined ? 0 : 1),
+  );
+  // The selected command stays in sight: the lines scroll once it passes the last one.
+  const firstCommand = Math.max(0, (palette?.row ?? 0) - paletteRoom + 1);
   const formWidth = Math.min(FORM_WIDTH, columns);
   const formLabels = dialog?.kind === "form" ? formRows(dialog.editing === undefined) : [];
   const formLabelWidth = Math.max(0, ...formLabels.map(({ label }) => label.length));
@@ -484,6 +553,20 @@ export function Dashboard({
         </Box>
       )}
       {filtering && <Text>{cut(`Filter: ${filter}${CURSOR}`)}</Text>}
+      {palette && <Text>{cut(`: ${palette.query}${CURSOR}`)}</Text>}
+      {palette &&
+        commands
+          .slice(firstCommand, firstCommand + paletteRoom)
+          .map(({ command, label, keys }) => (
+            <Text key={command}>
+              {cut(
+                `${commands[palette.row]?.command === command ? marker : "  "}${label.padEnd(commandWidth)}  ${keys}`,
+              )}
+            </Text>
+          ))}
+      {palette && commands.length === 0 && (
+        <Text>{colors.dim(cut(`no command matches "${palette.query}"`))}</Text>
+      )}
       {dialog?.kind === "confirm" && (
         <Text>{colors.bold(cut(`Remove ${dialog.name} from the config?`))}</Text>
       )}
