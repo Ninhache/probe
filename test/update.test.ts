@@ -14,7 +14,6 @@ import {
 import { tempDir } from "./helpers";
 
 const NOW = 1_800_000_000_000;
-// A script that exits at once, standing in for the CLI the refresh would spawn.
 const noopCli = async (dir: string) => {
   const file = join(dir, "noop.mjs");
   await writeFile(file, "");

@@ -6,7 +6,6 @@ import { openerCommand, openUrl, type Spawn } from "../src/open-url";
 
 const URL = "http://localhost:3000/health";
 
-/** A spawn that records its calls and lets the test decide how the child starts. */
 function fakeSpawn(outcome: "spawn" | "error") {
   const calls: { command: string; args: string[]; unrefs: number }[] = [];
   const spawn: Spawn = (command, args) => {

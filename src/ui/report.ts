@@ -11,17 +11,10 @@ function width(values: string[]): number {
   return Math.max(0, ...values.map((value) => value.length));
 }
 
-/** Width left to the name column when a line has to be cut: half of what the other columns leave. */
 function nameBudget(nameWidth: number, columns: number, reserved: number): number {
   return Math.max(1, Math.min(nameWidth, Math.floor((columns - reserved) / 2)));
 }
 
-/**
- * Renders one line per check result, followed by its hint when it has one.
- * On a terminal too narrow for the widest line, the target column is dropped and the rest is cut
- * to the width (6 columns at least); off a terminal (unknown width) lines are never cut.
- * A hint is cut to the width of the terminal, whatever the other lines need.
- */
 export function formatCheckResults(results: CheckResult[], terminal: Terminal): string {
   const colors = createColors(terminal.color);
   const nameWidth = width(results.map((result) => result.name));
@@ -65,11 +58,6 @@ export function formatCheckResults(results: CheckResult[], terminal: Terminal): 
     .join("\n");
 }
 
-/**
- * Renders one line per declared service.
- * On a terminal too narrow for the widest line, the notes after the URL (`expect`, skipped) are
- * dropped and the URL is cut to the width.
- */
 export function formatServices(
   config: Config,
   terminal: Terminal,

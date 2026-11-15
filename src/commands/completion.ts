@@ -25,10 +25,6 @@ const args = {
   shell: { type: "positional", description: SHELLS.join(", "), required: true },
 } as const;
 
-/**
- * Builds `probe completion <shell>`, which prints the completion script of a shell.
- * It is given the other commands, and completes itself too.
- */
 export default function completion(others: Record<string, CommandLike>) {
   const commands = { ...others, [COMPLETION_COMMAND]: { meta, args } };
   return defineCommand({

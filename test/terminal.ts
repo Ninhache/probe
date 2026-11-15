@@ -7,7 +7,6 @@ const PTY = resolve(import.meta.dirname, "fixtures", "on-terminal.py");
 export const ENTER = "\r";
 export const CTRL_C = "\u0003";
 
-/** The pseudo-terminal comes from python3, present on the Linux and macOS runners. */
 export function hasPython(): boolean {
   try {
     execFileSync("python3", ["--version"], { stdio: "ignore" });
@@ -17,10 +16,8 @@ export function hasPython(): boolean {
   }
 }
 
-/** A text to wait for on screen, then the keys to type. */
 export type Step = [marker: string, keys: string];
 
-/** Runs the built `probe <args>` in `cwd` on a pseudo-terminal, typing each step's keys once its marker shows. */
 export function onTerminal(
   cwd: string,
   args: string[],

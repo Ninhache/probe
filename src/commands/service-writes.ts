@@ -5,7 +5,6 @@ import type { RawConfig } from "../config/migrations";
 import type { Config, Service } from "../config/schema";
 import { rawServices, writeServices } from "./shared";
 
-/** What the dashboard lets one set on a service; `timeout` has its own panel. */
 export type ServiceFields = Pick<Service, "host" | "port" | "path" | "expect">;
 
 export type ServiceWrite =
@@ -14,9 +13,7 @@ export type ServiceWrite =
   | { kind: "remove"; name: string };
 
 export interface ServiceWritten {
-  /** The config as it is now in `config.yml`. */
   config: Config;
-  /** Something to tell the user, when the Makefile block could not follow. */
   warning?: string;
 }
 
@@ -26,7 +23,6 @@ const FIELD_KEYS = ["host", "port", "path", "expect"] as const;
 /** `expect: [200]` and `expect: 200` say the same: a form cannot tell which one was written. */
 const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].flat());
 
-/** The keys to write for `fields`: a value at its default is left out, as `probe add` does. */
 function withFields(service: RawConfig, fields: ServiceFields, current?: ServiceFields): RawConfig {
   const next = { ...service };
   for (const key of FIELD_KEYS) {
@@ -38,14 +34,7 @@ function withFields(service: RawConfig, fields: ServiceFields, current?: Service
   return next;
 }
 
-/**
- * Adds, edits or removes one service in `config.yml`, the way `probe add` and `probe rm` do:
- * comments kept, Makefile block regenerated when the project has one.
- * The file is read again first, so an edit made since the caller loaded it is kept.
- * Returns null, writing nothing, when the service to add is already there, when the one to edit or
- * remove no longer is, or when the one to edit is declared by `url`: the fields have no host,
- * port or path to put in its place.
- */
+// The file is read again first: an edit made since the caller loaded it is kept.
 export async function writeService(
   paths: ProbePaths,
   write: ServiceWrite,

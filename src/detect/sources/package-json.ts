@@ -3,7 +3,6 @@ import type { Candidate, Source } from "../types";
 
 const MANIFEST = "package.json";
 const SCRIPT_PORT = /(?:--port[= ]|-p |\bPORT=)(\d{2,5})\b/;
-// Port a dev server listens on when its script names none.
 const TOOL_PORTS: [tool: RegExp, port: number][] = [
   [/\bvite\b/, 5173],
   [/\bnext\b/, 3000],
@@ -37,7 +36,6 @@ function inManifest(text: string): Candidate[] {
   return found;
 }
 
-/** The port a script of `package.json` names, or the usual one of its dev server. */
 export const packageJsonSource: Source = {
   id: "package-json",
   async find({ read }) {

@@ -11,16 +11,13 @@ const OVERRIDE_FILES = [
   "docker-compose.override.yaml",
   "docker-compose.override.yml",
 ];
-// The one file compose takes its variables from.
 const VARIABLES_FILE = ".env";
 // ${VAR}, ${VAR:-default}, ${VAR-default} and $VAR.
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
 const PORT = /^\d+$/;
 
 interface Published {
-  /** Port opened on the machine. */
   host: number;
-  /** Port inside the container: it tells what kind of server this is. */
   container: number;
 }
 
@@ -34,7 +31,6 @@ const substituted = (text: string, variables: Variables) =>
     return missing ? (fallback ?? "") : value;
   });
 
-/** Reads one entry of `ports:`; null when it opens no fixed TCP port on the machine. */
 function published(entry: unknown, variables: Variables): Published | null {
   let host: string;
   let container: string;
@@ -85,11 +81,7 @@ function inFile(file: string, text: string, variables: Variables): Candidate[] {
   return found;
 }
 
-/**
- * The ports the services of a compose file publish on the machine.
- * Variables in a port (`"${WEB_PORT:-8080}:80"`) take their value from `.env`; those of the shell
- * are not looked at.
- */
+// Variables in a port take their value from `.env`; those of the shell are not looked at.
 export const composeSource: Source = {
   id: "compose",
   async find({ read }) {

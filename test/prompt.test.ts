@@ -5,7 +5,6 @@ import { ask as askText, choose, confirm, type Question } from "../src/ui/prompt
 const ENTER = "\r";
 const CTRL_C = "\u0003";
 
-/** Asks on fake streams, types `keys` once the question is drawn, returns the answer and the screen. */
 async function ask(keys: string): Promise<{ answer: boolean; screen: string }> {
   const input = new PassThrough();
   const output = new PassThrough();
@@ -40,7 +39,6 @@ describe("confirm", () => {
   });
 });
 
-/** Asks for text on fake streams, typing each entry of `lines` when its marker is drawn. */
 async function type(question: Question, steps: [marker: string, keys: string][]) {
   const input = new PassThrough();
   const output = new PassThrough();
@@ -82,7 +80,6 @@ describe("ask", () => {
   });
 });
 
-/** Shows a two-line checklist on fake streams and types `keys` once it is drawn. */
 async function tick(keys: string): Promise<number[] | null> {
   const input = new PassThrough();
   const output = new PassThrough();

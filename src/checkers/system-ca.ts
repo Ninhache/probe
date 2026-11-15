@@ -5,19 +5,11 @@ export interface CertificateStore {
 }
 
 export interface SystemTrust {
-  /** Whether `load` was already called: what it could add is there, or never will be. */
   readonly tried: boolean;
-  /**
-   * Makes https requests trust what the system trusts, on top of what Node ships with: curl and
-   * browsers do, and a local CA (mkcert) is installed there. Resolves to whether they now do.
-   */
   load(): Promise<boolean>;
 }
 
-/**
- * Reading the system store takes about 100 ms, so it is read once, and only when asked: when a
- * certificate was refused for its issuer. `node:tls` is loaded then too, not at startup.
- */
+// Reading the system store takes about 100 ms: done once, and only when a certificate was refused for its issuer.
 export function createSystemTrust(
   loadStore: () => Promise<CertificateStore> = () => import("node:tls"),
 ): SystemTrust {

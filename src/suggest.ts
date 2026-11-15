@@ -3,7 +3,6 @@ const SHORT_WORD = 4;
 const TYPOS_SHORT = 1;
 const TYPOS_LONG = 2;
 
-/** Number of typos between two words: a letter added, removed, replaced, or two neighbours swapped. */
 export function typoDistance(a: string, b: string): number {
   const rows = Array.from({ length: a.length + 1 }, (_, i) =>
     Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
@@ -22,10 +21,6 @@ export function typoDistance(a: string, b: string): number {
   return at(a.length, b.length);
 }
 
-/**
- * Returns the candidate the word was most likely meant to be, or `undefined` when none is close:
- * one typo at most for a candidate of 4 letters or fewer, two otherwise. The first of equal candidates wins.
- */
 export function closest(word: string, candidates: readonly string[]): string | undefined {
   let found: { candidate: string; distance: number } | undefined;
   for (const candidate of candidates) {

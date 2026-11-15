@@ -37,7 +37,6 @@ function inFile(file: string, text: string): Candidate[] {
   return found;
 }
 
-/** `PORT` and the `*_URL` pointing to a local http server, in `.env` and `.env.local`. */
 export const envSource: Source = {
   id: "env",
   async find({ read }) {

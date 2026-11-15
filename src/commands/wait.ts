@@ -16,7 +16,6 @@ import { openProject, requireVariables, secondsToMs, stdoutTerminal } from "./sh
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
-/** Returns a reporter that turns each pass into the lines worth printing: only what changed. */
 export function progressReporter(): (results: CheckResult[], elapsedMs: number) => string[] {
   let previous: Map<string, boolean> | null = null;
   return (results, elapsedMs) => {

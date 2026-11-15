@@ -6,7 +6,6 @@ const TEXT = "curl -i -L --max-time 3 'http://localhost:3000/health'";
 
 type Outcome = "copied" | "missing" | "failed";
 
-/** A spawn that records its calls; each tool ends the way the test decides. */
 function fakeSpawn(outcomes: Record<string, Outcome>) {
   const calls: { command: string; args: string[]; written: string }[] = [];
   const spawn: ClipboardSpawn = (command, args) => {

@@ -69,7 +69,6 @@ export function backupPath(paths: ProbePaths, version: number): string {
   return join(paths.dir, `config.v${version}.bak.yml`);
 }
 
-/** Tells whether loading would migrate, without writing anything. */
 export async function pendingMigration(
   paths: ProbePaths,
   options: MigrationOptions = {},
@@ -100,7 +99,6 @@ export async function loadConfig(
   return { config, raw: migrated, doc, paths, migratedFrom: plan?.from ?? null };
 }
 
-/** Validates `raw`, then rewrites config.yml keeping comments. */
 export async function saveConfig(
   loaded: LoadedConfig,
   raw: RawConfig,
@@ -112,11 +110,7 @@ export async function saveConfig(
   return { ...loaded, config, raw };
 }
 
-/**
- * Sets the `timeout` of one service in `config.yml`, in seconds; `undefined` removes it.
- * The file is read again first, so an edit made since the caller loaded it is kept.
- * Returns false when the service is no longer there.
- */
+// The file is read again first: an edit made since the caller loaded it is kept.
 export async function writeServiceTimeout(
   paths: ProbePaths,
   name: string,

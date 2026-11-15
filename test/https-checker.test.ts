@@ -15,7 +15,6 @@ interface Certificate {
   cert: string;
 }
 
-/** A self-signed certificate for `names`, made now: no key is kept in the repository. */
 function selfSigned(dir: string, id: string, names: string): Certificate {
   const file = (extension: string) => join(dir, `${id}.${extension}`);
   writeFileSync(
@@ -129,7 +128,6 @@ describe.skipIf(!made)("http checker over https", () => {
   });
 
   describe.skipIf(!canTrust)("once its certificates are trusted", () => {
-    /** A system store that holds the certificates of the two servers. */
     const system = () =>
       createSystemTrust(async () => ({
         getCACertificates: (type) =>

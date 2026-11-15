@@ -1,4 +1,3 @@
-/** A command line shown in the help, with what it does. */
 export interface Example {
   command: string;
   note: string;
@@ -11,7 +10,6 @@ const GAP = "  ";
 const INDENT = "  ";
 const ESC = "\u001b";
 
-/** Examples shown at the end of the help, by command name (`probe` for the help of `probe` itself). */
 export const EXAMPLES: Record<string, Example[]> = {
   [ROOT]: [
     { command: "probe init", note: "Start in this project" },
@@ -68,10 +66,6 @@ export const EXAMPLES: Record<string, Example[]> = {
   ],
 };
 
-/**
- * Renders the EXAMPLES section of a command's help, styled like the sections citty prints.
- * Returns an empty string for a command without examples.
- */
 export function formatExamples(name: string | undefined, color: boolean): string {
   const examples = EXAMPLES[name ?? ROOT] ?? [];
   if (examples.length === 0) return "";

@@ -109,7 +109,6 @@ function notifyUpdate(rawArgs: string[]): void {
   // The completion script is printed at every shell start: no registry lookup, no notice there.
   if (updateCheckDisabled() || !cliPath || rawArgs[0] === COMPLETION_COMMAND) return;
   scheduleRefresh(cacheDir(), cliPath);
-  // `status` prints the update line itself.
   if (
     !detectTerminal(process.stderr, process.env).isTTY ||
     rawArgs.includes("--json") ||
@@ -122,10 +121,6 @@ function notifyUpdate(rawArgs: string[]): void {
 
 const INTERVAL_OPTION = "--interval";
 
-/**
- * Reads the arguments the dashboard accepts: none, or `--interval` alone.
- * Returns the interval in seconds as typed, `undefined` when not given, `null` for any other arguments.
- */
 function dashboardInterval(rawArgs: string[]): string | undefined | null {
   const [first, second, ...rest] = rawArgs;
   if (first === undefined) return undefined;
@@ -135,13 +130,7 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
   return null;
 }
 
-/**
- * `probe` alone on a terminal, inside a project with services, opens the dashboard.
- * The interactive libraries are imported here only, so every other path starts without them.
- * With `--interval` there is nothing to fall back to: what prevents the dashboard is an error.
- * Settings come from `--interval`, then `local.yml`, then the defaults; what the panels change
- * is saved to `local.yml`, except what a service is and its timeout: shared, so in `config.yml`.
- */
+// The interactive libraries are imported here only: every other path starts without them.
 async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const interval = dashboardInterval(rawArgs);
   if (interval === null) return false;
@@ -204,11 +193,6 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   return true;
 }
 
-/**
- * A command run outside a project, on a terminal: offers to create `.probe/` in the current directory.
- * Off a terminal, with `--json`, or for any other error, asks nothing.
- * @returns true once `.probe/` is created, so the command can run again
- */
 async function offeredInit(error: unknown, rawArgs: string[]): Promise<boolean> {
   if (!(error instanceof ProbeError) || error.code !== "NO_PROBE_DIR") return false;
   if (rawArgs.includes("--json")) return false;
@@ -220,7 +204,6 @@ async function offeredInit(error: unknown, rawArgs: string[]): Promise<boolean> 
   return true;
 }
 
-/** `probe add` with nothing after it, on a terminal, asks for what the options would have given. */
 function wantsGuidedAdd(rawArgs: string[]): boolean {
   return (
     rawArgs.length === 1 &&
@@ -236,7 +219,6 @@ async function dispatch(rawArgs: string[]): Promise<void> {
 
 const UNKNOWN_COMMAND = "E_UNKNOWN_COMMAND";
 
-/** The command a mistyped one was probably meant to be, as a sentence to add to citty's error. */
 function didYouMean(error: Error, rawArgs: string[]): string {
   if ((error as { code?: string }).code !== UNKNOWN_COMMAND) return "";
   const typed = rawArgs.find((arg) => !arg.startsWith("-"));
@@ -244,7 +226,6 @@ function didYouMean(error: Error, rawArgs: string[]): string {
   return command ? ` Did you mean: probe ${command}?` : "";
 }
 
-/** Resolves once everything written to the stream so far has left the process. */
 function flushed(stream: NodeJS.WriteStream): Promise<void> {
   return new Promise((done) => {
     stream.write("", () => done());
@@ -277,7 +258,6 @@ async function run(rawArgs: string[]): Promise<void> {
     if (error instanceof ProbeError) {
       console.error(`probe: ${error.message}`);
     } else if (error instanceof Error && error.name === "CLIError") {
-      // citty's own usage errors (unknown command, missing argument)
       if (rawArgs.length === 0) await printUsage(main);
       const message = stripStyles(error.message).replace(/\.$/, "");
       console.error(`probe: ${message}.${didYouMean(error, rawArgs)} See: probe --help`);

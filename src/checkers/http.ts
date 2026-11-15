@@ -17,7 +17,6 @@ import { describeResponse, type ResponseDetail } from "./response";
 import { type SystemTrust, systemTrust } from "./system-ca";
 import type { CheckContext, Checker, CheckResult } from "./types";
 
-/** The URL a check requests: the one the config gives, or the one its host, port and path make. */
 export function targetUrl(service: Service): string {
   if (service.url !== undefined) return service.url;
   const bareIpv6 = service.host.includes(":") && !service.host.startsWith("[");
@@ -31,10 +30,7 @@ const shellQuoted = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
 const SHELL_SPECIAL = /[\\"`$!]/;
 const NAME_CHARACTER = /^[A-Za-z0-9_]/;
 
-/**
- * One header as a shell word. A variable stays a reference (`$API_TOKEN`), for the shell to fill
- * in: its value is never written in a command.
- */
+// A variable stays a reference (`$API_TOKEN`): its value is never written in a command.
 function shellHeader(name: string, template: string): string {
   const line = `${name}: ${template}`;
   const parts = templateParts(line);
@@ -54,12 +50,7 @@ function shellHeader(name: string, template: string): string {
   return `"${word.join("")}"`;
 }
 
-/**
- * Returns the curl command that sends what the check sends: same URL, same headers, same time
- * limit, redirects followed unless a 3xx is expected. With headers, `-L` is left out: curl would
- * send them to whatever host a redirect names. It prints the status line and the headers before
- * the body.
- */
+// No `-L` with headers: curl would send them to whatever host a redirect names.
 export function curlCommand(service: Service): string {
   const headers = Object.entries(service.headers ?? {});
   const follow = expectsRedirect(service.expect) || headers.length > 0 ? "" : " -L";
@@ -77,10 +68,7 @@ function expectsRedirect(expect: Service["expect"]): boolean {
   return [expect ?? []].flat().some((status) => status >= 300 && status < 400);
 }
 
-/**
- * Says which variables the curl command expects from the shell that runs it and does not find in
- * `env`; undefined when it needs none. probe may get them from `local.yml`, a shell does not.
- */
+// probe may get them from `local.yml`, a shell does not.
 export function curlNote(service: Service, env: NodeJS.ProcessEnv): string | undefined {
   const absent = serviceVariables(service.headers).filter((name) => !env[name]);
   if (absent.length === 0) return undefined;
@@ -89,11 +77,7 @@ export function curlNote(service: Service, env: NodeJS.ProcessEnv): string | und
 
 const isRedirect = (status: number) => status >= 300 && status < 400;
 
-/**
- * `fetch` for a service that sends headers. A redirect is followed by hand, and only on the same
- * origin: `fetch` would carry the headers to any host a redirect names. `leftFor` is the origin a
- * redirect asked to go to instead; the response is then that redirect.
- */
+// Redirects are followed by hand, same origin only: `fetch` would carry the headers to any host.
 async function fetchWithHeaders(
   target: string,
   init: { headers: Headers; signal: AbortSignal },
@@ -119,7 +103,6 @@ const maskedDetail = (detail: ResponseDetail, secrets: readonly string[]): Respo
   ...(detail.body === undefined ? {} : { body: masked(detail.body, secrets) }),
 });
 
-/** One request to the service: its result, and whether it failed for an issuer nobody vouches for. */
 async function request(
   name: string,
   service: Service,
@@ -197,10 +180,6 @@ async function request(
   }
 }
 
-/**
- * Builds the http checker. A certificate refused for its issuer gets a second request once the
- * system store is trusted too; `trust` says how, so a test can stand in for the store.
- */
 export function createHttpChecker(trust: SystemTrust = systemTrust): Checker {
   return {
     type: "http",

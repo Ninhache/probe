@@ -11,7 +11,6 @@ import { zshScript } from "../src/completion/zsh";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
-/** The system bash: 3.2 on macOS, the oldest one the script must run on. */
 const BASH = "/bin/bash";
 const CONFIG = "schemaVersion: 1\nservices:\n  api: { port: 3000 }\n  front: { port: 5173 }\n";
 
@@ -61,7 +60,6 @@ async function project(config = CONFIG): Promise<string> {
   return root;
 }
 
-/** A PATH whose `probe` is the built CLI, as the scripts call it by that name. */
 async function pathWithProbe(): Promise<string> {
   const bin = await tempDir();
   const shim = join(bin, "probe");
@@ -70,7 +68,6 @@ async function pathWithProbe(): Promise<string> {
   return `${bin}${delimiter}${process.env.PATH}`;
 }
 
-/** What bash offers for the words typed so far, the last one being the word under the cursor. */
 async function bashCompletions(cwd: string, ...words: string[]): Promise<string[]> {
   const script = [
     'eval "$(probe completion bash)"',
@@ -91,7 +88,6 @@ const ZSH_STUBS = [
   `_describe() { print -l -- "\${(@P)2}" }`,
 ];
 
-/** What the zsh function hands to zsh for the words typed so far. */
 async function zshCompletions(cwd: string, ...words: string[]): Promise<string[]> {
   const script = [
     ...ZSH_STUBS,
@@ -322,7 +318,6 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
   });
 });
 
-/** What fish offers for a command line, descriptions left out. */
 async function fishCompletions(cwd: string, line: string): Promise<string[]> {
   const script = `probe completion fish | source; complete -C '${line}'`;
   const run = await exec(FISH as string, ["--no-config", "-c", script], cwd, {

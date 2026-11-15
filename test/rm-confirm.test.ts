@@ -6,7 +6,6 @@ import { CTRL_C, ENTER, hasPython, onTerminal as runOnTerminal } from "./termina
 const CONFIG = "schemaVersion: 1\nservices:\n  api: { port: 3000 }\n  db: { port: 5432 }\n";
 const QUESTION = "Remove api?";
 
-/** Runs `probe <args>` in a project on a pseudo-terminal, typing `keys` when the question shows. */
 async function onTerminal(args: string[], keys: string) {
   const { root, config } = await tempProject(CONFIG);
   const run = await runOnTerminal(root, args, [[QUESTION, keys]]);

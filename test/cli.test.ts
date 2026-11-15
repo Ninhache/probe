@@ -42,7 +42,6 @@ function exec(
 
 const probe = (cwd: string, ...args: string[]) => exec(process.execPath, [CLI, ...args], cwd);
 
-/** Delay of the `/slow` route: longer than the short timeouts below, far below the default. */
 const SLOW_MS = 500;
 
 let server: Server;
@@ -79,7 +78,6 @@ async function project(): Promise<string> {
   return root;
 }
 
-/** A project that opted in to the Makefile block. */
 async function makefileProject(): Promise<string> {
   const root = await project();
   expect((await probe(root, "sync")).code).toBe(0);
@@ -584,7 +582,6 @@ describe("probe wait", () => {
 });
 
 describe("probe open / curl", () => {
-  /** A directory to use as PATH, holding only a fake opener that writes its argument to `opened`. */
   async function fakeOpener(): Promise<{ bin: string; opened: string }> {
     const bin = await tempDir();
     const opened = join(bin, "opened");

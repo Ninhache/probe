@@ -16,10 +16,7 @@ function parsedUrl(value: string): URL | undefined {
   return URL.canParse(value) ? new URL(value) : undefined;
 }
 
-/**
- * Why a URL cannot be the address of a service, in a few words that follow "expects"; undefined
- * when it can. The URL itself is never repeated: it may hold what must not be shown.
- */
+// The URL is never repeated: it may hold what must not be shown.
 export function urlProblem(value: string): string | undefined {
   const url = parsedUrl(value);
   if (!url || !(url.protocol in DEFAULT_PORTS) || url.hostname === "") {
@@ -30,7 +27,6 @@ export function urlProblem(value: string): string | undefined {
   return undefined;
 }
 
-/** A service as the checks see it; `url` is set when the config declares it by one. */
 export interface Service {
   url?: string;
   host: string;
@@ -38,14 +34,10 @@ export interface Service {
   path: string;
   expect?: number | number[];
   timeout?: number;
-  /** Sent with the request; a value may refer to variables as `${NAME}`. */
   headers?: Record<string, string>;
 }
 
-/**
- * The headers of a service. A YAML number or boolean is read as its text. What is wrong is said
- * without the value: it may be a secret pasted where a reference is expected.
- */
+// What is wrong is said without the value: it may be a secret pasted where a reference is expected.
 const headersSchema = z
   .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
   .transform((headers, ctx) => {
@@ -70,9 +62,7 @@ const headersSchema = z
     return texts;
   });
 
-/** The keys a service may have in the file, before they are read as a whole. */
 export const serviceObjectV1 = z.strictObject({
-  /** The whole address, http or https, instead of `host`, `port` and `path`. */
   url: z
     .string()
     .refine((value) => urlProblem(value) === undefined, {
@@ -83,21 +73,14 @@ export const serviceObjectV1 = z.strictObject({
   port: z.number().int().min(1).max(65535).optional(),
   path: z.string().startsWith("/").optional(),
   expect: z.union([statusCode, z.array(statusCode).min(1)]).optional(),
-  /** Seconds given to this service to answer, instead of the default. */
   timeout: z.number().positive().max(MAX_TIMEOUT_SECONDS).optional(),
-  /** Headers sent with the request, e.g. `Authorization: Bearer ${API_TOKEN}`. */
   headers: headersSchema.optional(),
 });
 
-/** What each key of a service accepts, to check one typed value at a time. */
 export const serviceShapeV1 = serviceObjectV1.shape;
 
 const ADDRESS_KEYS = ["host", "port", "path"] as const;
 
-/**
- * A service is found by `port` (with `host` and `path`) or by `url`, never both. Read from the
- * file, it always has its host, port and path: those of the URL when it is declared by one.
- */
 export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service => {
   const { url, host, port, path, ...rest } = service;
   if (url === undefined) {

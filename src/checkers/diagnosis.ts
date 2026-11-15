@@ -2,7 +2,6 @@ import { serviceVariables } from "../config/headers";
 import type { Service } from "../config/schema";
 import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
 
-/** Why a check failed, and what to try next when the cause is a known one. */
 export interface Diagnosis {
   error: string;
   hint?: string;
@@ -11,7 +10,6 @@ export interface Diagnosis {
 const CONFIG = `${PROBE_DIR}/${CONFIG_FILE}`;
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
-/** The certificate is fine in itself; nothing trusted here signed it. */
 const UNKNOWN_ISSUER_CODES = [
   "CERT_UNTRUSTED",
   "DEPTH_ZERO_SELF_SIGNED_CERT",
@@ -28,19 +26,16 @@ const CERTIFICATE_CODES = new Set([
   "ERR_TLS_CERT_ALTNAME_INVALID",
 ]);
 
-/** The code of the socket error under a failed fetch, when it has one. */
 function failureCode(error: unknown): string | undefined {
   // fetch wraps the socket error in `cause`; with both IPv4 and IPv6 tried it is an AggregateError.
   const cause = (error as { cause?: { code?: string; errors?: { code?: string }[] } })?.cause;
   return cause?.code ?? cause?.errors?.[0]?.code;
 }
 
-/** Whether a check failed because nothing trusted here signed the certificate. */
 export function hasUnknownIssuer(error: unknown): boolean {
   return UNKNOWN_ISSUER_CODES.includes(failureCode(error) ?? "");
 }
 
-/** Where to look in the config: a service declared by `url` has no `host` or `path` key. */
 const check = (service: Service, key: "host" | "path") =>
   `check \`${service.url === undefined ? key : "url"}\` in ${CONFIG}`;
 
@@ -50,10 +45,6 @@ const isHttps = (service: Service) =>
 // Over http, a certificate can only come from a redirect to https.
 const redirectLead = (service: Service) => (isHttps(service) ? "" : "a redirect led to https: ");
 
-/**
- * What to do about a certificate nothing trusted here signed. `systemStore` says whether this
- * Node can trust the system store: on one that cannot, only the file of the CA helps.
- */
 export function unknownIssuerHint(service: Service, systemStore: boolean): string {
   const remedy = systemStore
     ? "add the CA to the system store, or give its file in NODE_EXTRA_CA_CERTS"
@@ -66,7 +57,6 @@ const hostNotFound = (service: Service): Diagnosis => ({
   hint: `"${service.host}" does not resolve: ${check(service, "host")}`,
 });
 
-/** Explains a certificate that was refused: the reason first, the code only when it adds to it. */
 function diagnoseCertificate(code: string, service: Service): Diagnosis {
   const lead = redirectLead(service);
   if (code === "CERT_HAS_EXPIRED") {
@@ -90,7 +80,6 @@ function diagnoseCertificate(code: string, service: Service): Diagnosis {
   };
 }
 
-/** Start of the codes OpenSSL gives when the other side does not speak TLS. */
 const TLS_PROTOCOL_PREFIX = "ERR_SSL_";
 
 const NETWORK: Record<string, (service: Service) => Diagnosis> = {
@@ -110,10 +99,6 @@ const NETWORK: Record<string, (service: Service) => Diagnosis> = {
   }),
 };
 
-/**
- * Explains an error thrown by `fetch`.
- * A code that is not known is returned as is, without a hint.
- */
 export function diagnoseFailure(error: unknown, service: Service, timeoutMs: number): Diagnosis {
   if (error instanceof Error && error.name === "TimeoutError") {
     return {
@@ -139,7 +124,6 @@ function describeExpected(expect: Service["expect"]): string {
   return Array.isArray(expect) ? expect.join(" or ") : String(expect);
 }
 
-/** Explains an answer whose status is not the expected one. */
 export function diagnoseStatus(service: Service, status: number): Diagnosis {
   const error = `expected ${describeExpected(service.expect)}, got ${status}`;
   if (status >= 500) return { error, hint: "the service answers with an error: look at its logs" };
@@ -158,7 +142,6 @@ export function diagnoseStatus(service: Service, status: number): Diagnosis {
   return { error, hint: `the service answers: check \`${address}\` and \`expect\` in ${CONFIG}` };
 }
 
-/** What to look at when the headers of a service did not do: its variables, else the headers. */
 function sentBy(service: Service): string {
   const variables = serviceVariables(service.headers);
   return variables.length > 0 ? variables.join(", ") : `\`headers\` in ${CONFIG}`;
@@ -166,7 +149,6 @@ function sentBy(service: Service): string {
 
 const setCommand = (name: string) => `probe var ${name}`;
 
-/** Explains headers that refer to variables nothing sets: no request is sent. */
 export function diagnoseUnset(names: string[], localUnreadable: boolean): Diagnosis {
   const [first = ""] = names;
   const error = `${names.join(", ")} ${names.length > 1 ? "are" : "is"} not set`;
@@ -176,7 +158,6 @@ export function diagnoseUnset(names: string[], localUnreadable: boolean): Diagno
   return { error, hint: `set it for this machine: ${setCommand(first)} (or export it)` };
 }
 
-/** Explains variables whose value cannot go in a header, without showing it. */
 export function diagnoseUnsendable(names: string[]): Diagnosis {
   const [first = ""] = names;
   return {
@@ -185,7 +166,6 @@ export function diagnoseUnsendable(names: string[]): Diagnosis {
   };
 }
 
-/** Explains a redirect to another origin, where the headers of the service are not sent. */
 export function diagnoseForeignRedirect(service: Service, origin: string): Diagnosis {
   const error = `redirected to ${origin}`;
   const bare = (host: string) => host.replace(/^www\./, "");
@@ -204,7 +184,6 @@ export function diagnoseForeignRedirect(service: Service, origin: string): Diagn
 
 export const TOO_MANY_REDIRECTS: Diagnosis = { error: "too many redirects" };
 
-/** Said when `fetch` refuses the headers themselves: its own message could repeat a value. */
 export const HEADERS_REFUSED: Diagnosis = {
   error: "headers cannot be sent",
   hint: `check \`headers\` in ${CONFIG}`,

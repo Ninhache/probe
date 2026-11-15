@@ -1,7 +1,5 @@
-/** Where the keys go: the list, a panel under it, the filter or the palette being typed, the form, the question, the help. */
 export type Screen = "list" | "panel" | "filter" | "palette" | "form" | "confirm" | "help";
 
-/** What a key of the list does, and what the palette can run. */
 export type Command =
   | "check"
   | "detail"
@@ -20,19 +18,13 @@ type Section = "List" | "Panels" | "Filter" | "Add and edit" | "Outside a text f
 interface Binding {
   screens: readonly Screen[];
   keys: string;
-  /** How to write the keys on a terminal without unicode. */
   ascii?: string;
-  /** One word, for the bar. */
   action: string;
-  /** A few words, for the help; unset: the key is not in the help. */
   help?: string;
-  /** Where the help lists it. */
   section?: Section;
   /** Rank at which the bar gives it up when it is too wide, lowest first; unset: always shown. */
   drop?: number;
-  /** In the help only: the bar keeps to the keys one needs first. */
   barless?: true;
-  /** What the key runs: set, the palette lists it. */
   command?: Command;
 }
 
@@ -42,10 +34,6 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
   ...binding,
 });
 
-/**
- * Every key of the dashboard. The bar and the help are drawn from this table, in this order:
- * a new key is one entry here and one branch where keys are handled.
- */
 const BINDINGS: readonly Binding[] = [
   list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 2 }),
   list({ keys: "r", action: "check", help: "Check now", barless: true, command: "check" }),
@@ -155,10 +143,6 @@ const SECTIONS: readonly Section[] = [
 const written = (binding: Binding, unicode: boolean) =>
   unicode ? binding.keys : (binding.ascii ?? binding.keys);
 
-/**
- * The keys of a screen on one line. Too wide for `columns`, it gives up the keys one guesses
- * (moving first) and keeps those that lead out: help, close, quit.
- */
 export function helpBar(screen: Screen, unicode: boolean, columns: number): string {
   const shown = BINDINGS.filter(({ screens, barless }) => screens.includes(screen) && !barless);
   const line = () =>
@@ -174,7 +158,6 @@ export function helpBar(screen: Screen, unicode: boolean, columns: number): stri
   return line();
 }
 
-/** The command of a key pressed on the list, if it has one. */
 export function keyCommand(input: string, enter: boolean): Command | undefined {
   return BINDINGS.find(({ keys, command }) => command && (enter ? keys === "↵" : keys === input))
     ?.command;
@@ -182,13 +165,10 @@ export function keyCommand(input: string, enter: boolean): Command | undefined {
 
 export interface PaletteEntry {
   command: Command;
-  /** What it does, as the help says it. */
   label: string;
-  /** The key that runs it without the palette. */
   keys: string;
 }
 
-/** The commands the palette offers, in the order of the help: those that say `query`, all without one. */
 export function paletteEntries(unicode: boolean, query = ""): PaletteEntry[] {
   const wanted = query.trim().toLowerCase();
   return BINDINGS.flatMap((binding) => {
@@ -205,10 +185,8 @@ export interface HelpLine {
   heading: boolean;
 }
 
-/** The space between the two columns of the help. */
 const HELP_GAP = 3;
 
-/** The keys of some sections, each under its title. */
 function sectionLines(sections: readonly Section[], unicode: boolean): HelpLine[] {
   const described = BINDINGS.filter(({ help }) => help !== undefined);
   const width = Math.max(...described.map((binding) => written(binding, unicode).length));
@@ -224,15 +202,10 @@ function sectionLines(sections: readonly Section[], unicode: boolean): HelpLine[
   ]);
 }
 
-/** Every key, by where it works, for the help screen. */
 export function helpLines(unicode: boolean): HelpLine[] {
   return sectionLines(SECTIONS, unicode);
 }
 
-/**
- * The help as the columns to draw side by side: the keys of the list on the left, the others on
- * the right, so it fits the height of a terminal. One column when `columns` has no room for two.
- */
 export function helpColumns(unicode: boolean, columns: number): HelpLine[][] {
   const [first, ...others] = SECTIONS;
   const sides = [sectionLines([first as Section], unicode), sectionLines(others, unicode)];

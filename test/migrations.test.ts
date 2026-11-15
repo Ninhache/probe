@@ -16,7 +16,6 @@ import { tempProject } from "./helpers";
 const fixture = (name: string) =>
   readFile(join(import.meta.dirname, "fixtures", "migrations", name), "utf8");
 
-// A pretend V2: every service gains `type: http`.
 const configSchemaV2 = z.strictObject({
   schemaVersion: z.literal(2),
   services: z.record(z.string(), serviceObjectV1.extend({ type: z.enum(["http", "tcp"]) })),
