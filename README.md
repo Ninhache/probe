@@ -121,7 +121,7 @@ of macOS.
 | `e`             | Edit the selected service                      |
 | `d`             | Remove the selected service, after a question  |
 | `:`             | Find a command by what it does; `Enter` runs   |
-| `o`             | Options: interval and timeout                  |
+| `o`             | Options: interval, timeout and notifications   |
 | `?`             | Every key; `?` or `Esc` closes                 |
 | `q`             | Quit                                           |
 
@@ -143,10 +143,14 @@ is replaced by `(hidden)`. None of it is written anywhere, and `probe check --js
 The panels save what you change in `.probe/local.yml`, for your machine only:
 
 ```yaml
-dashboard: { interval: 5, timeout: 3 }
+dashboard: { interval: 5, timeout: 3, notify: true }
 services:
   db: { skip: true }
 ```
+
+With `notify` on, a desktop notification says when a service goes down or comes back: one per round of checks
+that saw a change, none when the dashboard starts. It names the services and nothing else, and needs
+`notify-send` on Linux (`osascript`, already there, on macOS); without it the dashboard says so once and goes on.
 
 A skipped service is left out of `probe check`, `probe wait` and the dashboard, and shown as `skipped`. Name it
 (`probe check db`) and it is checked anyway.

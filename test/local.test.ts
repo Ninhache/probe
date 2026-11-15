@@ -111,6 +111,47 @@ describe("dashboard preferences in local.yml", () => {
   });
 });
 
+describe("desktop notifications in local.yml", () => {
+  it("writes the key when they are turned on and removes it when they are turned off", async () => {
+    const paths = await tempProject(CONFIG);
+
+    expect(await writeDashboardPreferences(paths, { interval: 5, notify: true })).toBe(true);
+    expect(await readDashboardPreferences(paths)).toEqual({ interval: 5, notify: true });
+    expect(await readFile(paths.local, "utf8")).toBe("dashboard:\n  interval: 5\n  notify: true\n");
+
+    expect(await writeDashboardPreferences(paths, { notify: false })).toBe(true);
+    expect(await readDashboardPreferences(paths)).toEqual({ interval: 5 });
+    expect(await readFile(paths.local, "utf8")).toBe("dashboard:\n  interval: 5\n");
+  });
+
+  it("leaves no empty dashboard key when they were all it held", async () => {
+    const paths = await tempProject(CONFIG);
+
+    await writeDashboardPreferences(paths, { notify: true });
+    await writeDashboardPreferences(paths, { notify: false });
+
+    expect(await readFile(paths.local, "utf8")).not.toContain("dashboard");
+  });
+
+  it.each(["yes", "1", "false", '"true"'])("stays off when the file holds %s", async (value) => {
+    const paths = await tempProject(CONFIG);
+    await writeFile(paths.local, `dashboard:\n  notify: ${value}\n`);
+
+    expect(await readDashboardPreferences(paths)).toEqual({});
+  });
+
+  it("starts with them on only when saved, and saves a change either way", () => {
+    const off = initialDashboardSettings(undefined, {});
+    const on = initialDashboardSettings(undefined, { notify: true });
+
+    expect(off.notify).toBeUndefined();
+    expect(on.notify).toBe(true);
+    expect(changedPreferences(off, { ...off, notify: true })).toEqual({ notify: true });
+    expect(changedPreferences(on, { ...on, notify: false })).toEqual({ notify: false });
+    expect(changedPreferences(off, { ...off, notify: false })).toEqual({});
+  });
+});
+
 describe("dashboard settings at start", () => {
   it.each([
     ["the defaults with nothing saved", undefined, {}, { intervalMs: 2_000, timeoutMs: 3_000 }],

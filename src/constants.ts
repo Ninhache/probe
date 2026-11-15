@@ -56,3 +56,6 @@ export const DETECT_PORTS = [3000, 3001, 4200, 4321, 5173, 8000, 8080];
 export const DETECT_PORTS_ENV = "PROBE_DETECT_PORTS";
 // A local server answers in a few ms: a short limit keeps `init` and `add` instant.
 export const DETECT_TIMEOUT_MS = 300;
+
+/** How long the tool that shows a desktop notification gets to answer. */
+export const NOTIFY_WAIT_MS = 5_000;

@@ -15,10 +15,13 @@ import type { ProbePaths } from "./discovery";
 export interface DashboardPreferences {
   interval?: number;
   timeout?: number;
+  /** Desktop notifications; off unless `true`. */
+  notify?: boolean;
 }
 
 const SECTION = "dashboard";
 const KEYS = ["interval", "timeout"] as const;
+const NOTIFY = "notify";
 const SERVICES = "services";
 const SKIP = "skip";
 
@@ -48,6 +51,7 @@ export async function readDashboardPreferences(paths: ProbePaths): Promise<Dashb
     const value = doc.getIn([SECTION, key]);
     if (isDelay(value)) preferences[key] = value;
   }
+  if (doc.getIn([SECTION, NOTIFY]) === true) preferences.notify = true;
   return preferences;
 }
 
@@ -62,6 +66,7 @@ export function initialDashboardSettings(
   return {
     intervalMs: askedIntervalMs ?? (saved.interval ?? DASHBOARD_INTERVAL_SECONDS) * 1000,
     timeoutMs: (saved.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
+    ...(saved.notify ? { notify: true } : {}),
   };
 }
 
@@ -76,6 +81,7 @@ export function changedPreferences(
   const changed: DashboardPreferences = {};
   if (next.intervalMs !== previous.intervalMs) changed.interval = next.intervalMs / 1000;
   if (next.timeoutMs !== previous.timeoutMs) changed.timeout = next.timeoutMs / 1000;
+  if (Boolean(next.notify) !== Boolean(previous.notify)) changed.notify = Boolean(next.notify);
   return changed;
 }
 
@@ -118,7 +124,8 @@ async function editLocal(paths: ProbePaths, edit: LocalEdit): Promise<boolean> {
 
 /**
  * Saves the given dashboard settings in `local.yml` (see `editLocal` for what is kept and when
- * nothing is written). Returns false when the file or its `dashboard` key cannot be edited safely.
+ * nothing is written). Notifications turned off leave no key: off is the default. Returns false
+ * when the file or its `dashboard` key cannot be edited safely.
  */
 export function writeDashboardPreferences(
   paths: ProbePaths,
@@ -129,6 +136,11 @@ export function writeDashboardPreferences(
     if (section !== undefined && !isMap(section)) return false;
     for (const key of KEYS) {
       if (preferences[key] !== undefined) doc.setIn([SECTION, key], preferences[key]);
+    }
+    if (preferences.notify) doc.setIn([SECTION, NOTIFY], true);
+    else if (preferences.notify === false && isMap(section)) {
+      section.delete(NOTIFY);
+      if (section.items.length === 0) doc.delete(SECTION);
     }
     return true;
   });

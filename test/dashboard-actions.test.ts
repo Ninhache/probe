@@ -16,7 +16,14 @@ function deps(works: boolean, over: Partial<ActionDeps> = {}) {
   };
   return {
     seen,
-    deps: { platform: "linux", env: {}, openUrl: act, copyText: act, ...over } as ActionDeps,
+    deps: {
+      platform: "linux",
+      env: {},
+      openUrl: act,
+      copyText: act,
+      notify: async (title: string, text: string) => act(`${title}: ${text}`),
+      ...over,
+    } as ActionDeps,
   };
 }
 
@@ -77,4 +84,25 @@ describe("serviceActions", () => {
 
     expect(seen[0]).toContain("--max-time 10 ");
   });
+
+  it("should show a notification titled probe and say nothing when it worked", async () => {
+    const { seen, deps: system } = deps(true);
+
+    expect(await serviceActions(() => config, system).onNotify("api is down")).toBeUndefined();
+    expect(seen).toEqual(["probe: api is down"]);
+  });
+
+  it.each([
+    ["linux", "notify-send"],
+    ["darwin", "osascript"],
+  ] as const)(
+    "should name the tool of %s when no notification could be shown",
+    async (platform, tool) => {
+      const { deps: system } = deps(false, { platform });
+
+      expect(await serviceActions(() => config, system).onNotify("api is down")).toBe(
+        `${tool} could not show a desktop notification`,
+      );
+    },
+  );
 });
