@@ -1,6 +1,6 @@
 import type { Service } from "../config/schema";
 import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
-import { diagnoseFailure, diagnoseStatus, hasUnknownIssuer } from "./diagnosis";
+import { diagnoseFailure, diagnoseStatus, hasUnknownIssuer, unknownIssuerHint } from "./diagnosis";
 import { describeResponse } from "./response";
 import { type SystemTrust, systemTrust } from "./system-ca";
 import type { CheckContext, Checker, CheckResult } from "./types";
@@ -78,10 +78,13 @@ export function createHttpChecker(trust: SystemTrust = systemTrust): Checker {
   return {
     type: "http",
     async check(name, service, context) {
-      const canHelp = !trust.tried;
+      const firstTry = !trust.tried;
       const first = await request(name, service, context);
-      if (!first.unknownIssuer || !canHelp || !(await trust.load())) return first.result;
-      return (await request(name, service, context)).result;
+      if (!first.unknownIssuer) return first.result;
+      if (!(await trust.load())) {
+        return { ...first.result, hint: unknownIssuerHint(service, false) };
+      }
+      return firstTry ? (await request(name, service, context)).result : first.result;
     },
   };
 }

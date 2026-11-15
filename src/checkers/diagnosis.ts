@@ -42,7 +42,22 @@ export function hasUnknownIssuer(error: unknown): boolean {
 const check = (service: Service, key: "host" | "path") =>
   `check \`${service.url === undefined ? key : "url"}\` in ${CONFIG}`;
 
-const isHttps = (service: Service) => service.url?.startsWith("https:") === true;
+const isHttps = (service: Service) =>
+  service.url !== undefined && URL.parse(service.url)?.protocol === "https:";
+
+// Over http, a certificate can only come from a redirect to https.
+const redirectLead = (service: Service) => (isHttps(service) ? "" : "a redirect led to https: ");
+
+/**
+ * What to do about a certificate nothing trusted here signed. `systemStore` says whether this
+ * Node can trust the system store: on one that cannot, only the file of the CA helps.
+ */
+export function unknownIssuerHint(service: Service, systemStore: boolean): string {
+  const remedy = systemStore
+    ? "add the CA to the system store, or give its file in NODE_EXTRA_CA_CERTS"
+    : "give the file of the CA in NODE_EXTRA_CA_CERTS";
+  return `${redirectLead(service)}self-signed, or from a local CA: ${remedy}`;
+}
 
 const hostNotFound = (service: Service): Diagnosis => ({
   error: "host not found",
@@ -51,8 +66,7 @@ const hostNotFound = (service: Service): Diagnosis => ({
 
 /** Explains a certificate that was refused: the reason first, the code only when it adds to it. */
 function diagnoseCertificate(code: string, service: Service): Diagnosis {
-  // Over http, a certificate can only come from a redirect to https.
-  const lead = isHttps(service) ? "" : "a redirect led to https: ";
+  const lead = redirectLead(service);
   if (code === "CERT_HAS_EXPIRED") {
     return { error: "certificate expired", hint: `${lead}renew the certificate of the service` };
   }
@@ -70,7 +84,7 @@ function diagnoseCertificate(code: string, service: Service): Diagnosis {
   }
   return {
     error: `certificate not trusted (${code})`,
-    hint: `${lead}self-signed, or from a local CA: add the CA to the system store, or give its file in NODE_EXTRA_CA_CERTS`,
+    hint: unknownIssuerHint(service, true),
   };
 }
 

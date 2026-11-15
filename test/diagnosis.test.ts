@@ -83,6 +83,13 @@ describe("diagnoseFailure", () => {
     expect(diagnoseStatus(service, 404).hint).toContain("check `path` in");
   });
 
+  it("reads the scheme of a URL whatever its case", () => {
+    const shouting = serviceSchemaV1.parse({ url: "HTTPS://secure.test/health" });
+    const diagnosis = diagnoseFailure(fetchError({ code: "CERT_HAS_EXPIRED" }), shouting, 3000);
+
+    expect(diagnosis.hint).toBe("renew the certificate of the service");
+  });
+
   it("asks whether the port speaks https when an https service hangs up", () => {
     const diagnosis = diagnoseFailure(fetchError({ code: "ECONNRESET" }), secure, 3000);
 

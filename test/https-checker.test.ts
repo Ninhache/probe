@@ -105,6 +105,15 @@ describe.skipIf(!made)("http checker over https", () => {
     expect(result.hint).not.toContain("redirect");
   });
 
+  it("names only the file of the CA on a Node that cannot trust the system store", async () => {
+    const result = await check(local, createHttpChecker(createSystemTrust(async () => ({}))));
+
+    expect(result.error).toBe("certificate not trusted (DEPTH_ZERO_SELF_SIGNED_CERT)");
+    expect(result.hint).toBe(
+      "self-signed, or from a local CA: give the file of the CA in NODE_EXTRA_CA_CERTS",
+    );
+  });
+
   it("says so when the port speaks plain http", async () => {
     const { createServer: plain } = await import("node:http");
     const server = plain((_request, response) => response.writeHead(200).end());

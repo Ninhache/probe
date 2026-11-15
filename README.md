@@ -194,7 +194,8 @@ config with a `url` needs `probe` 0.12.0 or later: older versions refuse it. The
 service declared by `url`: change it in `config.yml`.
 
 Over `https` the certificate is checked, against what Node trusts and what the system trusts, so a local CA
-installed on the machine (`mkcert -install`) works as it does in a browser. A certificate that is expired, made
+installed on the machine (`mkcert -install`) works as it does in a browser (on a Node that can read the system
+store: the latest 22, 24 or later). A certificate that is expired, made
 for another host or not trusted makes the service down, with the reason. For a CA that is only in a file, set
 `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`.
 
