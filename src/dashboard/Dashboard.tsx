@@ -5,6 +5,7 @@ import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
+import { changeMessage, type KnownStates, stateChanges } from "./changes";
 import { detailLines, type LatencyHistory, recordLatencies } from "./detail";
 import { EMPTY_FORM, type FormValues, formFields, formProblem, formRows, formValues } from "./form";
 import {
@@ -52,6 +53,11 @@ export interface DashboardProps {
    * Resolves to the line that says what happened: the command itself when it could not be copied.
    */
   onCopy?: (name: string, timeout: number | undefined) => Promise<string>;
+  /**
+   * Shows a desktop notification, when the options turn them on and a service went down or came
+   * back. Resolves to a warning when it could not be shown.
+   */
+  onNotify?: (message: string) => Promise<string | undefined>;
   /** What a service has now, to fill the form that edits it. */
   serviceFields?: (name: string) => ServiceFields | undefined;
   /**
@@ -87,6 +93,8 @@ interface Palette {
 }
 
 const SERVICE_ROWS = ["Skip", "Timeout"];
+// The options: the delays of `SETTING_ROWS`, then the notifications.
+const NOTIFY_ROW = SETTING_ROWS.length;
 const TIMEOUT_ROW = SERVICE_ROWS.indexOf("Timeout");
 const NO_TIMEOUTS: ServiceTimeouts = {};
 
@@ -128,6 +136,7 @@ export function Dashboard({
   onTimeoutChange,
   onOpen,
   onCopy,
+  onNotify,
   serviceFields,
   onServiceWrite,
 }: DashboardProps) {
@@ -157,6 +166,22 @@ export function Dashboard({
     void saved?.then(setUnsaved);
   };
   const { intervalMs, timeoutMs } = settings;
+  // Kept across passes and settings: a change is told once, and turning the notifications on tells nothing old.
+  const known = useRef<KnownStates>(new Map());
+  const notifying = useRef(false);
+  notifying.current = settings.notify === true;
+  const warned = useRef(false);
+  const tell = (next: CheckResult[]) => {
+    const { known: now, changes } = stateChanges(known.current, next);
+    known.current = now;
+    if (!notifying.current || changes.length === 0) return;
+    // Not awaited: the checks go on whatever the desktop does.
+    void onNotify?.(changeMessage(changes)).then((warning) => {
+      if (warning === undefined || warned.current) return;
+      warned.current = true;
+      setNotice(warning);
+    });
+  };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a write to the config starts a new pass
   useEffect(() => {
@@ -167,6 +192,7 @@ export function Dashboard({
         const next = await check(signal, timeoutMs, skipped, timeouts);
         if (signal.aborted) return;
         setLatest(next);
+        tell(next);
         setHistory((before) => recordLatencies(before, next));
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, intervalMs);
@@ -243,10 +269,11 @@ export function Dashboard({
 
   const change = (rowIndex: number, direction: 1 | -1) => {
     const row = SETTING_ROWS[rowIndex];
-    if (!row) return;
-    const value = stepChoice(row.choicesMs, settings[row.key], direction);
-    if (value === settings[row.key]) return;
-    const next = { ...settings, [row.key]: value };
+    if (!row && rowIndex !== NOTIFY_ROW) return;
+    const next = row
+      ? { ...settings, [row.key]: stepChoice(row.choicesMs, settings[row.key], direction) }
+      : { ...settings, notify: !settings.notify };
+    if (row && next[row.key] === settings[row.key]) return;
     setSettings(next);
     track(onSettingsChange?.(next));
   };
@@ -347,7 +374,7 @@ export function Dashboard({
     } else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter))
       setPanel(null);
     else if (up || down) {
-      const lastRow = (panel.kind === "options" ? SETTING_ROWS : SERVICE_ROWS).length - 1;
+      const lastRow = panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length - 1;
       setPanel({ ...panel, row: Math.max(0, Math.min(lastRow, panel.row + (down ? 1 : -1))) });
     } else if (left || right) {
       if (panel.kind === "options") change(panel.row, right ? 1 : -1);
@@ -473,7 +500,10 @@ export function Dashboard({
           : text;
   const panelRows: [label: string, value: string][] =
     panel?.kind === "options"
-      ? SETTING_ROWS.map((row) => [row.label, seconds(settings[row.key])])
+      ? [
+          ...SETTING_ROWS.map((row): [string, string] => [row.label, seconds(settings[row.key])]),
+          ["Notify", settings.notify ? "on" : "off"],
+        ]
       : panel
         ? [
             ["Skip", skipped.has(panel.name) ? "yes" : "no"],

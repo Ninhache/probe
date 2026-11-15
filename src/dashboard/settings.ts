@@ -9,10 +9,12 @@ export interface DashboardSettings {
   intervalMs: number;
   /** Time given to each service to answer. */
   timeoutMs: number;
+  /** A desktop notification says when a service goes down or comes back; unset: off. */
+  notify?: boolean;
 }
 
 export interface SettingRow {
-  key: keyof DashboardSettings;
+  key: "intervalMs" | "timeoutMs";
   label: string;
   choicesMs: number[];
 }

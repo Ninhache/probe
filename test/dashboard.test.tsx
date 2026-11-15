@@ -76,13 +76,19 @@ function open(options: {
   onSkipChange?: DashboardProps["onSkipChange"];
   onOpen?: DashboardProps["onOpen"];
   onCopy?: DashboardProps["onCopy"];
+  notify?: boolean;
+  onNotify?: DashboardProps["onNotify"];
   serviceFields?: DashboardProps["serviceFields"];
   onServiceWrite?: DashboardProps["onServiceWrite"];
 }) {
   app = render(
     <Dashboard
       terminal={options.terminal ?? plain}
-      settings={{ intervalMs: options.intervalMs ?? 60_000, timeoutMs: 3_000 }}
+      settings={{
+        intervalMs: options.intervalMs ?? 60_000,
+        timeoutMs: 3_000,
+        ...(options.notify ? { notify: true } : {}),
+      }}
       check={options.check ?? (async () => [api, db])}
       skipped={options.skipped}
       timeouts={options.timeouts}
@@ -91,6 +97,7 @@ function open(options: {
       onSkipChange={options.onSkipChange}
       onOpen={options.onOpen}
       onCopy={options.onCopy}
+      onNotify={options.onNotify}
       serviceFields={options.serviceFields}
       onServiceWrite={options.onServiceWrite}
     />,
@@ -215,6 +222,7 @@ describe("dashboard", () => {
         "│ Options                    │",
         "│ › Interval  ‹ 60s ›        │",
         "│   Timeout   ‹ 3s ›         │",
+        "│   Notify    ‹ off ›        │",
         "└────────────────────────────┘",
         "↑↓ jk move · ←→ hl change · esc close · ? help · q quit",
       ].join("\n"),
@@ -1382,5 +1390,100 @@ describe("dashboard service changes", () => {
 
     expect(lastFrame()).not.toContain("Add a service");
     expect(lastFrame()).not.toContain("Remove");
+  });
+});
+
+describe("dashboard desktop notifications", () => {
+  /** A check where `api` is up or down pass after pass, then stays as in the last one. */
+  const flapping = (states: boolean[]): DashboardProps["check"] => {
+    let pass = 0;
+    return async () => {
+      const ok = states[Math.min(pass, states.length - 1)] ?? true;
+      pass += 1;
+      return [{ ...api, ok }, db];
+    };
+  };
+  const listener = (warning?: string) => {
+    const told: string[] = [];
+    const onNotify: DashboardProps["onNotify"] = async (message) => {
+      told.push(message);
+      return warning;
+    };
+    return { told, onNotify };
+  };
+
+  it("tells each change once, and nothing at start", async () => {
+    const { told, onNotify } = listener();
+    open({
+      intervalMs: 20,
+      notify: true,
+      onNotify,
+      check: flapping([true, true, false, false, false, true]),
+    });
+
+    await waitFor(() => expect(told).toEqual(["api is down", "api is back up"]));
+    await tick(150);
+    expect(told).toEqual(["api is down", "api is back up"]);
+  });
+
+  it("tells nothing while the option is off", async () => {
+    const { told, onNotify } = listener();
+    open({ intervalMs: 20, onNotify, check: flapping([true, false, true, false]) });
+
+    await tick(250);
+    expect(told).toEqual([]);
+  });
+
+  it("turns on from the options, saves it, and tells nothing that happened before", async () => {
+    const { told, onNotify } = listener();
+    const saved: DashboardSettings[] = [];
+    const { lastFrame, stdin } = open({
+      intervalMs: 20,
+      onNotify,
+      check: flapping([true, false]),
+      onSettingsChange: (next) => {
+        saved.push(next);
+        return undefined;
+      },
+    });
+    await shows(lastFrame, "0/2 up");
+
+    stdin.write("o");
+    await shows(lastFrame, "Options");
+    stdin.write("j");
+    await tick();
+    stdin.write("j");
+    await shows(lastFrame, "› Notify");
+    stdin.write("l");
+    await shows(lastFrame, "‹ on ›");
+
+    expect(saved).toEqual([{ intervalMs: 20, timeoutMs: 3_000, notify: true }]);
+    await tick(150);
+    expect(told).toEqual([]);
+  });
+
+  it("warns once when no notification can be shown, and keeps checking", async () => {
+    const warning = "notify-send could not show a desktop notification";
+    const { told, onNotify } = listener(warning);
+    let ok = true;
+    const { lastFrame, stdin } = open({
+      intervalMs: 20,
+      notify: true,
+      onNotify,
+      check: async () => [{ ...api, ok }, db],
+    });
+    await shows(lastFrame, "1/2 up");
+
+    ok = false;
+    await shows(lastFrame, warning);
+    expect(told).toEqual(["api is down"]);
+    stdin.write("j");
+    await hides(lastFrame, warning);
+
+    ok = true;
+    await waitFor(() => expect(told).toEqual(["api is down", "api is back up"]));
+    await shows(lastFrame, "1/2 up");
+    await tick(150);
+    expect(lastFrame()).not.toContain(warning);
   });
 });
