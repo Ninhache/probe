@@ -57,7 +57,6 @@ export interface DashboardProps {
   onCopy?: (name: string, timeout: number | undefined) => Promise<string>;
   onNotify?: (message: string) => Promise<string | undefined>;
   serviceFields?: (name: string) => ServiceFields | string | undefined;
-  /** `secrets`: variable name to value, kept on this machine once the service is written. */
   onServiceWrite?: (write: ServiceWrite, secrets?: Secrets) => Promise<ServiceWriteOutcome>;
   variables?: VariableTools;
   onVariableWrite?: (name: string, value: string) => Saved;
@@ -84,7 +83,6 @@ interface Form {
   secrets?: Secrets;
 }
 
-// `variable` is unset while a name is being looked for.
 type SecretStep = FormSecret & { kind: "secret"; form: Form; variable?: string; problem?: string };
 
 type Dialog =

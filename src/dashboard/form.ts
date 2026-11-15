@@ -22,7 +22,6 @@ import {
 export type FieldKey = "name" | "port" | "host" | "path" | "expect";
 
 export type FormValues = Readonly<Record<FieldKey, string>> & {
-  /** One `Name: value` per header, as typed: an empty line is a header to drop. */
   readonly headers: readonly string[];
 };
 
@@ -105,7 +104,6 @@ export function withHeaderLine(values: FormValues, index: number, line: string):
   return { ...values, headers };
 }
 
-/** The first header whose value is a secret typed in clear: it must become a variable. */
 export function formSecret(values: FormValues): FormSecret | undefined {
   for (const { line, index } of typedHeaders(values)) {
     const [header, value] = parseHeaderLine(line) ?? [];
