@@ -9,8 +9,14 @@ import {
 } from "../config/headers";
 import { loadVariables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
-import { urlProblem } from "../config/schema";
-import { expectProblem, nameProblem, pathProblem, portProblem } from "../config/service-input";
+import { DEFAULT_METHOD, METHODS, type Method, urlProblem } from "../config/schema";
+import {
+  expectProblem,
+  methodProblem,
+  nameProblem,
+  pathProblem,
+  portProblem,
+} from "../config/service-input";
 import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
 import { ask } from "../ui/prompt";
@@ -169,6 +175,11 @@ export default defineCommand({
       type: "string",
       description: `Seconds to wait for this service (default: ${DEFAULT_TIMEOUT_SECONDS})`,
     },
+    method: {
+      type: "string",
+      alias: "X",
+      description: "Method of the request, sent without a body, e.g. POST (default: GET)",
+    },
     header: {
       type: "string",
       alias: "H",
@@ -190,6 +201,13 @@ export default defineCommand({
     if (args.timeout !== undefined) {
       secondsToMs("--timeout", String(args.timeout));
       service.timeout = Number(args.timeout);
+    }
+    if (args.method !== undefined) {
+      if (methodProblem(String(args.method))) {
+        throw new ProbeError("USAGE", `--method expects one of ${METHODS.join(", ")}.`);
+      }
+      const method = String(args.method).toUpperCase() as Method;
+      if (method !== DEFAULT_METHOD) service.method = method;
     }
     const headers = headersFrom(headerLines(rawArgs));
     // Never a service saved without a header that was asked for.

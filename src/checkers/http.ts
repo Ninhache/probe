@@ -1,5 +1,5 @@
 import { masked, resolveHeaders, serviceVariables, templateParts } from "../config/headers";
-import type { Service } from "../config/schema";
+import { DEFAULT_METHOD, type Service } from "../config/schema";
 import { DEFAULT_TIMEOUT_SECONDS, MAX_REDIRECTS } from "../constants";
 import {
   type Diagnosis,
@@ -50,13 +50,27 @@ function shellHeader(name: string, template: string): string {
   return `"${word.join("")}"`;
 }
 
+// `fetch` sends `Content-Length: 0` with these, curl does not: some servers answer 411 without it.
+const BODILESS = new Set(["POST", "PUT", "PATCH"]);
+
+// Any other method is sent once: a redirect is the answer, never a second POST or DELETE.
+export function followsRedirects(service: Service): boolean {
+  const method = service.method ?? DEFAULT_METHOD;
+  return !expectsRedirect(service.expect) && (method === "GET" || method === "HEAD");
+}
+
 // No `-L` with headers: curl would send them to whatever host a redirect names.
 export function curlCommand(service: Service): string {
   const headers = Object.entries(service.headers ?? {});
-  const follow = expectsRedirect(service.expect) || headers.length > 0 ? "" : " -L";
+  const method = service.method ?? DEFAULT_METHOD;
+  const follow = !followsRedirects(service) || headers.length > 0 ? "" : " -L";
   const seconds = service.timeout ?? DEFAULT_TIMEOUT_SECONDS;
+  // `-X HEAD` would wait for a body that never comes.
+  const shown = method === "HEAD" ? "-I" : "-i";
+  const verb = method === "GET" || method === "HEAD" ? "" : ` -X ${method}`;
+  const empty = BODILESS.has(method) ? " -H 'Content-Length: 0'" : "";
   const sent = headers.map(([name, value]) => ` -H ${shellHeader(name, value)}`).join("");
-  return `curl -i${follow} --max-time ${seconds}${sent} ${shellQuoted(targetUrl(service))}`;
+  return `curl ${shown}${follow}${verb} --max-time ${seconds}${empty}${sent} ${shellQuoted(targetUrl(service))}`;
 }
 
 function isExpected(expect: Service["expect"], status: number): boolean {
@@ -80,7 +94,7 @@ const isRedirect = (status: number) => status >= 300 && status < 400;
 // Redirects are followed by hand, same origin only: `fetch` would carry the headers to any host.
 async function fetchWithHeaders(
   target: string,
-  init: { headers: Headers; signal: AbortSignal },
+  init: { headers: Headers; signal: AbortSignal; method: string | undefined },
   follow: boolean,
 ): Promise<{ response: Response; leftFor?: string } | undefined> {
   let url = target;
@@ -135,12 +149,14 @@ async function request(
   const elapsed = () => Math.round(performance.now() - started);
   const timeout = AbortSignal.timeout(timeoutMs);
   const abort = signal ? AbortSignal.any([timeout, signal]) : timeout;
-  const follow = !expectsRedirect(service.expect);
+  const follow = followsRedirects(service);
+  const { method } = service;
   try {
     const answer = headers
-      ? await fetchWithHeaders(target, { headers, signal: abort }, follow)
+      ? await fetchWithHeaders(target, { headers, signal: abort, method }, follow)
       : {
           response: await fetch(target, {
+            method,
             signal: abort,
             // Following a redirect hides its status: an expected 3xx could never match.
             redirect: follow ? "follow" : "manual",

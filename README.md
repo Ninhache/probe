@@ -40,7 +40,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | Command                                                   | What it does                                                           |
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `probe init`                                              | Create `.probe/` and the `.gitignore` entries                          |
-| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` gives it its own timeout)         |
+| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` and `-X <method>` are its own)    |
 | `probe add <name> --url <url> [--expect]`                 | Add a service by its full URL, `http` or `https`                       |
 | `probe rm <name> [--yes]`                                 | Remove a service                                                       |
 | `probe ls`                                                | List services                                                          |
@@ -132,7 +132,7 @@ The bar at the bottom shows the keys you need first; `?` lists them all.
 `c` uses `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the command is shown instead,
 to copy by hand.
 
-`a` and `e` open a form: name, port, host, path, expected status, then one line per [header](#headers) as
+`a` and `e` open a form: name, port, host, path, expected status, method, then one line per [header](#headers) as
 `Name: value`, with an empty one at the end to add another. `↑` `↓` or `Tab` change field, `Enter` saves, `Esc`
 cancels, `Ctrl+U` empties the field: a header left empty is removed. A field left empty takes its default.
 
@@ -190,9 +190,10 @@ services:
 | --------- | ----------- | --------------------------------------- |
 | `port`    | required    | TCP port                                |
 | `host`    | `localhost` | Host name or IP                         |
-| `path`    | `/`         | Path requested with `GET`               |
+| `path`    | `/`         | Path requested                          |
 | `url`     | none        | Full URL, instead of the three above    |
 | `expect`  | any 2xx     | Expected status, or a list of statuses  |
+| `method`  | `GET`       | Method of the request, without a body   |
 | `timeout` | 3           | Seconds given to this service to answer |
 | `headers` | none        | Headers sent with the request           |
 
@@ -203,6 +204,17 @@ A service is found by `port` (with `host` and `path`, over `http`) or by `url`, 
 check `https`: `url: https://localhost:8443/health`. It takes no user or password: `config.yml` is shared. A
 config with a `url` needs `probe` 0.12.0 or later: older versions refuse it. The dashboard does not edit a
 service declared by `url`: change it in `config.yml`.
+
+`method` is one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`: `probe add hook -p 8080 -X POST`.
+The request never has a body.
+
+- Every check sends it again: the dashboard every 2 s by default, `probe wait` until the service is up. A
+  `POST` or a `DELETE` that changes something changes it at each pass: point it at a route that is safe to
+  repeat.
+- Only `GET` and `HEAD` follow redirects. Any other method is sent once: a `302` is the answer, add it to
+  `expect` if that is what the route gives.
+
+A config with a `method` needs `probe` 0.14.0 or later: older versions refuse it.
 
 Over `https` the certificate is checked, against what Node trusts and what the system trusts, so a local CA
 installed on the machine (`mkcert -install`) works as it does in a browser (on a Node that can read the system

@@ -28,11 +28,12 @@ export interface DashboardState {
   onVariableWrite?: (name: string, value: string) => Saved;
 }
 
-const pickFields = ({ host, port, path, expect, headers }: Service): ServiceFields => ({
+const pickFields = ({ host, port, path, expect, method, headers }: Service): ServiceFields => ({
   host,
   port,
   path,
   expect,
+  method,
   headers,
 });
 

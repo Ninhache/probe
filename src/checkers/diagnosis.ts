@@ -1,5 +1,5 @@
 import { serviceVariables } from "../config/headers";
-import type { Service } from "../config/schema";
+import { DEFAULT_METHOD, type Service } from "../config/schema";
 import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
 
 export interface Diagnosis {
@@ -139,6 +139,16 @@ export function diagnoseStatus(service: Service, status: number): Diagnosis {
     };
   }
   const address = service.url === undefined ? "path" : "url";
+  const method = service.method ?? DEFAULT_METHOD;
+  if (status === 405) {
+    return { error, hint: `the service refuses ${method} there: check \`method\` in ${CONFIG}` };
+  }
+  if (status >= 300 && status < 400 && method !== "GET" && method !== "HEAD") {
+    return {
+      error,
+      hint: `a ${method} is sent once, redirects are not followed: check \`${address}\` in ${CONFIG}`,
+    };
+  }
   return { error, hint: `the service answers: check \`${address}\` and \`expect\` in ${CONFIG}` };
 }
 

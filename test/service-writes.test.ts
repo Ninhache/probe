@@ -133,6 +133,36 @@ describe("writeService", () => {
     expect(await readFile(paths.config, "utf8")).not.toContain("path:");
   });
 
+  it("should write the method an edit gives, and drop the key when it goes back to GET", async () => {
+    const paths = await tempProject(CONFIG);
+
+    await writeService(paths, { kind: "edit", name: "api", fields: fields({ method: "POST" }) });
+    expect(await readFile(paths.config, "utf8")).toContain("method: POST");
+
+    await writeService(paths, { kind: "edit", name: "api", fields: fields({ method: "GET" }) });
+    expect(await readFile(paths.config, "utf8")).toBe(CONFIG);
+  });
+
+  it.each([
+    ["method: post", "POST"],
+    ["method: GET", undefined],
+    ["method: GET", "GET"],
+  ] as const)(
+    "should leave a hand-written `%s` as it is when the edit keeps the method",
+    async (written, method) => {
+      const config = CONFIG.replace("front: { port: 5173 }", `front: { port: 5173, ${written} }`);
+      const paths = await tempProject(config);
+
+      await writeService(paths, {
+        kind: "edit",
+        name: "front",
+        fields: { host: "localhost", port: 5174, path: "/", expect: undefined, method },
+      });
+
+      expect(await readFile(paths.config, "utf8")).toBe(config.replace("5173", "5174"));
+    },
+  );
+
   it("should write nothing when the service to edit is no longer there", async () => {
     const paths = await tempProject(CONFIG);
 

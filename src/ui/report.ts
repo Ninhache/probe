@@ -68,6 +68,7 @@ export function formatServices(
     name,
     url: targetUrl(service),
     notes:
+      (service.method === undefined ? "" : `${GAP}${service.method}`) +
       (service.expect === undefined ? "" : `${GAP}expect ${service.expect}`) +
       (service.timeout === undefined ? "" : `${GAP}timeout ${service.timeout}s`) +
       // Names only: a value may come from a secret.

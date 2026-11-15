@@ -21,7 +21,7 @@ describe.skipIf(!hasPython())("a secret typed in the dashboard", () => {
       [],
       [
         ["api", "e"],
-        ["Edit api", `${DOWN.repeat(4)}Authorization: Bearer ${SECRET}${ENTER}`],
+        ["Edit api", `${DOWN.repeat(5)}Authorization: Bearer ${SECRET}${ENTER}`],
         ["holds a secret", ""],
         ["API_TOKEN", ENTER],
         ["Saved api", ENTER],

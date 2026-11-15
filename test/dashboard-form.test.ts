@@ -15,8 +15,21 @@ const SECRET = "s3cr3t-value";
 
 describe("service form", () => {
   it("should ask for the name only when adding", () => {
-    expect(adding.map(({ key }) => key)).toEqual(["name", "port", "host", "path", "expect"]);
-    expect(formRows(false).map(({ key }) => key)).toEqual(["port", "host", "path", "expect"]);
+    expect(adding.map(({ key }) => key)).toEqual([
+      "name",
+      "port",
+      "host",
+      "path",
+      "expect",
+      "method",
+    ]);
+    expect(formRows(false).map(({ key }) => key)).toEqual([
+      "port",
+      "host",
+      "path",
+      "expect",
+      "method",
+    ]);
   });
 
   it("should read empty fields as the defaults", () => {
@@ -25,7 +38,21 @@ describe("service form", () => {
       host: "localhost",
       path: "/",
       expect: undefined,
+      method: undefined,
+      headers: undefined,
     });
+  });
+
+  it("should read the method in capitals, and refuse one that is not a known verb", () => {
+    const values = { ...EMPTY_FORM, name: "api", port: "3000", method: "post" };
+
+    expect(formFields(values).method).toBe("POST");
+    expect(formProblem(adding, values, [])).toBeUndefined();
+    expect(formProblem(adding, { ...values, method: "TRACE" }, [])).toEqual({
+      row: 5,
+      message: "One of GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+    });
+    expect(formValues({ ...formFields(values), method: "POST" }).method).toBe("POST");
   });
 
   it("should fill the form with what the service has and read it back unchanged", () => {
@@ -37,9 +64,10 @@ describe("service form", () => {
       host: "127.0.0.1",
       path: "/health",
       expect: "200,204",
+      method: "",
       headers: [],
     });
-    expect(formFields(formValues(fields))).toEqual(fields);
+    expect(formFields(formValues(fields))).toMatchObject(fields);
   });
 
   it("should write one line per header and read them back unchanged, in order", () => {

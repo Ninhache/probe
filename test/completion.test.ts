@@ -114,6 +114,7 @@ describe("completionSpec", () => {
       "--url",
       "--expect",
       "--timeout",
+      "--method",
       "--header",
       "--help",
     ]);
