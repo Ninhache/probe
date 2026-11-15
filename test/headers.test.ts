@@ -5,12 +5,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { diagnoseStatus } from "../src/checkers/diagnosis";
 import { curlCommand, curlNote, httpChecker } from "../src/checkers/http";
 import {
+  hiddenHeaderLine,
   isSensitiveHeader,
   MASK,
   masked,
   parseHeaderLine,
   resolveHeaders,
   serviceVariables,
+  splitSecret,
 } from "../src/config/headers";
 import { loadVariables, readLocalVariables, writeVariable } from "../src/config/local";
 import { formatIssues } from "../src/config/migrations";
@@ -117,6 +119,29 @@ describe("masked", () => {
     expect(masked("token=abcdef, short=abcd", ["abcd", "abcdef"])).toBe(
       `token=${MASK}, short=${MASK}`,
     );
+  });
+});
+
+describe("a secret typed in a header", () => {
+  it("sets apart a scheme of the list only, whatever the case", () => {
+    expect(splitSecret("Bearer abc")).toEqual({ scheme: "Bearer ", secret: "abc" });
+    expect(splitSecret("basic  abc")).toEqual({ scheme: "basic  ", secret: "abc" });
+    expect(splitSecret("Custom abc")).toEqual({ scheme: "", secret: "Custom abc" });
+    expect(splitSecret("Bearer")).toEqual({ scheme: "", secret: "Bearer" });
+  });
+
+  it("hides what follows the scheme, and nothing of an ordinary header", () => {
+    expect(hiddenHeaderLine("Authorization: Bearer abc", "*")).toBe("Authorization: Bearer ***");
+    expect(hiddenHeaderLine("X-Api-Key:abc", "*")).toBe("X-Api-Key:***");
+    expect(hiddenHeaderLine("Cookie: a b", "*")).toBe("Cookie: ***");
+    expect(hiddenHeaderLine("Accept: text/plain", "*")).toBe("Accept: text/plain");
+    expect(hiddenHeaderLine("Authoriz", "*")).toBe("Authoriz");
+  });
+
+  it("shows a reference as typed", () => {
+    const line = "Authorization: Bearer $" + "{API_TOKEN}";
+
+    expect(hiddenHeaderLine(line, "*")).toBe(line);
   });
 });
 

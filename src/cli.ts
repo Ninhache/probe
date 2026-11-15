@@ -11,7 +11,7 @@ import add, { guidedAdd } from "./commands/add";
 import check from "./commands/check";
 import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
-import init, { initProject } from "./commands/init";
+import init, { ignoreLocalFiles, initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import open from "./commands/open";
@@ -31,9 +31,12 @@ import {
   initialDashboardSettings,
   loadVariables,
   readDashboardPreferences,
+  readLocalVariables,
   readSkippedServices,
+  variableSource,
   writeDashboardPreferences,
   writeServiceSkip,
+  writeVariable,
 } from "./config/local";
 import {
   COMPLETE_COMMAND,
@@ -156,10 +159,22 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const local = `${PROBE_DIR}/${LOCAL_FILE}`;
   const saveLocal = (write: () => Promise<boolean>) =>
     saves.save(local, write, `${local} cannot be edited safely: fix or delete it`);
+  const keepVariable = async (name: string, value: string) => {
+    // Before the value is written: the file that holds it must never be committed.
+    await ignoreLocalFiles(paths.root);
+    return writeVariable(paths, name, value);
+  };
   await openDashboard(config, stdoutTerminal(), {
     settings,
     skipped: await readSkippedServices(paths),
     variables: () => loadVariables(paths),
+    variableSources: async (names) => {
+      const { values } = await readLocalVariables(paths);
+      return Object.fromEntries(
+        names.map((name) => [name, variableSource(name, values, process.env)]),
+      );
+    },
+    onVariableWrite: (name, value) => saveLocal(() => keepVariable(name, value)),
     onSettingsChange: (next) => {
       const changed = changedPreferences(settings, next);
       settings = next;
@@ -172,9 +187,9 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
         () => writeServiceTimeout(paths, name, seconds),
         `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
       ),
-    onServiceWrite: async (write) => {
+    onServiceWrite: async (write, secrets = {}) => {
       let written: ServiceWritten | null = null;
-      const failure = await saves.save(
+      let failure = await saves.save(
         `${PROBE_DIR}/${CONFIG_FILE}`,
         async () => {
           written = await writeService(paths, write);
@@ -184,6 +199,9 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
           ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
           : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
       );
+      // After the config: a service that was not written leaves no secret behind.
+      for (const [name, value] of written ? Object.entries(secrets) : [])
+        failure = await saveLocal(() => keepVariable(name, value));
       return { failure, ...(written as ServiceWritten | null) };
     },
   });

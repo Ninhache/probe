@@ -2,12 +2,27 @@ import { Box, Text, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "../checkers/types";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
+import { hiddenHeaderLine, variableValueProblem } from "../config/headers";
+import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
 import { changeMessage, type KnownStates, stateChanges } from "./changes";
 import { detailLines, type LatencyHistory, recordLatencies } from "./detail";
-import { EMPTY_FORM, type FormValues, formFields, formProblem, formRows, formValues } from "./form";
+import {
+  EMPTY_FORM,
+  type FormSecret,
+  type FormValues,
+  formFields,
+  formProblem,
+  formRows,
+  formSecret,
+  formValues,
+  HEADER_LABEL,
+  HEADER_PLACEHOLDER,
+  withHeaderLine,
+  withVariable,
+} from "./form";
 import {
   type Command,
   HELP_GAP,
@@ -21,6 +36,7 @@ import {
 import { type Keystroke, splitKeys, typedCharacter } from "./keys";
 import type { Saved } from "./saves";
 import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
+import type { VariableRow, VariableTools } from "./variables";
 
 export interface DashboardProps {
   terminal: Terminal;
@@ -40,8 +56,13 @@ export interface DashboardProps {
   onCopy?: (name: string, timeout: number | undefined) => Promise<string>;
   onNotify?: (message: string) => Promise<string | undefined>;
   serviceFields?: (name: string) => ServiceFields | string | undefined;
-  onServiceWrite?: (write: ServiceWrite) => Promise<ServiceWriteOutcome>;
+  /** `secrets`: variable name to value, kept on this machine once the service is written. */
+  onServiceWrite?: (write: ServiceWrite, secrets?: Secrets) => Promise<ServiceWriteOutcome>;
+  variables?: VariableTools;
+  onVariableWrite?: (name: string, value: string) => Saved;
 }
+
+export type Secrets = Readonly<Record<string, string>>;
 
 export interface ServiceWriteOutcome {
   saved: boolean;
@@ -53,9 +74,23 @@ export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
 
 type Panel = { kind: "options"; row: number } | { kind: "service"; name: string; row: number };
 
+interface Form {
+  kind: "form";
+  editing?: string;
+  row: number;
+  values: FormValues;
+  problem?: string;
+  secrets?: Secrets;
+}
+
+// `variable` is unset while a name is being looked for.
+type SecretStep = FormSecret & { kind: "secret"; form: Form; variable?: string; problem?: string };
+
 type Dialog =
   | { kind: "confirm"; name: string }
-  | { kind: "form"; editing?: string; row: number; values: FormValues; problem?: string };
+  | Form
+  | SecretStep
+  | { kind: "variable"; name: string; value: string; problem?: string };
 
 interface Palette {
   query: string;
@@ -64,8 +99,12 @@ interface Palette {
 
 const SERVICE_ROWS = ["Skip", "Timeout"];
 const NOTIFY_ROW = SETTING_ROWS.length;
+const SKIP_ROW = SERVICE_ROWS.indexOf("Skip");
 const TIMEOUT_ROW = SERVICE_ROWS.indexOf("Timeout");
 const NO_TIMEOUTS: ServiceTimeouts = {};
+const NO_VARIABLES: readonly VariableRow[] = [];
+const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
+const SOURCES = { environment: "set in the environment", local: `set in ${LOCAL_FILE}` };
 
 const MARKER_WIDTH = 2;
 const PANEL_WIDTH = 30;
@@ -99,6 +138,8 @@ export function Dashboard({
   onNotify,
   serviceFields,
   onServiceWrite,
+  variables,
+  onVariableWrite,
 }: DashboardProps) {
   const { exit } = useApp();
   const { columns, rows: windowRows } = useWindowSize();
@@ -118,6 +159,8 @@ export function Dashboard({
   const [help, setHelp] = useState(false);
   const [unsaved, setUnsaved] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [variableRows, setVariableRows] = useState(NO_VARIABLES);
+  const looking = useRef(false);
   const skipPause = useRef(() => {});
   // A change stays in effect for this run even when saving it failed: the failure is shown instead.
   const track = (saved: Saved | undefined) => {
@@ -166,17 +209,35 @@ export function Dashboard({
     return () => controller.abort();
   }, [check, intervalMs, timeoutMs, skipped, timeouts, writes]);
 
+  const detailedName = panel?.kind === "service" ? panel.name : undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each pass may find a variable set meanwhile
+  useEffect(() => {
+    if (detailedName === undefined || !variables) return setVariableRows(NO_VARIABLES);
+    let closed = false;
+    void variables.serviceVariables(detailedName).then((found) => {
+      if (!closed) setVariableRows(found);
+    });
+    return () => {
+      closed = true;
+    };
+  }, [detailedName, variables, latest]);
+
   const wanted = filter.toLowerCase();
   const shown = (latest ?? []).filter(({ name }) => name.toLowerCase().includes(wanted));
   const last = Math.max(0, shown.length - 1);
   const current = Math.min(selected, last);
 
-  const write = async (change: ServiceWrite, done: string) => {
-    const outcome = await onServiceWrite?.(change);
+  const write = async (change: ServiceWrite, done: string, secrets?: Secrets) => {
+    const outcome = await (secrets ? onServiceWrite?.(change, secrets) : onServiceWrite?.(change));
     if (!outcome) return;
     setUnsaved(outcome.failure);
     if (!outcome.saved) return;
-    setNotice(outcome.warning ? `${done}\n${outcome.warning}` : done);
+    const kept = Object.keys(secrets ?? {});
+    const told =
+      kept.length > 0 && outcome.failure === undefined
+        ? `${done}, ${kept.join(", ")} kept in ${LOCAL}`
+        : done;
+    setNotice(outcome.warning ? `${told}\n${outcome.warning}` : told);
     if (change.kind === "remove") {
       setLatest((results) => results?.filter(({ name }) => name !== change.name) ?? null);
       // A service added later under the same name starts without the timeout of this one.
@@ -185,30 +246,114 @@ export function Dashboard({
     setWrites((count) => count + 1);
   };
 
-  const typeInForm = (form: Dialog & { kind: "form" }, keystroke: Keystroke) => {
+  const submit = (form: Form) => {
+    const rows = formRows(form.editing === undefined);
+    const taken = (latest ?? []).map(({ name }) => name);
+    const problem = formProblem(rows, form.values, taken);
+    if (problem) return setDialog({ ...form, row: problem.row, problem: problem.message });
+    const service = form.editing ?? form.values.name;
+    const secret = formSecret(form.values);
+    if (secret) {
+      const row = rows.length + secret.index;
+      if (!variables) {
+        const message = `${secret.header} expects a reference, e.g. \${API_TOKEN}: config.yml is shared`;
+        return setDialog({ ...form, row, problem: message });
+      }
+      const step: SecretStep = { kind: "secret", form: { ...form, row }, ...secret };
+      setDialog(step);
+      looking.current = true;
+      const named = Object.keys(form.secrets ?? {});
+      return void variables.variableName(service, secret.header, named).then((variable) => {
+        looking.current = false;
+        setDialog({ ...step, variable });
+      });
+    }
+    setDialog(null);
+    const fields = formFields(form.values);
+    if (form.editing === undefined)
+      void write({ kind: "add", name: service, fields }, `Added ${service}`, form.secrets);
+    else void write({ kind: "edit", name: service, fields }, `Saved ${service}`, form.secrets);
+  };
+
+  const typeInForm = (form: Form, keystroke: Keystroke) => {
     const { key } = keystroke;
     const rows = formRows(form.editing === undefined);
     const field = rows[form.row]?.key;
+    const header = form.row - rows.length;
+    const lastRow = rows.length + form.values.headers.length;
     const typed = typedCharacter(keystroke);
-    const edit = (value: string) =>
-      field &&
-      setDialog({ ...form, values: { ...form.values, [field]: value }, problem: undefined });
+    const value = field ? form.values[field] : (form.values.headers[header] ?? "");
+    const edit = (next: string) =>
+      setDialog({
+        ...form,
+        values: field
+          ? { ...form.values, [field]: next }
+          : withHeaderLine(form.values, header, next),
+        problem: undefined,
+      });
     if (key === "escape") setDialog(null);
     else if (key === "up") setDialog({ ...form, row: Math.max(0, form.row - 1) });
-    else if (key === "down") setDialog({ ...form, row: Math.min(rows.length - 1, form.row + 1) });
-    else if (key === "tab") setDialog({ ...form, row: (form.row + 1) % rows.length });
-    else if (key === "backspace" && field) edit(form.values[field].slice(0, -1));
-    else if (typed && field) edit(form.values[field] + typed);
+    else if (key === "down") setDialog({ ...form, row: Math.min(lastRow, form.row + 1) });
+    else if (key === "tab") setDialog({ ...form, row: (form.row + 1) % (lastRow + 1) });
+    else if (key === "backspace") edit(value.slice(0, -1));
+    else if (key === "clear") edit("");
+    else if (typed) edit(value + typed);
+    else if (key === "return") submit(form);
+  };
+
+  const typeSecret = (step: SecretStep, keystroke: Keystroke) => {
+    const { key } = keystroke;
+    const { variable, form } = step;
+    if (looking.current || variable === undefined) return;
+    const typed = typedCharacter(keystroke);
+    const rename = (next: string) => setDialog({ ...step, variable: next, problem: undefined });
+    if (key === "escape") setDialog(form);
+    else if (key === "backspace") rename(variable.slice(0, -1));
+    else if (key === "clear") rename("");
+    else if (typed) rename(variable + typed);
     else if (key === "return") {
-      const taken = (latest ?? []).map(({ name }) => name);
-      const problem = formProblem(rows, form.values, taken);
-      if (problem) return setDialog({ ...form, row: problem.row, problem: problem.message });
-      setDialog(null);
-      const fields = formFields(form.values);
-      if (form.editing === undefined)
-        void write({ kind: "add", name: form.values.name, fields }, `Added ${form.values.name}`);
-      else void write({ kind: "edit", name: form.editing, fields }, `Saved ${form.editing}`);
+      if (Object.hasOwn(form.secrets ?? {}, variable))
+        return setDialog({ ...step, problem: `${variable} already keeps another header` });
+      looking.current = true;
+      const service = form.editing ?? form.values.name;
+      void variables?.variableProblem(variable, service).then((problem) => {
+        looking.current = false;
+        if (problem) return setDialog({ ...step, problem });
+        submit({
+          ...form,
+          values: withVariable(form.values, step, variable),
+          secrets: { ...form.secrets, [variable]: step.secret },
+        });
+      });
     }
+  };
+
+  const typeVariable = (asked: Dialog & { kind: "variable" }, keystroke: Keystroke) => {
+    const { key } = keystroke;
+    const { name, value } = asked;
+    const typed = typedCharacter(keystroke);
+    const retype = (next: string) => setDialog({ ...asked, value: next, problem: undefined });
+    if (key === "escape") setDialog(null);
+    else if (key === "backspace") retype(value.slice(0, -1));
+    else if (key === "clear") retype("");
+    else if (typed) retype(value + typed);
+    else if (key === "return") {
+      const problem = variableValueProblem(value);
+      if (problem) return setDialog({ ...asked, problem: `${name} expects ${problem}` });
+      setDialog(null);
+      void onVariableWrite?.(name, value).then((failure) => {
+        setUnsaved(failure);
+        if (failure !== undefined) return;
+        setNotice(`Kept ${name} in ${LOCAL}, for this machine only`);
+        setWrites((count) => count + 1);
+      });
+    }
+  };
+
+  const askVariable = ({ name, source }: VariableRow) => {
+    if (source === "environment")
+      return setNotice(`${name} comes from the environment, which is read first`);
+    setDialog({ kind: "variable", name, value: "" });
   };
 
   const typeFilter = (keystroke: Keystroke) => {
@@ -310,7 +455,13 @@ export function Dashboard({
     const enter = key === "return";
     setNotice(undefined);
     // A text field takes every character: there `q`, `?` and `j` are letters.
+    const variableRow =
+      panel?.kind === "service" && onVariableWrite
+        ? variableRows[panel.row - SERVICE_ROWS.length]
+        : undefined;
     if (dialog?.kind === "form") typeInForm(dialog, keystroke);
+    else if (dialog?.kind === "secret") typeSecret(dialog, keystroke);
+    else if (dialog?.kind === "variable") typeVariable(dialog, keystroke);
     else if (dialog) {
       setDialog(null);
       if (input === "y")
@@ -328,15 +479,16 @@ export function Dashboard({
       else if (key === "escape") setFilter("");
       else if (up) setSelected(Math.max(0, current - 1));
       else if (down) setSelected(Math.min(last, current + 1));
-    } else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter))
-      setPanel(null);
+    } else if (enter && variableRow) askVariable(variableRow);
+    else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter)) setPanel(null);
     else if (up || down) {
-      const lastRow = panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length - 1;
+      const lastRow =
+        panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length + variableRows.length - 1;
       setPanel({ ...panel, row: Math.max(0, Math.min(lastRow, panel.row + (down ? 1 : -1))) });
     } else if (left || right) {
       if (panel.kind === "options") change(panel.row, right ? 1 : -1);
       else if (panel.row === TIMEOUT_ROW) changeTimeout(panel.name, right ? 1 : -1);
-      else toggleSkip(panel.name);
+      else if (panel.row === SKIP_ROW) toggleSkip(panel.name);
     }
   };
 
@@ -436,9 +588,10 @@ export function Dashboard({
   const panelRoom = Math.max(1, panelWidth - PANEL_FRAME_WIDTH);
   const detailed =
     panel?.kind === "service" ? latest.find(({ name }) => name === panel.name) : undefined;
-  // Around the detail: summary, list, target, border, title, rule, the two settings, the bar.
+  // Around the detail: summary, list, target, border, title, rule, the settings, the bar.
   // One more line stays free: ink clears the whole screen on each draw of a frame as tall as it.
-  const taken = 1 + Math.max(1, rows.length) + 1 + 2 + 1 + 1 + SERVICE_ROWS.length + 1 + 1;
+  const settingRows = SERVICE_ROWS.length + (panel?.kind === "service" ? variableRows.length : 0);
+  const taken = 1 + Math.max(1, rows.length) + 1 + 2 + 1 + 1 + settingRows + 1 + 1;
   const detail = detailed
     ? detailLines(asShown(detailed), history[detailed.name] ?? [], {
         unicode,
@@ -469,19 +622,27 @@ export function Dashboard({
             ],
           ]
         : [];
-  const labelWidth = Math.max(0, ...panelRows.map(([label]) => label.length));
+  const shownVariables = panel?.kind === "service" ? variableRows : NO_VARIABLES;
+  const labelWidth = Math.max(
+    0,
+    ...panelRows.map(([label]) => label.length),
+    ...shownVariables.map(({ name }) => name.length),
+  );
+  const bullet = unicode ? "•" : "*";
   const screen: Screen =
     dialog?.kind === "form"
       ? "form"
-      : dialog
-        ? "confirm"
-        : palette
-          ? "palette"
-          : filtering
-            ? "filter"
-            : panel
-              ? "panel"
-              : "list";
+      : dialog?.kind === "secret" || dialog?.kind === "variable"
+        ? "input"
+        : dialog
+          ? "confirm"
+          : palette
+            ? "palette"
+            : filtering
+              ? "filter"
+              : panel
+                ? "panel"
+                : "list";
   const hint = helpBar(screen, unicode, columns);
   const commands = palette ? paletteEntries(unicode, palette.query) : [];
   const commandWidth = Math.max(0, ...commands.map(({ label }) => label.length));
@@ -494,7 +655,24 @@ export function Dashboard({
   const firstCommand = Math.max(0, (palette?.row ?? 0) - paletteRoom + 1);
   const formWidth = Math.min(FORM_WIDTH, columns);
   const formLabels = dialog?.kind === "form" ? formRows(dialog.editing === undefined) : [];
-  const formLabelWidth = Math.max(0, ...formLabels.map(({ label }) => label.length));
+  const formLabelWidth = Math.max(
+    HEADER_LABEL.length,
+    ...formLabels.map(({ label }) => label.length),
+  );
+  const formRoom = Math.max(1, formWidth - PANEL_FRAME_WIDTH);
+  const formLine = (active: boolean, label: string, value: string, placeholder: string) => {
+    const prefix = `${active ? marker : "  "}${label.padEnd(formLabelWidth)}  `;
+    const typed = active
+      ? `${prefix}${ending(value, Math.max(1, formRoom - prefix.length - CURSOR.length))}${CURSOR}`
+      : truncate(`${prefix}${value}`, formRoom);
+    const example = value ? "" : truncate(placeholder, Math.max(0, formRoom - typed.length - 1));
+    return (
+      <>
+        {typed}
+        {example && colors.dim(`${active ? " " : ""}${example}`)}
+      </>
+    );
+  };
 
   return (
     <Box flexDirection="column">
@@ -534,6 +712,17 @@ export function Dashboard({
             }`;
             return <Text key={label}>{truncate(line, panelRoom)}</Text>;
           })}
+          {shownVariables.map(({ name, source }, index) => {
+            const active = index + SERVICE_ROWS.length === panel.row;
+            const enter = unicode ? "↵" : "enter";
+            const state = source ? SOURCES[source] : "not set";
+            const offer =
+              active && onVariableWrite && source !== "environment"
+                ? ` ${dot} ${enter} ${source ? "changes" : "sets"} it`
+                : "";
+            const line = `${active ? marker : "  "}${name.padEnd(labelWidth)}  ${state}${offer}`;
+            return <Text key={`variable ${name}`}>{truncate(line, panelRoom)}</Text>;
+          })}
         </Box>
       )}
       {filtering && <Text>{cut(`Filter: ${filter}${CURSOR}`)}</Text>}
@@ -569,26 +758,75 @@ export function Dashboard({
               ),
             )}
           </Text>
-          {formLabels.map(({ key, label, placeholder }, index) => {
-            const active = index === dialog.row;
-            const value = dialog.values[key];
-            const room = Math.max(1, formWidth - PANEL_FRAME_WIDTH);
-            const prefix = `${active ? marker : "  "}${label.padEnd(formLabelWidth)}  `;
-            const typed = active
-              ? `${prefix}${ending(value, Math.max(1, room - prefix.length - CURSOR.length))}${CURSOR}`
-              : truncate(`${prefix}${value}`, room);
-            const example = value
-              ? ""
-              : truncate(placeholder, Math.max(0, room - typed.length - 1));
-            return (
-              <Text key={key}>
-                {typed}
-                {example && colors.dim(`${active ? " " : ""}${example}`)}
-              </Text>
-            );
-          })}
+          {formLabels.map(({ key, label, placeholder }, index) => (
+            <Text key={key}>
+              {formLine(index === dialog.row, label, dialog.values[key], placeholder)}
+            </Text>
+          ))}
+          {[...dialog.values.headers, ""].map((line, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a header row is its position, its text changes at each key
+            <Text key={`header ${index}`}>
+              {formLine(
+                formLabels.length + index === dialog.row,
+                HEADER_LABEL,
+                // Hidden before it is cut: no part of a secret is drawn.
+                hiddenHeaderLine(line, bullet),
+                HEADER_PLACEHOLDER,
+              )}
+            </Text>
+          ))}
+          {dialog.row >= formLabels.length && dialog.problem === undefined && (
+            <Text>{colors.dim(truncate("Name: value. Emptied, it is removed.", formRoom))}</Text>
+          )}
           {dialog.problem !== undefined && <Text>{colors.yellow(dialog.problem)}</Text>}
         </Box>
+      )}
+      {dialog?.kind === "secret" && (
+        <Box
+          flexDirection="column"
+          width={formWidth}
+          borderStyle={unicode ? "single" : "classic"}
+          paddingX={1}
+        >
+          <Text>{colors.bold(truncate(`${dialog.header} holds a secret`, formRoom))}</Text>
+          <Text>{colors.dim(`${CONFIG_FILE} gets a reference, ${LOCAL} the value.`)}</Text>
+          <Text>
+            {dialog.variable === undefined
+              ? colors.dim("looking for a name…")
+              : `${marker}Variable  ${ending(
+                  dialog.variable,
+                  Math.max(1, formRoom - marker.length - "Variable  ".length - CURSOR.length),
+                )}${CURSOR}`}
+          </Text>
+          {dialog.variable !== undefined && dialog.problem === undefined && (
+            <Text>
+              {colors.dim(
+                truncate(
+                  hiddenHeaderLine(
+                    withVariable(dialog.form.values, dialog, dialog.variable).headers[
+                      dialog.index
+                    ] ?? "",
+                    bullet,
+                  ),
+                  formRoom,
+                ),
+              )}
+            </Text>
+          )}
+          {dialog.problem !== undefined && <Text>{colors.yellow(dialog.problem)}</Text>}
+        </Box>
+      )}
+      {dialog?.kind === "variable" && (
+        <>
+          <Text>
+            {cut(`Value of ${dialog.name}: ${bullet.repeat(dialog.value.length)}${CURSOR}`)}
+          </Text>
+          <Text>
+            {dialog.problem === undefined
+              ? colors.dim(cut(`not shown, kept in ${LOCAL} on this machine only`))
+              : colors.yellow(cut(dialog.problem))}
+          </Text>
+        </>
       )}
       {/* Not cut: a command that could not be copied must be readable whole. */}
       {notice !== undefined && <Text>{notice}</Text>}

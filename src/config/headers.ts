@@ -21,6 +21,27 @@ export const MASK = "***";
 
 export const reference = (name: string) => `\${${name}}`;
 
+// A closed list: whatever is kept as a scheme is written in clear in config.yml.
+const AUTH_SCHEME = /^(?:Bearer|Basic|Token)\s+(?=\S)/i;
+
+export function splitSecret(value: string): { scheme: string; secret: string } {
+  const scheme = AUTH_SCHEME.exec(value)?.[0] ?? "";
+  return { scheme, secret: value.slice(scheme.length) };
+}
+
+export function holdsSecret(name: string, value: string): boolean {
+  return isSensitiveHeader(name) && !value.includes("${");
+}
+
+export function hiddenHeaderLine(line: string, bullet: string): string {
+  const colon = line.indexOf(":");
+  if (colon < 1) return line;
+  const value = line.slice(colon + 1).trimStart();
+  if (!holdsSecret(line.slice(0, colon).trim(), value)) return line;
+  const { scheme, secret } = splitSecret(value);
+  return `${line.slice(0, line.length - value.length)}${scheme}${bullet.repeat(secret.length)}`;
+}
+
 export function isSensitiveHeader(name: string): boolean {
   return SENSITIVE_NAME.test(name);
 }

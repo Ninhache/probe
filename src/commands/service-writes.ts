@@ -5,7 +5,7 @@ import type { RawConfig } from "../config/migrations";
 import type { Config, Service } from "../config/schema";
 import { rawServices, writeServices } from "./shared";
 
-export type ServiceFields = Pick<Service, "host" | "port" | "path" | "expect">;
+export type ServiceFields = Pick<Service, "host" | "port" | "path" | "expect" | "headers">;
 
 export type ServiceWrite =
   | { kind: "add"; name: string; fields: ServiceFields }
@@ -17,8 +17,13 @@ export interface ServiceWritten {
   warning?: string;
 }
 
-const DEFAULTS: Partial<ServiceFields> = { host: "localhost", path: "/", expect: undefined };
-const FIELD_KEYS = ["host", "port", "path", "expect"] as const;
+const DEFAULTS: Partial<ServiceFields> = {
+  host: "localhost",
+  path: "/",
+  expect: undefined,
+  headers: undefined,
+};
+const FIELD_KEYS = ["host", "port", "path", "expect", "headers"] as const;
 
 /** `expect: [200]` and `expect: 200` say the same: a form cannot tell which one was written. */
 const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].flat());

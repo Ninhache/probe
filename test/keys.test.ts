@@ -49,6 +49,16 @@ describe("typedCharacter", () => {
     expect(typedCharacter({ input: "/" })).toBe("/");
   });
 
+  it("should read ctrl+u as the key that empties a field, alone or among others", () => {
+    const controlU = String.fromCharCode(21);
+    expect(splitKeys("u", { ctrl: true } as Key)).toEqual([{ input: "u", key: "clear" }]);
+    expect(splitKeys(`a${controlU}b`, none)).toEqual([
+      { input: "a" },
+      { input: "", key: "clear" },
+      { input: "b" },
+    ]);
+  });
+
   it("should give nothing for a named key or a control character", () => {
     expect(typedCharacter({ input: "\r", key: "return" })).toBeUndefined();
     expect(typedCharacter({ input: String.fromCharCode(3) })).toBeUndefined();

@@ -77,6 +77,8 @@ function open(options: {
   onNotify?: DashboardProps["onNotify"];
   serviceFields?: DashboardProps["serviceFields"];
   onServiceWrite?: DashboardProps["onServiceWrite"];
+  variables?: DashboardProps["variables"];
+  onVariableWrite?: DashboardProps["onVariableWrite"];
 }) {
   app = render(
     <Dashboard
@@ -97,6 +99,8 @@ function open(options: {
       onNotify={options.onNotify}
       serviceFields={options.serviceFields}
       onServiceWrite={options.onServiceWrite}
+      variables={options.variables}
+      onVariableWrite={options.onVariableWrite}
     />,
   );
   return app;
@@ -643,6 +647,7 @@ describe("dashboard", () => {
       "Panels",
       "  ↑↓ jk   Move",
       "  ←→ hl   Change the value",
+      "  ↵       Set the variable",
       "  esc     Close",
       "Filter",
       "  ↑↓      Move",
@@ -651,6 +656,7 @@ describe("dashboard", () => {
       "Add and edit",
       "  ↑↓ tab  Change field",
       "  ↵       Save",
+      "  ctrl+u  Empty the field",
       "  esc     Cancel",
       "Outside a text field",
       "  ?       This help",
@@ -1213,7 +1219,8 @@ describe("dashboard service changes", () => {
     expect(frame).toContain("│ › Name    _ api");
     expect(frame).toContain("│   Port    3000");
     expect(frame).toContain("│   Expect  any 2xx");
-    expect(frame).toContain("↑↓ tab field · ↵ save · esc cancel");
+    expect(frame).toContain("│   Header  Accept: application/json");
+    expect(frame).toContain("↑↓ tab field · ↵ save · ctrl+u empty · esc cancel");
   });
 
   it("adds the service typed in the form, defaults for what is left empty", async () => {
@@ -1490,5 +1497,333 @@ describe("dashboard desktop notifications", () => {
     await shows(lastFrame, "1/2 up");
     await tick(150);
     expect(lastFrame()).not.toContain(warning);
+  });
+});
+
+describe("dashboard headers and variables", () => {
+  const SECRET = "s3cr3t-token-0123456789";
+  const reference = (name: string) => `$\{${name}}`;
+  const DOWN = `${ESCAPE}[B`;
+  const CLEAR = String.fromCharCode(21);
+  const ACCEPT = "Accept: text/plain";
+  const fields = { host: "localhost", port: 3000, path: "/health", expect: undefined };
+
+  function project(
+    headers: Record<string, string> | undefined,
+    sources: Record<string, "local" | "environment"> = {},
+    refused: Record<string, string> = {},
+  ) {
+    const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => SAVED);
+    const onVariableWrite = vi.fn<NonNullable<DashboardProps["onVariableWrite"]>>(
+      async () => undefined,
+    );
+    const variables: DashboardProps["variables"] = {
+      serviceVariables: async (name) =>
+        name === "api"
+          ? Object.values(headers ?? {})
+              .flatMap((value) => Array.from(value.matchAll(/\$\{(\w+)\}/g), (match) => match[1]))
+              .map((variable) => ({
+                name: variable as string,
+                source: sources[variable as string],
+              }))
+          : [],
+      variableProblem: async (name) => refused[name],
+      variableName: async (service, _header, taken) =>
+        taken.includes(`${service.toUpperCase()}_TOKEN`)
+          ? "OTHER"
+          : `${service.toUpperCase()}_TOKEN`,
+    };
+    const serviceFields: DashboardProps["serviceFields"] = (name) =>
+      name === "api" ? { ...fields, headers } : undefined;
+    return { onServiceWrite, onVariableWrite, variables, serviceFields };
+  }
+
+  it("shows each header of the service on its line, with one more to add", async () => {
+    const { lastFrame, stdin } = open(project({ Accept: "text/plain" }));
+    await tick();
+
+    stdin.write("e");
+
+    await shows(lastFrame, "│ Edit api");
+    expect(lastFrame()).toContain("│   Header  Accept: text/plain");
+    expect(lastFrame()).toContain("│   Header  Accept: application/json");
+  });
+
+  it("writes the headers as they were when nothing was typed", async () => {
+    const headers = { Authorization: `Bearer ${reference("API_TOKEN")}`, Accept: "text/plain" };
+    const { onServiceWrite, ...props } = project(headers);
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${ENTER}`);
+
+    await shows(lastFrame, "Saved api");
+    expect(onServiceWrite).toHaveBeenCalledWith({
+      kind: "edit",
+      name: "api",
+      fields: { ...fields, headers },
+    });
+  });
+
+  it("adds the header typed on the last line", async () => {
+    const { onServiceWrite, ...props } = project(undefined);
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}${ACCEPT}`);
+    await shows(lastFrame, `│ › Header  ${ACCEPT}_`);
+    expect(lastFrame()).toContain("Name: value. Emptied, it is removed.");
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "Saved api");
+    expect(onServiceWrite).toHaveBeenCalledWith({
+      kind: "edit",
+      name: "api",
+      fields: { ...fields, headers: { Accept: "text/plain" } },
+    });
+  });
+
+  it("removes the header emptied with ctrl+u", async () => {
+    const { onServiceWrite, ...props } = project({ Accept: "text/plain", "X-Mode": "dev" });
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}${CLEAR}${ENTER}`);
+
+    await shows(lastFrame, "Saved api");
+    expect(onServiceWrite).toHaveBeenCalledWith({
+      kind: "edit",
+      name: "api",
+      fields: { ...fields, headers: { "X-Mode": "dev" } },
+    });
+  });
+
+  it("goes to the header that cannot be saved and says why", async () => {
+    const { onServiceWrite, ...props } = project({ Accept: "text/plain" });
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(5)}accept: text/html${TAB}${ENTER}`);
+
+    await shows(lastFrame, "accept is given twice");
+    expect(lastFrame()).toContain("│ › Header  accept: text/html_");
+    expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
+  it("keeps a secret typed in clear off the screen and gives it a variable", async () => {
+    const { onServiceWrite, ...props } = project(undefined);
+    const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}Authorization: Bearer ${SECRET}`);
+    await shows(lastFrame, `Authorization: Bearer ${"•".repeat(SECRET.length)}`.slice(-20));
+    stdin.write(ENTER);
+    await shows(lastFrame, "│ Authorization holds a secret");
+    await shows(lastFrame, "│ › Variable  API_TOKEN_");
+    expect(lastFrame()).toContain(`│ Authorization: Bearer ${reference("API_TOKEN")}`);
+    expect(lastFrame()).toContain("↵ save · ctrl+u empty · esc cancel");
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "Saved api, API_TOKEN kept in .probe/local.yml");
+    expect(onServiceWrite).toHaveBeenCalledWith(
+      {
+        kind: "edit",
+        name: "api",
+        fields: { ...fields, headers: { Authorization: `Bearer ${reference("API_TOKEN")}` } },
+      },
+      { API_TOKEN: SECRET },
+    );
+    expect(frames.join("\n")).not.toContain(SECRET);
+    expect(frames.join("\n")).not.toContain(SECRET.slice(0, 6));
+  });
+
+  it("hides a secret without unicode too, and shows a reference typed by hand", async () => {
+    const { lastFrame, frames, stdin } = open({
+      ...project(undefined),
+      terminal: { ...plain, unicode: false },
+    });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}X-Api-Key: ${SECRET}`);
+    await shows(lastFrame, "*****_");
+    stdin.write(`${CLEAR}X-Api-Key: ${reference("KEY")}`);
+
+    await shows(lastFrame, `> Header  X-Api-Key: ${reference("KEY")}_`);
+    expect(frames.join("\n")).not.toContain(SECRET);
+  });
+
+  it("takes the name typed for the variable, and refuses one that is taken", async () => {
+    const taken = "MINE is already sent by db: another name";
+    const { onServiceWrite, ...props } = project(undefined, {}, { MINE: taken });
+    const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}X-Api-Key: ${SECRET}${ENTER}`);
+    await shows(lastFrame, "│ › Variable  API_TOKEN_");
+    stdin.write(`${CLEAR}MINE${ENTER}`);
+    await shows(lastFrame, taken);
+    expect(onServiceWrite).not.toHaveBeenCalled();
+    stdin.write(`${BACKSPACE.repeat(3)}Y_KEY${ENTER}`);
+
+    await shows(lastFrame, "Saved api, MY_KEY kept in .probe/local.yml");
+    expect(onServiceWrite).toHaveBeenCalledWith(
+      {
+        kind: "edit",
+        name: "api",
+        fields: { ...fields, headers: { "X-Api-Key": reference("MY_KEY") } },
+      },
+      { MY_KEY: SECRET },
+    );
+    expect(frames.join("\n")).not.toContain(SECRET);
+  });
+
+  it("asks a name for each secret, never the same twice", async () => {
+    const { onServiceWrite, ...props } = project(undefined);
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(
+      `e${DOWN.repeat(4)}Authorization: Basic ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`,
+    );
+    await shows(lastFrame, "│ › Variable  API_TOKEN_");
+    stdin.write(ENTER);
+    await shows(lastFrame, "│ Cookie holds a secret");
+    await shows(lastFrame, "│ › Variable  OTHER_");
+    stdin.write(`${CLEAR}API_TOKEN${ENTER}`);
+    await shows(lastFrame, "API_TOKEN already keeps another header");
+    stdin.write(`${CLEAR}SID${ENTER}`);
+
+    await shows(lastFrame, "Saved api, API_TOKEN, SID kept in .probe/local.yml");
+    expect(onServiceWrite).toHaveBeenCalledWith(
+      {
+        kind: "edit",
+        name: "api",
+        fields: {
+          ...fields,
+          headers: { Authorization: `Basic ${reference("API_TOKEN")}`, Cookie: reference("SID") },
+        },
+      },
+      { API_TOKEN: SECRET, SID: `sid=${SECRET}` },
+    );
+  });
+
+  it("comes back to the form on escape, the secret still hidden and nothing written", async () => {
+    const { onServiceWrite, ...props } = project(undefined);
+    const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${ENTER}`);
+    await shows(lastFrame, "│ › Variable  API_TOKEN_");
+    stdin.write(ESCAPE);
+
+    await shows(lastFrame, "│ Edit api");
+    expect(onServiceWrite).not.toHaveBeenCalled();
+    expect(frames.join("\n")).not.toContain(SECRET);
+  });
+
+  it("does not say a secret is kept when keeping it failed", async () => {
+    const props = project(undefined);
+    props.onServiceWrite.mockResolvedValue({ saved: true, failure: ".probe/local.yml is broken" });
+    const { lastFrame, stdin } = open(props);
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${ENTER}`);
+    await shows(lastFrame, "│ › Variable  API_TOKEN_");
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "not saved: .probe/local.yml is broken");
+    expect(lastFrame()).not.toContain("kept in");
+  });
+
+  it("asks for a reference where no variable can be kept", async () => {
+    const { variables: _, ...props } = project(undefined);
+    const { lastFrame, frames, stdin } = open(props);
+    await tick();
+
+    stdin.write(`e${DOWN.repeat(4)}X-Token: ${SECRET}${ENTER}`);
+
+    await shows(lastFrame, "X-Token expects a reference");
+    expect(props.onServiceWrite).not.toHaveBeenCalled();
+    expect(frames.join("\n")).not.toContain(SECRET);
+  });
+
+  it("lists the variables of a service in its panel, with where each is set", async () => {
+    const headers = {
+      Authorization: `Bearer ${reference("API_TOKEN")}`,
+      "X-Api-Key": reference("KEY"),
+      Cookie: reference("SID"),
+    };
+    const { lastFrame, stdin } = open(project(headers, { KEY: "local", SID: "environment" }));
+    await tick();
+
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "│   API_TOKEN  not set");
+    expect(lastFrame()).toContain("│   KEY        set in local.yml");
+    expect(lastFrame()).toContain("│   SID        set in the environment");
+    stdin.write(`${DOWN.repeat(2)}`);
+    await shows(lastFrame, "│ › API_TOKEN  not set · ↵ sets it");
+    stdin.write(DOWN);
+    await shows(lastFrame, "│ › KEY        set in local.yml · ↵ changes it");
+    stdin.write(`${DOWN}${DOWN}`);
+    await shows(lastFrame, "│ › SID        set in the environment  ");
+  });
+
+  it("takes the value of a variable on enter, without drawing it", async () => {
+    const { onVariableWrite, ...props } = project({ "X-Api-Key": reference("KEY") });
+    const { lastFrame, frames, stdin } = open({ ...props, onVariableWrite });
+    await tick();
+
+    stdin.write(`${ENTER}${DOWN.repeat(2)}${ENTER}`);
+    await shows(lastFrame, "Value of KEY: _");
+    expect(lastFrame()).toContain("not shown, kept in .probe/local.yml on this machine only");
+    stdin.write(SECRET);
+    await shows(lastFrame, `Value of KEY: ${"•".repeat(SECRET.length)}_`);
+    stdin.write(ENTER);
+
+    await shows(lastFrame, "Kept KEY in .probe/local.yml, for this machine only");
+    expect(onVariableWrite).toHaveBeenCalledWith("KEY", SECRET);
+    expect(lastFrame()).toContain("│ › KEY");
+    expect(frames.join("\n")).not.toContain(SECRET);
+  });
+
+  it("keeps nothing for an empty value or on escape", async () => {
+    const { onVariableWrite, ...props } = project({ "X-Api-Key": reference("KEY") });
+    const { lastFrame, stdin } = open({ ...props, onVariableWrite });
+    await tick();
+
+    stdin.write(`${ENTER}${DOWN.repeat(2)}${ENTER}${ENTER}`);
+    await shows(lastFrame, "KEY expects a value");
+    stdin.write(`abc${ESCAPE}`);
+
+    await hides(lastFrame, "Value of KEY");
+    expect(onVariableWrite).not.toHaveBeenCalled();
+  });
+
+  it("says a variable of the environment is not changed here", async () => {
+    const { onVariableWrite, ...props } = project(
+      { Cookie: reference("SID") },
+      { SID: "environment" },
+    );
+    const { lastFrame, stdin } = open({ ...props, onVariableWrite });
+    await tick();
+
+    stdin.write(`${ENTER}${DOWN.repeat(2)}${ENTER}`);
+
+    await shows(lastFrame, "SID comes from the environment, which is read first");
+    expect(lastFrame()).not.toContain("Value of SID");
+  });
+
+  it("changes no setting with the arrows on a variable", async () => {
+    const onSkipChange = vi.fn();
+    const { lastFrame, stdin } = open({ ...project({ Cookie: reference("SID") }), onSkipChange });
+    await tick();
+
+    stdin.write(`${ENTER}${DOWN.repeat(2)}`);
+    await shows(lastFrame, "│ › SID");
+    stdin.write("l");
+    await tick();
+
+    expect(onSkipChange).not.toHaveBeenCalled();
   });
 });

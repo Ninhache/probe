@@ -24,7 +24,8 @@ describe("helpBar", () => {
   it.each([
     ["filter", "↑↓ move · ↵ keep · esc clear"],
     ["palette", "↑↓ move · ↵ run · esc close"],
-    ["form", "↑↓ tab field · ↵ save · esc cancel"],
+    ["form", "↑↓ tab field · ↵ save · ctrl+u empty · esc cancel"],
+    ["input", "↵ save · ctrl+u empty · esc cancel"],
     ["confirm", "y remove · n esc keep"],
   ] as const)("should show the keys of the %s", (screen, bar) => {
     expect(helpBar(screen, true, 80)).toBe(bar);
@@ -66,7 +67,7 @@ describe("helpBar", () => {
 
   it("should write the keys in ASCII without unicode", () => {
     expect(helpBar("panel", false, 100)).toBe("jk move - hl change - esc close - ? help - q quit");
-    expect(helpBar("form", false, 100)).toBe("tab field - enter save - esc cancel");
+    expect(helpBar("form", false, 100)).toBe("tab field - enter save - ctrl+u empty - esc cancel");
   });
 });
 
