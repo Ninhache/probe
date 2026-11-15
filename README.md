@@ -210,7 +210,8 @@ services:
   front: { url: https://example.com }
 ```
 
-`probe check --env prod` checks that file and nothing else; `wait`, `ls` and `curl` take `--env` too. Without
+`probe check --env prod` checks that file and nothing else; `wait`, `ls` and `curl` take `--env` too. The other
+commands (`add`, `rm`, `var`, `open`, the dashboard) work on the local services and refuse `--env`. Without
 `--env`, every command reads `config.yml` as before, and `make check` with it: a file in `envs/` is never
 reached unless you name it. The name is the file name, made of letters, digits, `_` and `-`; `local` is
 `config.yml` itself.

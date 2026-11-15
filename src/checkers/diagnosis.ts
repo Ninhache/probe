@@ -172,11 +172,12 @@ export function diagnoseUnset(
   return { error, hint: `set it for this machine: ${setCommand(first)} (or export it)` };
 }
 
-export function diagnoseUnsendable(names: string[]): Diagnosis {
+export function diagnoseUnsendable(names: string[], exportedOnly = false): Diagnosis {
   const [first = ""] = names;
+  const again = exportedOnly ? `export ${first} again` : `set it again with ${setCommand(first)}`;
   return {
     error: `${names.join(", ")} cannot go in a header`,
-    hint: `a line break or an unusual character in its value: set it again with ${setCommand(first)}`,
+    hint: `a line break or an unusual character in its value: ${again}`,
   };
 }
 

@@ -218,6 +218,19 @@ describe("probe check --env", () => {
     );
   });
 
+  it.each([
+    ["wrong", "expected 2xx, got 401"],
+    ["caf\u00e9\u2603", "API_KEY cannot go in a header"],
+  ])("never points at probe var for a value it refuses (%j)", async (value, error) => {
+    const { root } = await twoEnvironments();
+
+    const result = await probe(root, ["check", "--env", "prod", "--json"], { API_KEY: value });
+
+    expect(JSON.parse(result.stdout)[0]).toMatchObject({ ok: false, error });
+    expect(result.stdout + result.stderr).not.toContain("probe var");
+    expect(result.stdout + result.stderr).not.toContain("config.yml");
+  });
+
   it("ignores a skip kept for the local service of the same name", async () => {
     const paths = await twoEnvironments();
     await writeFile(paths.local, "services:\n  api:\n    skip: true\n");
@@ -245,6 +258,33 @@ describe("probe check --env", () => {
     expect((await readdir(root)).sort()).toEqual([".probe"]);
     expect((await readdir(dir)).sort()).toEqual(["config.yml", "envs"]);
     expect(await readFile(join(dir, "envs", "dev.yml"), "utf8")).toBe(before);
+  });
+});
+
+describe("a command that works on the local services only", () => {
+  it.each([
+    [["rm", "api", "--yes", "--env", "prod"]],
+    [["rm", "api", "--yes", "--env=prod"]],
+    [["add", "other", "-p", "3000", "--env", "prod"]],
+    [["var", "API_KEY", "--env", "prod"]],
+    [["open", "api", "--env", "prod"]],
+    [["sync", "--env", "prod"]],
+    [["status", "--env", "prod"]],
+    [["migrate", "--env", "prod"]],
+    [["--env", "prod"]],
+  ])("refuses --env and changes nothing: %j", async (args) => {
+    const { root, dir } = await twoEnvironments();
+    const before = await readFile(join(dir, "config.yml"), "utf8");
+
+    const result = await probe(root, args);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(
+      "--env is read by ls, check, wait, curl only: the other commands work on the local services.",
+    );
+    expect(await readFile(join(dir, "config.yml"), "utf8")).toBe(before);
+    expect((await readdir(root)).sort()).toEqual([".probe"]);
+    expect((await readdir(dir)).sort()).toEqual(["config.yml", "envs"]);
   });
 });
 

@@ -136,7 +136,8 @@ async function request(
     if ("unset" in resolved) {
       return failed(diagnoseUnset(resolved.unset, variables ?? {}));
     }
-    if ("unsendable" in resolved) return failed(diagnoseUnsendable(resolved.unsendable));
+    if ("unsendable" in resolved)
+      return failed(diagnoseUnsendable(resolved.unsendable, variables?.exportedOnly));
     try {
       headers = new Headers(resolved.headers);
     } catch {

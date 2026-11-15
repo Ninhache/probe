@@ -230,7 +230,27 @@ function wantsGuidedAdd(rawArgs: string[]): boolean {
   );
 }
 
+const ENVIRONMENT_FLAG = "--env";
+
+// Ignored, the flag would let `probe rm api --env prod` remove the local service.
+function refuseStrayEnvironment(rawArgs: string[]): void {
+  const given = rawArgs.some(
+    (arg) => arg === ENVIRONMENT_FLAG || arg.startsWith(`${ENVIRONMENT_FLAG}=`),
+  );
+  if (!given) return;
+  const reading = Object.entries(commands)
+    .filter(([, command]) => "env" in (command.args ?? {}))
+    .map(([name]) => name);
+  const typed = rawArgs.find((arg) => !arg.startsWith("-"));
+  if (typed !== undefined && reading.includes(typed)) return;
+  throw new ProbeError(
+    "USAGE",
+    `${ENVIRONMENT_FLAG} is read by ${reading.join(", ")} only: the other commands work on the local services.`,
+  );
+}
+
 async function dispatch(rawArgs: string[]): Promise<void> {
+  refuseStrayEnvironment(rawArgs);
   if (wantsGuidedAdd(rawArgs)) return guidedAdd();
   if (!(await openedDashboard(rawArgs))) await runCommand(main, { rawArgs });
 }
