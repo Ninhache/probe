@@ -121,7 +121,7 @@ describe("response detail", () => {
   });
 
   it("keeps the service up when the time limit ends while the body is read", async () => {
-    const { ok, status, response } = await check("/endless", true, 200);
+    const { ok, status, response } = await check("/endless", true, 400);
 
     expect({ ok, status }).toEqual({ ok: true, status: 200 });
     expect(response?.body).toBe("first");

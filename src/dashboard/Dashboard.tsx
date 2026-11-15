@@ -398,7 +398,8 @@ export function Dashboard({
   const detailed =
     panel?.kind === "service" ? latest.find(({ name }) => name === panel.name) : undefined;
   // Around the detail: summary, list, target, border, title, rule, the two settings, the bar.
-  const taken = 1 + Math.max(1, rows.length) + 1 + 2 + 1 + 1 + SERVICE_ROWS.length + 1;
+  // One more line stays free: ink clears the whole screen on each draw of a frame as tall as it.
+  const taken = 1 + Math.max(1, rows.length) + 1 + 2 + 1 + 1 + SERVICE_ROWS.length + 1 + 1;
   const detail = detailed
     ? detailLines(asShown(detailed), history[detailed.name] ?? [], {
         unicode,

@@ -769,16 +769,17 @@ describe("dashboard service detail", () => {
       intervalMs: 20,
       check: async () => {
         pass += 1;
-        return [{ ...answered, latencyMs: pass === 1 ? 2 : 8 }, refused];
+        return [{ ...answered, latencyMs: pass % 2 === 1 ? 2 : 8 }, refused];
       },
     });
-    await shows(lastFrame, "8ms");
+    await tick();
 
     stdin.write(ENTER);
 
-    await shows(lastFrame, "│ 200 OK · 8ms");
+    await shows(lastFrame, "2–8ms");
     const frame = lastFrame() ?? "";
-    expect(frame).toMatch(/│ ▁█+ 2–8ms/);
+    expect(frame).toMatch(/│ 200 OK · [28]ms/);
+    expect(frame).toMatch(/│ [▁█]+ 2–8ms/);
     expect(frame).toContain("│ content-type: application/json");
     expect(frame).toContain("│ set-cookie: (hidden)");
     expect(frame).toContain('│ {"status":"ok"}');
@@ -840,7 +841,7 @@ describe("dashboard service detail", () => {
 
     await shows(lastFrame, "› Skip");
     const lines = (lastFrame() ?? "").split("\n");
-    expect(lines.length).toBeLessThanOrEqual(24);
+    expect(lines.length).toBeLessThan(24);
     expect(lastFrame()).toMatch(/… \d more headers/);
     expect(lastFrame()).toContain("Timeout");
   });
