@@ -7,7 +7,7 @@ export interface Diagnosis {
   hint?: string;
 }
 
-const CONFIG = `${PROBE_DIR}/${CONFIG_FILE}`;
+export const CONFIG = `${PROBE_DIR}/${CONFIG_FILE}`;
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
 const UNKNOWN_ISSUER_CODES = [
@@ -159,9 +159,13 @@ function sentBy(service: Service): string {
 
 const setCommand = (name: string) => `probe var ${name}`;
 
-export function diagnoseUnset(names: string[], localUnreadable: boolean): Diagnosis {
+export function diagnoseUnset(
+  names: string[],
+  { localUnreadable, exportedOnly }: { localUnreadable?: boolean; exportedOnly?: boolean },
+): Diagnosis {
   const [first = ""] = names;
   const error = `${names.join(", ")} ${names.length > 1 ? "are" : "is"} not set`;
+  if (exportedOnly) return { error, hint: `export ${first} in the shell that runs probe` };
   if (localUnreadable) {
     return { error, hint: `${LOCAL} is not valid YAML: fix it, or export ${first}` };
   }

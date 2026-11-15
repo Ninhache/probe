@@ -253,6 +253,7 @@ describe("bash completion", () => {
 
     expect(await bashCompletions(root, "probe", "check", "--")).toEqual([
       "--json",
+      "--env",
       "--timeout",
       "--help",
     ]);
@@ -311,6 +312,7 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
 
     expect(await zshCompletions(root, "probe", "check", "--")).toEqual([
       "--json",
+      "--env",
       "--timeout",
       "--help",
     ]);
@@ -376,6 +378,7 @@ describe.skipIf(!FISH)("fish completion", () => {
     const root = await project();
 
     expect((await fishCompletions(root, "probe check --")).sort()).toEqual([
+      "--env",
       "--help",
       "--json",
       "--timeout",

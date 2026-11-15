@@ -2,6 +2,7 @@ import type { Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
 import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { ProbeError } from "../errors";
+import { CONFIG } from "./diagnosis";
 import { targetUrl } from "./http";
 import { getChecker } from "./registry";
 import type { CheckResult } from "./types";
@@ -13,6 +14,7 @@ export interface RunOptions {
   signal?: AbortSignal;
   detail?: boolean;
   variables?: Variables;
+  configFile?: string;
 }
 
 export function resolveTimeoutMs(service: Service, options: RunOptions): number {
@@ -37,7 +39,7 @@ export async function runChecks(
   }
 
   const selected = names.length > 0 ? [...new Set(names)] : known;
-  return Promise.all(
+  const results = await Promise.all(
     selected.map((name) => {
       const service = config.services[name] as Service;
       // Schema v1 has no `type` field; a later schema adds it.
@@ -60,5 +62,13 @@ export async function runChecks(
         variables: options.variables,
       });
     }),
+  );
+  const { configFile } = options;
+  if (configFile === undefined) return results;
+  // The hints name the file to edit: for another environment, that is not config.yml.
+  return results.map((result) =>
+    result.hint === undefined
+      ? result
+      : { ...result, hint: result.hint.replaceAll(CONFIG, configFile) },
   );
 }

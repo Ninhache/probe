@@ -66,7 +66,8 @@ function validate(raw: RawConfig, paths: ProbePaths, options: MigrationOptions):
 }
 
 export function backupPath(paths: ProbePaths, version: number): string {
-  return join(paths.dir, `config.v${version}.bak.yml`);
+  const file = paths.environment === undefined ? "config" : `env-${paths.environment}`;
+  return join(paths.dir, `${file}.v${version}.bak.yml`);
 }
 
 export async function pendingMigration(

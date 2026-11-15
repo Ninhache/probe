@@ -4,6 +4,8 @@ export const PROBE_DIR = ".probe";
 export const CONFIG_FILE = "config.yml";
 export const LOCK_FILE = "lock.yml";
 export const LOCAL_FILE = "local.yml";
+export const ENVIRONMENTS_DIR = "envs";
+export const LOCAL_ENVIRONMENT = "local";
 export const BACKUP_GLOB = "*.bak.yml";
 // Matches BACKUP_GLOB, so the copy written before replacing local.yml is git-ignored too.
 export const LOCAL_DRAFT_FILE = "local.draft.bak.yml";

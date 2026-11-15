@@ -12,6 +12,7 @@ export type ProbeErrorCode =
   | "SERVICE_UNKNOWN"
   | "CHECKER_UNKNOWN"
   | "VARIABLE_UNSET"
+  | "ENVIRONMENT_UNKNOWN"
   | "USAGE";
 
 export class ProbeError extends Error {

@@ -1,17 +1,37 @@
-import { requireProbeDir } from "../config/discovery";
+import { type ProbePaths, requireProbeDir } from "../config/discovery";
+import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { type LoadedConfig, loadConfig, saveConfig } from "../config/loader";
 import type { Variables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
 import type { Config, Service } from "../config/schema";
-import { MAX_TIMEOUT_SECONDS } from "../constants";
+import { CONFIG_FILE, ENVIRONMENTS_DIR, MAX_TIMEOUT_SECONDS, PROBE_DIR } from "../constants";
 import { ProbeError } from "../errors";
 import { blockState, syncMakefile } from "../makefile/sync";
 import { type Colors, createColors } from "../ui/colors";
 import { detectTerminal, type Terminal } from "../ui/terminal";
 
-export function openProject(): Promise<LoadedConfig> {
-  return loadConfig(requireProbeDir(process.cwd()));
+export const ENVIRONMENT_ARG = {
+  type: "string",
+  valueHint: "name",
+  description: `Read .probe/${ENVIRONMENTS_DIR}/<name>.yml instead of the local services`,
+} as const;
+
+export function configFile(paths: ProbePaths): string | undefined {
+  return paths.environment === undefined
+    ? undefined
+    : `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${paths.environment}.yml`;
+}
+
+export function noServices(paths: ProbePaths): string {
+  const file = configFile(paths);
+  return file === undefined
+    ? "No services yet. Add one: probe add api -p 3000"
+    : `No services in ${file} yet. Write them there, as in ${PROBE_DIR}/${CONFIG_FILE}.`;
+}
+
+export async function openProject(environment?: string): Promise<LoadedConfig> {
+  return loadConfig(await environmentPaths(requireProbeDir(process.cwd()), environment));
 }
 
 export function stdoutTerminal(): Terminal {
@@ -52,10 +72,10 @@ export function requireVariables(
     const service = Object.hasOwn(config.services, name) ? config.services[name] : undefined;
     const [unset] = serviceVariables(service?.headers).filter((v) => !variables.lookup(v));
     if (unset === undefined) continue;
-    throw new ProbeError(
-      "VARIABLE_UNSET",
-      `${name} sends ${unset}, which is not set. Set it for this machine: probe var ${unset} (or export it).`,
-    );
+    const how = variables.exportedOnly
+      ? `Export ${unset} in the shell that runs probe.`
+      : `Set it for this machine: probe var ${unset} (or export it).`;
+    throw new ProbeError("VARIABLE_UNSET", `${name} sends ${unset}, which is not set. ${how}`);
   }
 }
 
