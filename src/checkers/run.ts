@@ -1,10 +1,10 @@
 import type { Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
 import { DEFAULT_CHECKER_TYPE } from "../constants";
-import { ProbeError } from "../errors";
 import { CONFIG } from "./diagnosis";
 import { targetUrl } from "./http";
 import { getChecker } from "./registry";
+import { selectServices } from "./select";
 import type { CheckResult } from "./types";
 
 export interface RunOptions {
@@ -15,6 +15,7 @@ export interface RunOptions {
   detail?: boolean;
   variables?: Variables;
   configFile?: string;
+  tags?: readonly string[];
 }
 
 export function resolveTimeoutMs(service: Service, options: RunOptions): number {
@@ -29,22 +30,13 @@ export async function runChecks(
   options: RunOptions,
   skipped: ReadonlySet<string> = new Set(),
 ): Promise<CheckResult[]> {
-  const known = Object.keys(config.services);
-  const unknown = names.filter((name) => !known.includes(name));
-  if (unknown.length > 0) {
-    throw new ProbeError(
-      "SERVICE_UNKNOWN",
-      `unknown service: ${unknown.join(", ")}. Known: ${known.join(", ") || "(none)"}.`,
-    );
-  }
-
-  const selected = names.length > 0 ? [...new Set(names)] : known;
+  const selected = selectServices(config, names, options.tags ?? [], skipped);
   const results = await Promise.all(
-    selected.map((name) => {
+    selected.map(({ name, skipped: skip }) => {
       const service = config.services[name] as Service;
       // Schema v1 has no `type` field; a later schema adds it.
       const type = (service as { type?: string }).type ?? DEFAULT_CHECKER_TYPE;
-      if (names.length === 0 && skipped.has(name)) {
+      if (skip) {
         const result: CheckResult = {
           name,
           type,

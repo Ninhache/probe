@@ -128,6 +128,7 @@ describe("completionSpec", () => {
       "--method",
       "--header",
       "--hint",
+      "--tag",
       "--help",
     ]);
   });
@@ -273,6 +274,7 @@ describe("bash completion", () => {
     expect(await bashCompletions(root, "probe", "check", "--")).toEqual([
       "--json",
       "--env",
+      "--tag",
       "--timeout",
       "--help",
     ]);
@@ -339,6 +341,7 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
     expect(await zshCompletions(root, "probe", "check", "--")).toEqual([
       "--json",
       "--env",
+      "--tag",
       "--timeout",
       "--help",
     ]);
@@ -415,6 +418,7 @@ describe.skipIf(!FISH)("fish completion", () => {
       "--env",
       "--help",
       "--json",
+      "--tag",
       "--timeout",
     ]);
     expect((await fishCompletions(root, "probe completion ")).sort()).toEqual([

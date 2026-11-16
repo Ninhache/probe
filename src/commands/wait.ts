@@ -20,6 +20,8 @@ import {
   requireVariables,
   secondsToMs,
   stdoutTerminal,
+  TAG_ARG,
+  tagsFrom,
 } from "./shared";
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -50,6 +52,7 @@ export default defineCommand({
   args: {
     json: { type: "boolean", description: "Print the final results as JSON" },
     env: ENVIRONMENT_ARG,
+    tag: TAG_ARG,
     timeout: {
       type: "string",
       description: "Seconds to wait in total, all checks included, before giving up",
@@ -66,7 +69,8 @@ export default defineCommand({
       default: String(DEFAULT_WAIT_MAX_INTERVAL_SECONDS),
     },
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
+    const tags = tagsFrom(rawArgs);
     const deadlineMs = secondsToMs("--timeout", args.timeout);
     const intervalMs = secondsToMs("--interval", args.interval);
     const maxIntervalMs = secondsToMs("--max-interval", args["max-interval"]);
@@ -79,7 +83,7 @@ export default defineCommand({
     const { config, paths } = await openProject(args.env);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);
-    requireVariables(config, args._, variables, skipped);
+    requireVariables(config, args._, variables, skipped, tags);
     const report = progressReporter();
 
     const { results, timedOut } = await pollUntilUp(
@@ -93,6 +97,7 @@ export default defineCommand({
             maxTimeoutMs: remainingMs,
             variables,
             configFile: configFile(paths),
+            tags,
           },
           skipped,
         ),

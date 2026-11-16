@@ -67,6 +67,7 @@ Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 | [Wait](docs/features/wait.md)                   | `probe wait && pnpm test`: go on once everything is up             |
 | [Doctor](docs/features/doctor.md)               | Who holds the port, which container is stopped                     |
 | [Environments](docs/features/environments.md)   | The same checks against dev, staging or prod: `--env prod`         |
+| [Tags](docs/features/tags.md)                   | `probe check --tag back`: check a group of services                |
 | [Headers and secrets](docs/features/headers.md) | Check a service behind an API key without writing the key in git   |
 | [Makefile](docs/features/makefile.md)           | `make check`, kept up to date for you                              |
 | [Completion](docs/features/completion.md)       | Tab completes commands, options and service names                  |

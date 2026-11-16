@@ -10,6 +10,8 @@ import {
   openProject,
   secondsToMs,
   stdoutTerminal,
+  TAG_ARG,
+  tagsFrom,
 } from "./shared";
 
 export default defineCommand({
@@ -17,13 +19,15 @@ export default defineCommand({
   args: {
     json: { type: "boolean", description: "Print results as JSON" },
     env: ENVIRONMENT_ARG,
+    tag: TAG_ARG,
     timeout: {
       type: "string",
       // No citty default: a value given here must be told apart from none, it beats the services' own.
       description: `Seconds to wait for each service (default: its own timeout, else ${DEFAULT_TIMEOUT_SECONDS})`,
     },
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
+    const tags = tagsFrom(rawArgs);
     const forceTimeout = args.timeout !== undefined;
     const timeoutMs = secondsToMs("--timeout", args.timeout ?? String(DEFAULT_TIMEOUT_SECONDS));
     const { config, paths } = await openProject(args.env);
@@ -32,7 +36,7 @@ export default defineCommand({
     const results = await runChecks(
       config,
       args._,
-      { timeoutMs, forceTimeout, variables, configFile: configFile(paths) },
+      { timeoutMs, forceTimeout, variables, configFile: configFile(paths), tags },
       skipped,
     );
 

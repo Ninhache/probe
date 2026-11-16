@@ -22,7 +22,7 @@ import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
 import { ask } from "../ui/prompt";
 import { offerDetected } from "./detected";
-import { openProject, rawServices, saveServices, secondsToMs } from "./shared";
+import { openProject, rawServices, saveServices, secondsToMs, tagsFrom } from "./shared";
 
 function parseInteger(value: string, flag: string): number {
   if (!/^\d+$/.test(value)) {
@@ -192,6 +192,11 @@ export default defineCommand({
       valueHint: "text",
       description: "What to do when it is down, shown under it, e.g. 'run: make api'",
     },
+    tag: {
+      type: "string",
+      valueHint: "a,b",
+      description: "Tags to select it with, e.g. --tag back,infra then: probe check --tag back",
+    },
   },
   async run({ args, rawArgs }) {
     const loaded = await openProject();
@@ -226,6 +231,8 @@ export default defineCommand({
       if (hintProblem(hint)) throw new ProbeError("USAGE", `--hint expects ${hintProblem(hint)}.`);
       service.hint = hint;
     }
+    const tags = tagsFrom(rawArgs);
+    if (tags.length > 0) service.tags = tags;
 
     await saveServices(loaded, { ...services, [args.name]: service });
     const { lookup } = await loadVariables(loaded.paths);
