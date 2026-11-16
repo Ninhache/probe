@@ -1,13 +1,16 @@
 import { render } from "ink";
 import { runChecks } from "../checkers/run";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
+import type { ProbePaths } from "../config/discovery";
+import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
-import type { Variables } from "../config/local";
+import { loadConfig } from "../config/loader";
+import { loadVariables, type Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
-import { CONFIG_FILE, PROBE_DIR } from "../constants";
+import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
-import { serviceActions } from "./actions";
-import { Dashboard, type DashboardProps, type Secrets } from "./Dashboard";
+import { type ActionDeps, serviceActions } from "./actions";
+import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
 import { type VariableSources, variableTools } from "./variables";
@@ -26,6 +29,59 @@ export interface DashboardState {
   ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
+  environments?: readonly EnvironmentSource[];
+}
+
+export interface EnvironmentSource {
+  name: string;
+  file: string;
+  /** Read before each pass: the file is edited by hand while the dashboard runs. */
+  load: () => Promise<{ config: Config; variables: Variables }>;
+}
+
+export function environmentSource(
+  paths: ProbePaths,
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+): EnvironmentSource {
+  return {
+    name,
+    file: `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${name}.yml`,
+    async load() {
+      const found = await environmentPaths(paths, name);
+      // Not on stderr: a line printed there would land in the middle of the screen.
+      const loaded = await loadConfig(found, { log: () => {} });
+      return { config: loaded.config, variables: await loadVariables(found, env) };
+    },
+  };
+}
+
+export function environmentColumn(
+  { name, file, load }: EnvironmentSource,
+  deps?: ActionDeps,
+): EnvironmentColumn {
+  let known: Config | undefined;
+  const { onOpen, onCopy } = serviceActions(
+    () => known ?? { schemaVersion: 1, services: {} },
+    deps,
+  );
+  return {
+    name,
+    file,
+    onOpen,
+    onCopy: (service) => onCopy(service, known?.services[service]?.timeout),
+    async check(signal, timeoutMs) {
+      const { config, variables } = await load();
+      known = config;
+      return runChecks(config, [], {
+        timeoutMs,
+        signal,
+        detail: true,
+        variables,
+        configFile: file,
+      });
+    },
+  };
 }
 
 const pickFields = ({ host, port, path, expect, method, headers }: Service): ServiceFields => ({
@@ -40,7 +96,13 @@ const pickFields = ({ host, port, path, expect, method, headers }: Service): Ser
 export async function openDashboard(
   initial: Config,
   terminal: Terminal,
-  { onServiceWrite, variables: readVariables, variableSources, ...state }: DashboardState,
+  {
+    onServiceWrite,
+    variables: readVariables,
+    variableSources,
+    environments = [],
+    ...state
+  }: DashboardState,
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
   let config = initial;
@@ -97,6 +159,7 @@ export async function openDashboard(
         })
       }
       variables={tools}
+      environments={environments.map((source) => environmentColumn(source))}
     />,
     { alternateScreen: true },
   );
