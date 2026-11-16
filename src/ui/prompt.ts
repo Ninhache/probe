@@ -12,8 +12,8 @@ const TOWARDS_NO = ["right", "down"];
 
 // "No" is selected first: Enter alone changes nothing.
 export async function confirm(message: string, streams: PromptStreams = {}): Promise<boolean> {
-  const { ConfirmPrompt } = await import("@clack/core");
-  const { isCancel, symbol, S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE } = await import(
+  const { ConfirmPrompt, isCancel } = await import("@clack/core");
+  const { symbol, S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE } = await import(
     "@clack/prompts"
   );
   const { styleText } = await import("node:util");
@@ -39,11 +39,13 @@ export async function confirm(message: string, streams: PromptStreams = {}): Pro
       return `${title}${styleText("cyan", S_BAR)}  ${options}\n${styleText("cyan", S_BAR_END)}\n`;
     },
   });
-  // The library flips the answer on any arrow: the right one, pressed on "No", would say "Yes".
-  // This runs after its flip and sets the side the key points to.
+  // The library flips the answer on any arrow and on space: the right arrow, pressed on "No",
+  // would say "Yes". This runs after its flip and puts back the side the key points to.
+  let picked = false;
   prompt.on("cursor", (direction) => {
-    if (direction && TOWARDS_YES.includes(direction)) prompt.value = true;
-    if (direction && TOWARDS_NO.includes(direction)) prompt.value = false;
+    if (direction && TOWARDS_YES.includes(direction)) picked = true;
+    if (direction && TOWARDS_NO.includes(direction)) picked = false;
+    prompt.value = picked;
   });
   const answer = await prompt.prompt();
   return !isCancel(answer) && answer === true;
