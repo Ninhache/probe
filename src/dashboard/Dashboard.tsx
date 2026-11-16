@@ -597,7 +597,7 @@ export function Dashboard({
     } else if (enter && variableRow) askVariable(variableRow);
     else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter)) setPanel(null);
     else if (panel.kind === "service" && panel.environment !== undefined) {
-      // Skip, timeout and variables are kept in the local files: this panel has no row to change.
+      // The rows of this panel write for the local services: another environment is set with `probe var --env`.
     } else if (up || down) {
       const lastRow =
         panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length + variableRows.length - 1;

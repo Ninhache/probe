@@ -1,10 +1,11 @@
 import { chmod, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type Document, isMap, isScalar, parseDocument } from "yaml";
+import { type Document, isMap, isScalar, parseDocument, type YAMLMap } from "yaml";
 import {
   DASHBOARD_INTERVAL_SECONDS,
   DEFAULT_TIMEOUT_SECONDS,
   LOCAL_DRAFT_FILE,
+  LOCAL_ENVIRONMENTS_KEY,
   LOCAL_FILE_MODE,
   LOCAL_VARIABLES_KEY,
   MAX_TIMEOUT_SECONDS,
@@ -27,6 +28,41 @@ const SKIP = "skip";
 
 function isDelay(value: unknown): value is number {
   return typeof value === "number" && value > 0 && value <= MAX_TIMEOUT_SECONDS;
+}
+
+// What local.yml keeps for another environment sits under `envs.<name>`, shaped like the top level.
+function scope(paths: ProbePaths): string[] {
+  return paths.environment === undefined ? [] : [LOCAL_ENVIRONMENTS_KEY, paths.environment];
+}
+
+/** The map at `path`: undefined when nothing is there, null when something else is in the way. */
+function mapAt(doc: Document, path: readonly string[]): YAMLMap | undefined | null {
+  let node: unknown = doc.contents;
+  for (const key of path) {
+    if (node === null || node === undefined) return undefined;
+    if (!isMap(node)) return null;
+    node = node.get(key, true);
+  }
+  if (node === null || node === undefined) return undefined;
+  return isMap(node) ? node : null;
+}
+
+function pruneEmpty(doc: Document, path: readonly string[]): void {
+  for (let depth = path.length; depth > 0; depth--) {
+    const at = path.slice(0, depth);
+    const node = doc.getIn(at, true);
+    if (!isMap(node) || node.items.length > 0) return;
+    doc.deleteIn(at);
+  }
+}
+
+function holdsVariables(doc: Document): boolean {
+  if (doc.has(LOCAL_VARIABLES_KEY)) return true;
+  const environments = doc.get(LOCAL_ENVIRONMENTS_KEY, true);
+  return (
+    isMap(environments) &&
+    environments.items.some(({ value }) => isMap(value) && value.has(LOCAL_VARIABLES_KEY))
+  );
 }
 
 async function readLocal(paths: ProbePaths): Promise<string | null> {
@@ -92,7 +128,7 @@ async function editLocal(paths: ProbePaths, edit: LocalEdit): Promise<boolean> {
   const existing = await stat(target).catch(() => null);
   const kept = existing ? existing.mode & 0o777 : LOCAL_FILE_MODE;
   // A file that holds variables holds secrets: nobody else reads it, whatever it allowed before.
-  const mode = doc.has(LOCAL_VARIABLES_KEY) ? kept & LOCAL_FILE_MODE : kept;
+  const mode = holdsVariables(doc) ? kept & LOCAL_FILE_MODE : kept;
   // Written beside then renamed: a crash never leaves a half-written local.yml.
   const draft = join(dirname(target), LOCAL_DRAFT_FILE);
   try {
@@ -128,13 +164,12 @@ export function writeDashboardPreferences(
 }
 
 export async function readSkippedServices(paths: ProbePaths): Promise<Set<string>> {
-  if (paths.environment !== undefined) return new Set();
   const text = await readLocal(paths);
   if (text === null) return new Set();
   const doc = parseDocument(text);
   if (doc.errors.length > 0) return new Set();
-  const services = doc.get(SERVICES, true);
-  if (!isMap(services)) return new Set();
+  const services = mapAt(doc, [...scope(paths), SERVICES]);
+  if (!services) return new Set();
   const names = services.items
     .filter((pair) => isMap(pair.value) && pair.value.get(SKIP) === true)
     .map((pair) => String(isScalar(pair.key) ? pair.key.value : pair.key));
@@ -143,19 +178,17 @@ export async function readSkippedServices(paths: ProbePaths): Promise<Set<string
 
 export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean): Promise<boolean> {
   return editLocal(paths, (doc) => {
-    const services = doc.get(SERVICES, true);
-    if (services !== undefined && !isMap(services)) return false;
-    const entry = services?.get(name, true);
-    if (entry !== undefined && !isMap(entry)) return false;
+    const path = [...scope(paths), SERVICES, name];
+    const entry = mapAt(doc, path);
+    if (entry === null) return false;
     if (skip) {
       if (entry?.get(SKIP) === true) return null;
-      doc.setIn([SERVICES, name, SKIP], true);
+      doc.setIn([...path, SKIP], true);
       return true;
     }
-    if (!services || !entry?.has(SKIP)) return null;
+    if (!entry?.has(SKIP)) return null;
     entry.delete(SKIP);
-    if (entry.items.length === 0) services.delete(name);
-    if (services.items.length === 0) doc.delete(SERVICES);
+    pruneEmpty(doc, path);
     return true;
   });
 }
@@ -164,7 +197,8 @@ export interface Variables {
   lookup: VariableLookup;
   /** `local.yml` is there but cannot be read: a variable it may hold is not simply "not set". */
   localUnreadable?: true;
-  exportedOnly?: true;
+  /** Set when the values are those of another environment than the local one. */
+  environment?: string;
 }
 
 export type VariableSource = "environment" | "local";
@@ -176,8 +210,8 @@ export async function readLocalVariables(
   if (text === null) return { values: {}, unreadable: false };
   const doc = parseDocument(text);
   if (doc.errors.length > 0) return { values: {}, unreadable: true };
-  const section = doc.get(LOCAL_VARIABLES_KEY, true);
-  if (!isMap(section)) return { values: {}, unreadable: false };
+  const section = mapAt(doc, [...scope(paths), LOCAL_VARIABLES_KEY]);
+  if (!section) return { values: {}, unreadable: false };
   const values: Record<string, string> = {};
   for (const { key, value } of section.items) {
     if (!isScalar(key) || !isScalar(value) || value.value === null) continue;
@@ -199,13 +233,11 @@ export async function loadVariables(
   paths: ProbePaths,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Variables> {
-  // The values of local.yml are those of the local environment: no other one is sent them.
-  if (paths.environment !== undefined) {
-    return { lookup: (name) => env[name] || undefined, exportedOnly: true };
-  }
+  // Each environment has its own values in local.yml: none falls back on those of another.
   const { values, unreadable } = await readLocalVariables(paths);
   return {
     lookup: (name) => env[name] || values[name] || undefined,
+    ...(paths.environment === undefined ? {} : { environment: paths.environment }),
     ...(unreadable ? { localUnreadable: true as const } : {}),
   };
 }
@@ -216,15 +248,16 @@ export function writeVariable(
   value: string | undefined,
 ): Promise<boolean> {
   return editLocal(paths, (doc) => {
-    const section = doc.get(LOCAL_VARIABLES_KEY, true);
-    if (section !== undefined && !isMap(section)) return false;
+    const path = [...scope(paths), LOCAL_VARIABLES_KEY];
+    const section = mapAt(doc, path);
+    if (section === null) return false;
     if (value !== undefined) {
-      doc.setIn([LOCAL_VARIABLES_KEY, name], value);
+      doc.setIn([...path, name], value);
       return true;
     }
     if (!section?.has(name)) return null;
     section.delete(name);
-    if (section.items.length === 0) doc.delete(LOCAL_VARIABLES_KEY);
+    pruneEmpty(doc, path);
     return true;
   });
 }

@@ -13,11 +13,11 @@ import { ProbeError } from "../errors";
 import { askSecret } from "../ui/prompt";
 import { isInteractive } from "../ui/terminal";
 import { ignoreLocalFiles } from "./init";
-import { openProject } from "./shared";
+import { ENVIRONMENT_ARG, openProject } from "./shared";
 
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
-function usedVariables(config: Config): Map<string, string[]> {
+export function usedVariables(config: Config): Map<string, string[]> {
   const used = new Map<string, string[]>();
   for (const [service, { headers }] of Object.entries(config.services)) {
     for (const name of serviceVariables(headers))
@@ -29,18 +29,27 @@ function usedVariables(config: Config): Map<string, string[]> {
 const unreadable = () =>
   new ProbeError("CONFIG_INVALID", `${LOCAL} is not valid YAML: fix it, then run this again.`);
 
+const flag = (environment: string | undefined) =>
+  environment === undefined ? "" : ` --env ${environment}`;
+const forEnvironment = (environment: string | undefined) =>
+  environment === undefined ? "" : ` for ${environment}`;
+
 function listing(
   used: Map<string, string[]>,
   local: Readonly<Record<string, string>>,
   env: NodeJS.ProcessEnv,
+  environment: string | undefined,
 ): string {
   const names = [...new Set([...used.keys(), ...Object.keys(local)])];
   const width = Math.max(...names.map((name) => name.length));
-  const where = { environment: "set in the environment", local: `set in ${LOCAL}` };
+  const where = {
+    environment: "set in the environment",
+    local: `set in ${LOCAL}${forEnvironment(environment)}`,
+  };
   return names
     .map((name) => {
       const source = variableSource(name, local, env);
-      const state = source ? where[source] : `not set: probe var ${name}`;
+      const state = source ? where[source] : `not set: probe var ${name}${flag(environment)}`;
       const services = used.get(name);
       const users = services ? `sent by ${services.join(", ")}` : "used by no service";
       return `${name.padEnd(width)}  ${state}  (${users})`;
@@ -49,7 +58,7 @@ function listing(
 }
 
 // Never from the command line: the shell history and `ps` would keep it.
-async function readValue(name: string): Promise<string | null> {
+async function readValue(name: string, environment: string | undefined): Promise<string | null> {
   const problem = (value: string) => {
     const reason = variableValueProblem(value);
     return reason && `${name} expects ${reason}.`;
@@ -63,10 +72,10 @@ async function readValue(name: string): Promise<string | null> {
   if (!isInteractive(process.stdin, process.stdout, process.env)) {
     throw new ProbeError(
       "USAGE",
-      `give the value on stdin, e.g. printf %s "$${name}" | probe var ${name}`,
+      `give the value on stdin, e.g. printf %s "$${name}" | probe var ${name}${flag(environment)}`,
     );
   }
-  return askSecret(`Value of ${name} (not shown)`, problem);
+  return askSecret(`Value of ${name}${forEnvironment(environment)} (not shown)`, problem);
 }
 
 export default defineCommand({
@@ -77,9 +86,14 @@ export default defineCommand({
   args: {
     name: { type: "positional", description: "Variable name, e.g. API_TOKEN", required: false },
     unset: { type: "boolean", description: "Forget the value kept for this variable" },
+    env: {
+      ...ENVIRONMENT_ARG,
+      description: "Keep the value for the environment <name> only, instead of the local services",
+    },
   },
   async run({ args }) {
-    const { config, paths } = await openProject();
+    const { config, paths } = await openProject(args.env);
+    const { environment } = paths;
     const used = usedVariables(config);
     const local = await readLocalVariables(paths);
     const { name } = args;
@@ -95,7 +109,7 @@ export default defineCommand({
         );
         return;
       }
-      console.log(listing(used, local.values, process.env));
+      console.log(listing(used, local.values, process.env, environment));
       return;
     }
 
@@ -109,15 +123,17 @@ export default defineCommand({
 
     if (args.unset) {
       if (!Object.hasOwn(local.values, name)) {
-        console.log(`${name} is not kept in ${LOCAL}: nothing to forget.`);
+        console.log(
+          `${name} is not kept in ${LOCAL}${forEnvironment(environment)}: nothing to forget.`,
+        );
         return;
       }
       if (!(await writeVariable(paths, name, undefined))) throw unreadable();
-      console.log(`Forgot ${name}.`);
+      console.log(`Forgot ${name}${forEnvironment(environment)}.`);
       return;
     }
 
-    const value = await readValue(name);
+    const value = await readValue(name, environment);
     if (value === null) {
       console.log("Nothing kept.");
       return;
@@ -125,7 +141,7 @@ export default defineCommand({
     // Before the value is written: the file that holds it must never be committed.
     await ignoreLocalFiles(paths.root);
     if (!(await writeVariable(paths, name, value))) throw unreadable();
-    console.log(`Kept ${name} in ${LOCAL}, for this machine only.`);
+    console.log(`Kept ${name} in ${LOCAL}${forEnvironment(environment)}, for this machine only.`);
     if (process.env[name]) {
       console.error(`probe: the environment sets ${name} too, and is read first.`);
     }
