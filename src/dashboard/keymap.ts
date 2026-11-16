@@ -1,6 +1,7 @@
 export type Screen =
   | "list"
   | "panel"
+  | "readonly"
   | "filter"
   | "palette"
   | "form"
@@ -98,7 +99,13 @@ const BINDINGS: readonly Binding[] = [
     help: "Set the variable",
     barless: true,
   },
-  { screens: ["panel"], section: "Panels", keys: "esc", action: "close", help: "Close" },
+  {
+    screens: ["panel", "readonly"],
+    section: "Panels",
+    keys: "esc",
+    action: "close",
+    help: "Close",
+  },
   {
     screens: ["filter"],
     section: "Filter",
@@ -156,7 +163,7 @@ const BINDINGS: readonly Binding[] = [
   { screens: ["confirm"], keys: "n esc", action: "keep" },
   { screens: ["help"], keys: "? esc", action: "close" },
   {
-    screens: ["list", "panel"],
+    screens: ["list", "panel", "readonly"],
     section: "Outside a text field",
     keys: "?",
     action: "help",
@@ -164,7 +171,7 @@ const BINDINGS: readonly Binding[] = [
     command: "help",
   },
   {
-    screens: ["list", "panel", "help"],
+    screens: ["list", "panel", "readonly", "help"],
     section: "Outside a text field",
     keys: "q",
     action: "quit",

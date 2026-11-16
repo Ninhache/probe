@@ -784,7 +784,9 @@ export function Dashboard({
             : filtering
               ? "filter"
               : panel
-                ? "panel"
+                ? panel.kind === "service" && panel.environment
+                  ? "readonly"
+                  : "panel"
                 : "list";
   const hint = helpBar(screen, unicode, columns, grid);
   const commands = palette ? paletteEntries(unicode, palette.query) : [];

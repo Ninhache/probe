@@ -1,8 +1,18 @@
+import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { render as inkRender } from "ink";
 import { render } from "ink-testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
+import { requireProbeDir } from "../src/config/discovery";
+import type { ActionDeps } from "../src/dashboard/actions";
 import { Dashboard, type DashboardProps, type EnvironmentColumn } from "../src/dashboard/Dashboard";
 import { formatGrid, type GridColumn } from "../src/dashboard/grid";
+import { environmentColumn, environmentSource } from "../src/dashboard/open";
 import { createColors } from "../src/ui/colors";
 import type { Terminal } from "../src/ui/terminal";
 
@@ -110,7 +120,8 @@ describe("dashboard with environments", () => {
   it("says where a service is missing and acts on nothing from an empty cell", async () => {
     const dev1 = column("dev", dev);
     const onOpen = vi.fn(async () => "Opened");
-    const { lastFrame, stdin } = open([dev1, column("prod", prod)], { onOpen });
+    const onServiceWrite = vi.fn(async () => ({ saved: true }));
+    const { lastFrame, stdin } = open([dev1, column("prod", prod)], { onOpen, onServiceWrite });
     await tick();
     stdin.write("jj");
     await waitFor(() => expect(lastFrame()).toContain("local · front is not in .probe/config.yml"));
@@ -120,10 +131,17 @@ describe("dashboard with environments", () => {
     stdin.write("l");
     await waitFor(() => expect(lastFrame()).toContain("dev · front is not in .probe/envs/dev.yml"));
     stdin.write("u");
+    stdin.write("h");
+    await waitFor(() => expect(lastFrame()).toContain("local · front is not in"));
+    stdin.write("e");
+    stdin.write("d");
+    stdin.write("y");
     await tick();
     expect(onOpen).not.toHaveBeenCalled();
     expect(dev1.onOpen).not.toHaveBeenCalled();
+    expect(onServiceWrite).not.toHaveBeenCalled();
     expect(lastFrame()).not.toContain("┌");
+    expect(lastFrame()).not.toContain("Remove");
   });
 
   it("opens and copies the service of the selected environment", async () => {
@@ -168,11 +186,14 @@ describe("dashboard with environments", () => {
       await waitFor(() =>
         expect(lastFrame()).toContain("prod is not edited here: change .probe/envs/prod.yml"),
       );
+      expect(lastFrame()).not.toContain("┌");
       stdin.write("y");
-      await tick();
+      await waitFor(() => expect(lastFrame()).not.toContain("is not edited here"));
     }
     stdin.write(ENTER);
     await waitFor(() => expect(lastFrame()).toContain("api · prod"));
+    expect(lastFrame()).toContain("esc close · ? help · q quit");
+    expect(lastFrame()).not.toContain("hl change");
     expect(lastFrame()).not.toContain("Skip");
     expect(lastFrame()).not.toContain("Timeout");
     expect(lastFrame()).not.toContain("API_TOKEN");
@@ -254,7 +275,7 @@ describe("dashboard with environments", () => {
     expect(lastFrame()).toContain("120ms");
   });
 
-  it("draws the grid in ASCII with no escape sequence, without unicode or colour", async () => {
+  it("marks the selected cell in ASCII, with no escape sequence, without unicode or colour", async () => {
     const { lastFrame, stdin, frames } = open(
       [column("dev", dev)],
       {},
@@ -272,6 +293,128 @@ describe("dashboard with environments", () => {
     await tick();
     stdin.write("?");
     await waitFor(() => expect(lastFrame()).toContain("Change environment"));
+  });
+});
+
+describe("dashboard with environments on a narrow terminal", () => {
+  it("keeps every line within 80 columns, three environments side by side", async () => {
+    const written: string[] = [];
+    const stdout = Object.assign(new EventEmitter(), {
+      columns: 80,
+      rows: 24,
+      isTTY: true,
+      write: (frame: string) => written.push(frame),
+    });
+    const noop = () => {};
+    const stdin = Object.assign(new EventEmitter(), {
+      isTTY: true,
+      setEncoding: noop,
+      setRawMode: noop,
+      resume: noop,
+      pause: noop,
+      ref: noop,
+      unref: noop,
+      read: () => null,
+    });
+    const lines = () => (written.findLast((text) => text.includes("probe ")) ?? "").split("\n");
+    const slow = [
+      down(
+        "api",
+        "https://api.production.example.com/internal/health/readiness?deep=true",
+        "expected 200 or 204, got 503 Service Unavailable",
+      ),
+      up("front", "https://example.com/", 90),
+    ];
+    const ink = inkRender(
+      <Dashboard
+        terminal={plain}
+        settings={{ intervalMs: 60_000, timeoutMs: 3_000 }}
+        check={async () => local}
+        environments={[column("dev", dev), column("prod", slow)]}
+      />,
+      {
+        stdout: stdout as unknown as NodeJS.WriteStream,
+        stdin: stdin as unknown as NodeJS.ReadStream,
+        debug: true,
+        patchConsole: false,
+      },
+    );
+    try {
+      await waitFor(() => expect(lines().join("\n")).toContain("prod 1/2"));
+      stdin.emit("data", "ll");
+      stdin.emit("readable");
+      expect(lines()).toContain("        local 1/2               dev 2/2                 prod 1/2");
+      for (const line of lines()) expect(line.length).toBeLessThanOrEqual(80);
+      expect(lines().at(-1)).toContain("? help · q quit");
+    } finally {
+      ink.unmount();
+    }
+  });
+});
+
+describe("the column of an environment", () => {
+  let dir: string | undefined;
+  let server: ReturnType<typeof createServer> | undefined;
+
+  afterEach(async () => {
+    await new Promise((resolve) => (server ? server.close(resolve) : resolve(undefined)));
+    if (dir) await rm(dir, { recursive: true, force: true });
+    server = undefined;
+    dir = undefined;
+  });
+
+  const project = async () => {
+    const seen: (string | undefined)[] = [];
+    server = createServer((request, response) => {
+      seen.push(request.headers.authorization);
+      response.end("ok");
+    });
+    await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    dir = await mkdtemp(join(tmpdir(), "probe-grid-"));
+    await mkdir(join(dir, ".probe", "envs"), { recursive: true });
+    await writeFile(join(dir, ".probe", "config.yml"), "schemaVersion: 1\nservices: {}\n");
+    await writeFile(join(dir, ".probe", "local.yml"), "variables:\n  DEV_TOKEN: local-value\n");
+    await writeFile(
+      join(dir, ".probe", "envs", "dev.yml"),
+      `schemaVersion: 1\nservices:\n  api:\n    port: ${port}\n    host: 127.0.0.1\n    headers: { Authorization: 'Bearer \${DEV_TOKEN}' }\n`,
+    );
+    return { paths: requireProbeDir(dir), seen };
+  };
+
+  const deps = (copied: string[]): ActionDeps => ({
+    platform: "linux",
+    env: {},
+    openUrl: async () => true,
+    copyText: async (text) => {
+      copied.push(text);
+      return true;
+    },
+    notify: async () => true,
+  });
+
+  it("never sends another environment the value local.yml keeps", async () => {
+    const { paths, seen } = await project();
+    const column = environmentColumn(environmentSource(paths, "dev", {}), deps([]));
+    const results = await column.check(new AbortController().signal, 3_000);
+    expect(results).toMatchObject([{ name: "api", ok: false, error: "DEV_TOKEN is not set" }]);
+    expect(seen).toEqual([]);
+  });
+
+  it("sends the exported value and copies its name, not the value", async () => {
+    const { paths, seen } = await project();
+    const copied: string[] = [];
+    const env = { DEV_TOKEN: "exported-value" };
+    const column = environmentColumn(environmentSource(paths, "dev", env), deps(copied));
+    const results = await column.check(new AbortController().signal, 3_000);
+    expect(results).toMatchObject([{ name: "api", ok: true }]);
+    expect(seen).toEqual(["Bearer exported-value"]);
+    const said = await column.onCopy?.("api");
+    expect(copied.join()).toContain("DEV_TOKEN");
+    for (const text of [said, copied.join(), JSON.stringify(results)]) {
+      expect(text).not.toContain("exported-value");
+      expect(text).not.toContain("local-value");
+    }
   });
 });
 

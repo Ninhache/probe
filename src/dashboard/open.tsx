@@ -1,12 +1,15 @@
 import { render } from "ink";
 import { runChecks } from "../checkers/run";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
+import type { ProbePaths } from "../config/discovery";
+import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
-import type { Variables } from "../config/local";
+import { loadConfig } from "../config/loader";
+import { loadVariables, type Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
-import { CONFIG_FILE, PROBE_DIR } from "../constants";
+import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
-import { serviceActions } from "./actions";
+import { type ActionDeps, serviceActions } from "./actions";
 import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
@@ -36,9 +39,32 @@ export interface EnvironmentSource {
   load: () => Promise<{ config: Config; variables: Variables }>;
 }
 
-function environmentColumn({ name, file, load }: EnvironmentSource): EnvironmentColumn {
+export function environmentSource(
+  paths: ProbePaths,
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+): EnvironmentSource {
+  return {
+    name,
+    file: `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${name}.yml`,
+    async load() {
+      const found = await environmentPaths(paths, name);
+      // Not on stderr: a line printed there would land in the middle of the screen.
+      const loaded = await loadConfig(found, { log: () => {} });
+      return { config: loaded.config, variables: await loadVariables(found, env) };
+    },
+  };
+}
+
+export function environmentColumn(
+  { name, file, load }: EnvironmentSource,
+  deps?: ActionDeps,
+): EnvironmentColumn {
   let known: Config | undefined;
-  const { onOpen, onCopy } = serviceActions(() => known ?? { schemaVersion: 1, services: {} });
+  const { onOpen, onCopy } = serviceActions(
+    () => known ?? { schemaVersion: 1, services: {} },
+    deps,
+  );
   return {
     name,
     file,
@@ -133,7 +159,7 @@ export async function openDashboard(
         })
       }
       variables={tools}
-      environments={environments.map(environmentColumn)}
+      environments={environments.map((source) => environmentColumn(source))}
     />,
     { alternateScreen: true },
   );
