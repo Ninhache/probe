@@ -46,7 +46,8 @@ export default defineCommand({
 
     if (!pending) {
       const { config } = await loadConfig(paths);
-      makefile = await blockState(paths, config);
+      // The block lists the local services: another environment says nothing about it.
+      if (paths.environment === undefined) makefile = await blockState(paths, config);
       const results = await runChecks(
         config,
         args._,
@@ -90,7 +91,10 @@ export default defineCommand({
         line("services", colors.dim("checked after the migration"));
       } else {
         line("migration", colors.green("none pending"));
-        line("makefile", describeBlock(makefile as BlockState, colors));
+        line(
+          "makefile",
+          makefile ? describeBlock(makefile, colors) : colors.dim("not checked with --env"),
+        );
       }
       line("update", describeUpdate(colors));
       if (services) {

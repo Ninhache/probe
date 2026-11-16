@@ -715,6 +715,24 @@ describe("probe doctor", () => {
     expect(report.services[1].checks.process).toEqual({ status: "none" });
   });
 
+  it("leaves the Makefile out when it looks at another environment", async () => {
+    const root = await makefileProject();
+    await addApi(root);
+    await mkdir(join(root, ".probe", "envs"), { recursive: true });
+    await writeFile(
+      join(root, ".probe", "envs", "staging.yml"),
+      `schemaVersion: 1\nservices:\n  other:\n    host: 127.0.0.1\n    port: ${port}\n    path: /health\n`,
+    );
+
+    const text = await probe(root, "doctor", "--env", "staging");
+    const json = await probe(root, "doctor", "--env", "staging", "--json");
+
+    expect(text.stdout).toContain("makefile   not checked with --env");
+    expect(text.stdout).toContain("✓ other");
+    expect(text.code).toBe(0);
+    expect(JSON.parse(json.stdout).project.makefile).toBeNull();
+  });
+
   it("exits 1 for a Makefile block edited by hand, with every service up", async () => {
     const root = await makefileProject();
     await addApi(root);

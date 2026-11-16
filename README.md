@@ -227,6 +227,8 @@ update     up to date (0.17.0)
   state of a container, are read: never a command line nor an environment.
 - It changes nothing: a pending migration is reported, not applied.
 
+With `--env`, the Makefile block is left out: it lists the local services. `--timeout` works as in `check`.
+
 Exit code `0` when there is nothing to report, `1` when a service is down, a migration is pending or the
 Makefile block is edited or out of date. `--json` prints `{ ok, project, services }`, each down service with
 its `checks` (`port`, `process`, `docker`).
