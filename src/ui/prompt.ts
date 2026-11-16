@@ -5,11 +5,48 @@ export interface PromptStreams {
   output?: Writable;
 }
 
+const YES = "Yes";
+const NO = "No";
+const TOWARDS_YES = ["left", "up"];
+const TOWARDS_NO = ["right", "down"];
+
 // "No" is selected first: Enter alone changes nothing.
 export async function confirm(message: string, streams: PromptStreams = {}): Promise<boolean> {
-  const { confirm: ask, isCancel } = await import("@clack/prompts");
-  const answer = await ask({ message, initialValue: false, ...streams });
-  return !isCancel(answer) && answer;
+  const { ConfirmPrompt } = await import("@clack/core");
+  const { isCancel, symbol, S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE } = await import(
+    "@clack/prompts"
+  );
+  const { styleText } = await import("node:util");
+  const option = (label: string, picked: boolean) =>
+    picked
+      ? `${styleText("green", S_RADIO_ACTIVE)} ${label}`
+      : styleText("dim", `${S_RADIO_INACTIVE} ${label}`);
+  const prompt = new ConfirmPrompt({
+    active: YES,
+    inactive: NO,
+    initialValue: false,
+    ...streams,
+    render() {
+      const title = `${styleText("gray", S_BAR)}\n${symbol(this.state)}  ${message}\n`;
+      const answer = this.value ? YES : NO;
+      if (this.state === "submit")
+        return `${title}${styleText("gray", S_BAR)}  ${styleText("dim", answer)}`;
+      if (this.state === "cancel") {
+        const struck = styleText(["strikethrough", "dim"], answer);
+        return `${title}${styleText("gray", S_BAR)}  ${struck}\n${styleText("gray", S_BAR)}`;
+      }
+      const options = `${option(YES, this.value === true)} ${styleText("dim", "/")} ${option(NO, this.value !== true)}`;
+      return `${title}${styleText("cyan", S_BAR)}  ${options}\n${styleText("cyan", S_BAR_END)}\n`;
+    },
+  });
+  // The library flips the answer on any arrow: the right one, pressed on "No", would say "Yes".
+  // This runs after its flip and sets the side the key points to.
+  prompt.on("cursor", (direction) => {
+    if (direction && TOWARDS_YES.includes(direction)) prompt.value = true;
+    if (direction && TOWARDS_NO.includes(direction)) prompt.value = false;
+  });
+  const answer = await prompt.prompt();
+  return !isCancel(answer) && answer === true;
 }
 
 export interface Question {

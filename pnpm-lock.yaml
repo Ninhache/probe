@@ -21,6 +21,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.6.7
         version: 2.6.7
+      '@clack/core':
+        specifier: ^1.6.0
+        version: 1.6.0
       '@clack/prompts':
         specifier: ^1.9.0
         version: 1.9.0
