@@ -1,0 +1,112 @@
+# Dashboard
+
+`probe` alone, on a terminal, opens a live list of your services and checks them every 2 s.
+
+```sh
+probe                # every 2 s
+probe --interval 5   # every 5 s
+```
+
+Off a terminal, in CI or in a pipe, use `probe check`.
+
+## Keys
+
+| Key             | What it does                                   |
+| --------------- | ---------------------------------------------- |
+| `↑` `↓` `j` `k` | Move                                           |
+| `r`             | Check now                                      |
+| `Enter`         | Open the detail of the selected service        |
+| `u`             | Open its URL in the browser                    |
+| `c`             | Copy its curl command                          |
+| `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
+| `a`             | Add a service                                  |
+| `e`             | Edit the selected service                      |
+| `d`             | Remove the selected service, after a question  |
+| `:`             | Find a command by what it does; `Enter` runs   |
+| `o`             | Options: interval, timeout and notifications   |
+| `?`             | Every key; `?` or `Esc` closes                 |
+| `q`             | Quit                                           |
+
+The bar at the bottom shows the keys you need first. While you type (filter, form, command palette), `q` and
+`?` are letters.
+
+`c` uses `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the command is shown to copy by
+hand.
+
+## Add, edit, remove
+
+`a` and `e` open a form: name, port, host, path, expected status, method, then one line per
+[header](headers.md) as `Name: value`, with an empty one at the end to add another.
+
+| Key in the form   | What it does                              |
+| ----------------- | ----------------------------------------- |
+| `↑` `↓` or `Tab`  | Change field                              |
+| `Enter`           | Save                                      |
+| `Esc`             | Cancel                                    |
+| `Ctrl+U`          | Empty the field                           |
+
+- A field left empty takes its default. A header left empty is removed.
+- `d` asks first: only `y` removes.
+- All three write `.probe/config.yml` as `probe add` and `probe rm` do: your comments are kept, and the
+  [Makefile](makefile.md) block stays up to date.
+- A service declared by `url` is not edited here: change it in `config.yml`.
+
+A secret typed in a header (`Authorization: Bearer abc123`) is drawn as dots and never reaches `config.yml`.
+On `Enter` the form asks under which variable to keep it and proposes a name (`API_TOKEN`). It writes
+`Bearer ${API_TOKEN}` in `config.yml` and the value in `.probe/local.yml`.
+
+## Detail of a service
+
+`Enter` shows the last answer of the selected service: status, latencies of this session, headers and the
+first lines of the body. For a service that is down: what failed and what to try.
+
+- The value of a header that can carry a secret (`Authorization`, `Set-Cookie`, anything named after a token
+  or a key) is replaced by `(hidden)`.
+- None of it is written anywhere.
+
+Under it, the panel has:
+
+- the timeout of the service. It is shared: written to `.probe/config.yml`, so commit it;
+- skip: leave the service out on this machine;
+- the variables its headers use, and where each is set. `Enter` on one asks for its value, hidden, and keeps
+  it in `.probe/local.yml`, as `probe var` does. A variable set in the environment is not changed there.
+
+## Options saved for your machine
+
+`o` and the panels save what you change in `.probe/local.yml`:
+
+```yaml
+dashboard: { interval: 5, timeout: 3, notify: true }
+services:
+  db: { skip: true }
+```
+
+- **Skip**: a skipped service is left out of `probe check`, `probe wait` and the dashboard, and shown as
+  `skipped`. Name it (`probe check db`) and it is checked anyway.
+- **Notifications**: with `notify` on, a desktop notification says when a service goes down or comes back. It
+  names the services and nothing else. It needs `notify-send` on Linux; nothing to install on macOS.
+
+A change that cannot be saved (a read-only file, or one that is not valid YAML) still applies until you quit.
+The dashboard shows `not saved: …`, and says it again when it closes.
+
+## Several environments
+
+With [environments](environments.md) in `.probe/envs/`, the list becomes a grid: one line per service name, one
+column per environment, `local` first.
+
+```
+probe · 4/6 up · every 2s
+        local 1/2                 dev 2/2                   prod 1/2
+api   › ✓ 200 4ms                 ✓ 200 120ms               ✗ expected 200, got 503
+db      ✗ connection refused      ✓ 200 80ms
+front                                                       ✓ 200 90ms
+local · http://localhost:3000/health
+```
+
+- `←` `→` or `h` `l` change environment. `›` marks the selected cell, and the line under the grid says what it
+  is.
+- An empty cell is a service the environment does not have.
+- `Enter`, `u` and `c` work on the selected cell.
+- The other environments are read-only: `a`, `e` and `d` say which file to change.
+- A file that cannot be read shows `!` next to its name, with the reason when you select it.
+- A notification names the environment (`prod/api`).
