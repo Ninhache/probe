@@ -79,7 +79,8 @@ their list (since 0.21.0):
 
 ```
 probe · 2/2 up · tenant=globex · every 2s
-› ✓ api  http://localhost:3000/health  200  4ms
+› ✓ api  http://localhost:3000/globex/health  200  4ms
+http://localhost:3000/globex/health
 ┌────────────────────────────┐
 │ Parameters                 │
 │ › tenant  ‹ globex ›       │

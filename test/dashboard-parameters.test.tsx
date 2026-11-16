@@ -115,6 +115,28 @@ describe("dashboard parameters", () => {
     expect(lastFrame()?.split("\n")[0]).toBe("probe · 1/1 up · every 60s");
   });
 
+  it("should not announce a change of state when the value changes", async () => {
+    const told: string[] = [];
+    const check = vi.fn<DashboardProps["check"]>(async (_s, _t, _k, _o, selection) =>
+      answer(selection).map((result) => ({ ...result, ok: selection.tenant === "globex" })),
+    );
+    const { lastFrame, stdin } = open({
+      check,
+      settings: { intervalMs: 60_000, timeoutMs: 3_000, notify: true },
+      onNotify: async (message) => {
+        told.push(message);
+        return undefined;
+      },
+    });
+    await waitFor(() => expect(lastFrame()).toContain("0/1 up"));
+
+    stdin.write("pl");
+    await waitFor(() => expect(lastFrame()).toContain("1/1 up"));
+    await tick();
+
+    expect(told).toEqual([]);
+  });
+
   it("should start the latencies again when the value changes", async () => {
     const { lastFrame, stdin } = open();
     await tick();
