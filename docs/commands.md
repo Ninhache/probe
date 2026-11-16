@@ -34,18 +34,19 @@ probe add api -p 3000 --path /health
 probe add secure --url https://localhost:8443/health
 ```
 
-| Option                    | Default     | Meaning                                                        |
-| ------------------------- | ----------- | -------------------------------------------------------------- |
-| `-p`, `--port <port>`     | required    | Port                                                           |
-| `--host <host>`           | `localhost` | Host name or IP                                                |
-| `--path <path>`           | `/`         | Path to request                                                |
-| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above        |
-| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                           |
-| `--timeout <seconds>`     | 3           | Seconds given to this service                                  |
-| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                     |
-| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`       |
-| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`           |
-| `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra` |
+| Option                    | Default     | Meaning                                                                        |
+| ------------------------- | ----------- | ------------------------------------------------------------------------------ |
+| `-p`, `--port <port>`     | required    | Port                                                                           |
+| `--host <host>`           | `localhost` | Host name or IP                                                                |
+| `--path <path>`           | `/`         | Path to request                                                                |
+| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above                        |
+| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                                           |
+| `--contains <text>`       | none        | Text the body must [contain](config.md#contains): `--contains '"status":"ok"'` |
+| `--timeout <seconds>`     | 3           | Seconds given to this service                                                  |
+| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                                     |
+| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`                       |
+| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`                           |
+| `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra`                 |
 
 - `probe add` alone, on a terminal, asks for each value: see [Discover](features/discover.md).
 - What each value means: [Config](config.md). Headers and their secrets: [Headers](features/headers.md).
@@ -61,7 +62,7 @@ once.
 
 ## probe ls
 
-Lists the services, their URL and their [tags](features/tags.md).
+Lists the services, their URL and what each one declares, such as `expect`, `contains` or [tags](features/tags.md).
 
 | Option         | Meaning                                                 |
 | -------------- | ------------------------------------------------------- |

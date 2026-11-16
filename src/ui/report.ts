@@ -1,6 +1,7 @@
 import { targetUrl } from "../checkers/http";
 import type { CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
+import { CONTAINS_SHOWN_CHARACTERS } from "../constants";
 import { createColors } from "./colors";
 import { link } from "./links";
 import { type Terminal, truncate } from "./terminal";
@@ -73,6 +74,9 @@ export function formatServices(
     notes:
       (service.method === undefined ? "" : `${GAP}${service.method}`) +
       (service.expect === undefined ? "" : `${GAP}expect ${service.expect}`) +
+      (service.contains === undefined
+        ? ""
+        : `${GAP}contains ${truncate(service.contains, CONTAINS_SHOWN_CHARACTERS)}`) +
       (service.timeout === undefined ? "" : `${GAP}timeout ${service.timeout}s`) +
       // Names only: a value may come from a secret.
       (service.headers ? `${GAP}sends ${Object.keys(service.headers).join(", ")}` : "") +

@@ -43,6 +43,7 @@ export interface Service {
   headers?: Record<string, string>;
   hint?: string;
   tags?: string[];
+  contains?: string;
 }
 
 // What is wrong is said without the value: it may be a secret pasted where a reference is expected.
@@ -71,8 +72,14 @@ const headersSchema = z
   });
 
 // One line of plain text: it is printed as is under the service, in any terminal.
-const HINT_FORBIDDEN = /[\p{Cc}\p{Zl}\p{Zp}]/u;
+const LINE_FORBIDDEN = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 export const HINT_EXPECTED = "one line of text, e.g. start it with: make api";
+export const CONTAINS_EXPECTED = 'one line of text, e.g. "status":"ok"';
+
+const oneLine = (expected: string) =>
+  z.string().refine((text) => text.trim() !== "" && !LINE_FORBIDDEN.test(text), {
+    error: `expected ${expected}`,
+  });
 
 export const NAME_EXPECTED = "letters, digits, _ and - only";
 
@@ -95,13 +102,9 @@ export const serviceObjectV1 = z.strictObject({
     .pipe(z.enum(METHODS))
     .optional(),
   headers: headersSchema.optional(),
-  hint: z
-    .string()
-    .refine((hint) => hint.trim() !== "" && !HINT_FORBIDDEN.test(hint), {
-      error: `expected ${HINT_EXPECTED}`,
-    })
-    .optional(),
+  hint: oneLine(HINT_EXPECTED).optional(),
   tags: z.array(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED)).optional(),
+  contains: oneLine(CONTAINS_EXPECTED).optional(),
 });
 
 export const serviceShapeV1 = serviceObjectV1.shape;
@@ -110,6 +113,15 @@ const ADDRESS_KEYS = ["host", "port", "path"] as const;
 
 export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service => {
   const { url, host, port, path, ...rest } = service;
+  if (service.method === "HEAD" && service.contains !== undefined) {
+    ctx.issues.push({
+      code: "custom",
+      message: "cannot be set with `method: HEAD`, whose response has no body",
+      input: service.contains,
+      path: ["contains"],
+    });
+    return z.NEVER;
+  }
   if (url === undefined) {
     if (port === undefined) {
       ctx.issues.push({

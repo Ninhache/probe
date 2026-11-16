@@ -106,6 +106,20 @@ describe("writeService", () => {
     );
   });
 
+  it("should keep the text a service must contain when it is edited", async () => {
+    const contains = `contains: '"status":"ok"'`;
+    const config = CONFIG.replace("front: { port: 5173 }", `front: { port: 5173, ${contains} }`);
+    const paths = await tempProject(config);
+
+    await writeService(paths, {
+      kind: "edit",
+      name: "front",
+      fields: fields({ port: 5174, path: "/" }),
+    });
+
+    expect(await readFile(paths.config, "utf8")).toContain(`front: { port: 5174, ${contains} }`);
+  });
+
   it("should keep the headers of a service that is edited", async () => {
     const headers = "headers: { Accept: text/plain, X-Api-Key: '$" + "{API_KEY}' }";
     const config = CONFIG.replace("front: { port: 5173 }", `front: { port: 5173, ${headers} }`);

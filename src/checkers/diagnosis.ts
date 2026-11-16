@@ -1,6 +1,13 @@
 import { serviceVariables } from "../config/headers";
 import { DEFAULT_METHOD, type Service } from "../config/schema";
-import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
+import {
+  CONFIG_FILE,
+  CONTAINS_BODY_BYTES,
+  CONTAINS_SHOWN_CHARACTERS,
+  LOCAL_FILE,
+  PROBE_DIR,
+} from "../constants";
+import { truncate } from "../ui/terminal";
 
 export interface Diagnosis {
   error: string;
@@ -150,6 +157,27 @@ export function diagnoseStatus(service: Service, status: number): Diagnosis {
     };
   }
   return { error, hint: `the service answers: check \`${address}\` and \`expect\` in ${CONFIG}` };
+}
+
+export type BodyGap = "absent" | "empty" | "cut";
+
+const BYTES_PER_MIB = 1_048_576;
+
+// Only the text asked for is named, never what the service answered.
+export function diagnoseBody(text: string, status: number, gap: BodyGap): Diagnosis {
+  const error = `body does not contain: ${truncate(text, CONTAINS_SHOWN_CHARACTERS)}`;
+  const remedy = `check \`contains\` in ${CONFIG}`;
+  if (gap === "empty") {
+    return { error, hint: `the service answers ${status} with an empty body: ${remedy}` };
+  }
+  if (gap === "cut") {
+    const read = `${CONTAINS_BODY_BYTES / BYTES_PER_MIB} MiB`;
+    return { error, hint: `not in the first ${read} of the body, the rest is not read: ${remedy}` };
+  }
+  return {
+    error,
+    hint: `the service answers ${status} without this exact text: look at its response, or ${remedy}`,
+  };
 }
 
 function sentBy(service: Service): string {
