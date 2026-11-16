@@ -34,7 +34,11 @@ async function readDocument(paths: ProbePaths): Promise<{ doc: Document; raw: Ra
   try {
     text = await readFile(paths.config, "utf8");
   } catch {
-    throw new ProbeError("CONFIG_MISSING", `cannot read ${paths.config}. Run \`probe init\`.`);
+    throw new ProbeError(
+      "CONFIG_MISSING",
+      `cannot read ${paths.config}. Run \`probe init\`.`,
+      paths.config,
+    );
   }
   const doc = parseDocument(text);
   const [syntaxError] = doc.errors;
@@ -42,11 +46,12 @@ async function readDocument(paths: ProbePaths): Promise<{ doc: Document; raw: Ra
     throw new ProbeError(
       "CONFIG_INVALID",
       `${paths.config} is not valid YAML: ${syntaxError.message}`,
+      paths.config,
     );
   }
   const raw: unknown = doc.toJS();
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new ProbeError("CONFIG_INVALID", `${paths.config} must be a YAML mapping.`);
+    throw new ProbeError("CONFIG_INVALID", `${paths.config} must be a YAML mapping.`, paths.config);
   }
   return { doc, raw: raw as RawConfig };
 }
@@ -60,6 +65,7 @@ function validate(raw: RawConfig, paths: ProbePaths, options: MigrationOptions):
     throw new ProbeError(
       "CONFIG_INVALID",
       `${paths.config} is invalid:\n${formatIssues(result.error)}`,
+      paths.config,
     );
   }
   return result.data as Config;

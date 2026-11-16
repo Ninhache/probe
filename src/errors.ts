@@ -21,6 +21,8 @@ export class ProbeError extends Error {
   constructor(
     readonly code: ProbeErrorCode,
     message: string,
+    /** Absolute path of the file the message names, to link it on a terminal that can. */
+    readonly file?: string,
   ) {
     super(message);
     this.name = "ProbeError";

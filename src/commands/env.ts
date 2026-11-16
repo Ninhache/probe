@@ -2,11 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { defineCommand } from "citty";
 import { requireProbeDir } from "../config/discovery";
-import { listEnvironments } from "../config/environments";
+import { environmentPaths, listEnvironments } from "../config/environments";
 import { SERVICE_NAME_PATTERN } from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, LOCAL_ENVIRONMENT, PROBE_DIR } from "../constants";
 import { ProbeError } from "../errors";
-import { openProject } from "./shared";
+import { linkFile } from "../ui/links";
+import { openProject, stdoutTerminal } from "./shared";
 import { usedVariables } from "./var";
 
 const fileOf = (name: string) =>
@@ -36,10 +37,15 @@ export default defineCommand({
           "--from expects the name to create: probe env prod --from dev",
         );
       }
-      const found = await listEnvironments(requireProbeDir(process.cwd()));
+      const paths = requireProbeDir(process.cwd());
+      const found = await listEnvironments(paths);
       const names = [LOCAL_ENVIRONMENT, ...found];
       const width = Math.max(...names.map((known) => known.length));
-      for (const known of names) console.log(`${known.padEnd(width)}  ${fileOf(known)}`);
+      const { hyperlinks } = stdoutTerminal();
+      for (const known of names) {
+        const file = (await environmentPaths(paths, known)).config;
+        console.log(`${known.padEnd(width)}  ${linkFile(fileOf(known), file, hyperlinks)}`);
+      }
       return;
     }
     if (!SERVICE_NAME_PATTERN.test(name)) {
