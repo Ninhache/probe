@@ -41,6 +41,7 @@ export interface Service {
   timeout?: number;
   method?: Method;
   headers?: Record<string, string>;
+  hint?: string;
 }
 
 // What is wrong is said without the value: it may be a secret pasted where a reference is expected.
@@ -68,6 +69,10 @@ const headersSchema = z
     return texts;
   });
 
+// One line of plain text: it is printed as is under the service, in any terminal.
+const HINT_FORBIDDEN = /[\p{Cc}\p{Zl}\p{Zp}]/u;
+export const HINT_EXPECTED = "one line of text, e.g. start it with: make api";
+
 export const serviceObjectV1 = z.strictObject({
   url: z
     .string()
@@ -87,6 +92,12 @@ export const serviceObjectV1 = z.strictObject({
     .pipe(z.enum(METHODS))
     .optional(),
   headers: headersSchema.optional(),
+  hint: z
+    .string()
+    .refine((hint) => hint.trim() !== "" && !HINT_FORBIDDEN.test(hint), {
+      error: `expected ${HINT_EXPECTED}`,
+    })
+    .optional(),
 });
 
 export const serviceShapeV1 = serviceObjectV1.shape;

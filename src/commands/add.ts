@@ -12,6 +12,7 @@ import type { RawConfig } from "../config/migrations";
 import { DEFAULT_METHOD, METHODS, type Method, urlProblem } from "../config/schema";
 import {
   expectProblem,
+  hintProblem,
   methodProblem,
   nameProblem,
   pathProblem,
@@ -186,6 +187,11 @@ export default defineCommand({
       valueHint: "Name: value",
       description: `Header to send, repeatable; a secret as a reference: 'X-Api-Key: ${reference("API_KEY")}'`,
     },
+    hint: {
+      type: "string",
+      valueHint: "text",
+      description: "What to do when it is down, shown under it, e.g. 'run: make api'",
+    },
   },
   async run({ args, rawArgs }) {
     const loaded = await openProject();
@@ -215,6 +221,11 @@ export default defineCommand({
       throw new ProbeError("USAGE", `--header expects "Name: value", e.g. ${HEADER_EXAMPLE}.`);
     }
     if (headers) service.headers = headers;
+    if (args.hint !== undefined) {
+      const hint = String(args.hint);
+      if (hintProblem(hint)) throw new ProbeError("USAGE", `--hint expects ${hintProblem(hint)}.`);
+      service.hint = hint;
+    }
 
     await saveServices(loaded, { ...services, [args.name]: service });
     const { lookup } = await loadVariables(loaded.paths);

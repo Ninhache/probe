@@ -64,11 +64,11 @@ export async function runChecks(
     }),
   );
   const { configFile } = options;
-  if (configFile === undefined) return results;
-  // The hints name the file to edit: for another environment, that is not config.yml.
-  return results.map((result) =>
-    result.hint === undefined
-      ? result
-      : { ...result, hint: result.hint.replaceAll(CONFIG, configFile) },
-  );
+  return results.map((result) => {
+    const own = config.services[result.name]?.hint;
+    if (own !== undefined && !result.ok) return { ...result, hint: own };
+    // The hints name the file to edit: for another environment, that is not config.yml.
+    if (result.hint === undefined || configFile === undefined) return result;
+    return { ...result, hint: result.hint.replaceAll(CONFIG, configFile) };
+  });
 }
