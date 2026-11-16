@@ -31,6 +31,7 @@ The strategy says where the chosen value goes in the request.
 | `header` | `name` | `/health`, sent with `name: v2`        |
 | `query`  | `name` | `/health?name=v2`                      |
 | `path`   |        | `/v2/health`                           |
+| `url`    |        | the address the service gives for `v2` |
 
 - `query` is added after the query the service already has: `/find?q=a` becomes `/find?q=a&name=v2`.
 - `path` goes before the path of the service, for a `url` too: `https://example.com/status` becomes
@@ -40,6 +41,32 @@ The strategy says where the chosen value goes in the request.
 - Two parameters cannot set the same header or the same query.
 - With a `header` parameter, every service sends a header: a redirect is then followed on the same host and
   port only, as for the [headers](headers.md) of a service.
+
+## One address per value
+
+With the `url` strategy, a value changes where a service is: each service lists its address for the values
+that move it, under `urls`. Since 0.21.0.
+
+```yaml
+parameters:
+  env: { values: [local, prod], strategy: { kind: url } }
+
+services:
+  api:
+    port: 3000
+    path: /health
+    urls: { prod: https://api.example.com/health }
+  db: { port: 5432 }
+```
+
+```sh
+probe check                  # api at http://localhost:3000/health
+probe check --set env=prod   # api at https://api.example.com/health, db where it was
+```
+
+- A value without an address in `urls` keeps the `port` or the `url` of the service.
+- A config has one `url` parameter at most, and `urls` only names its values.
+- The other parameters apply to the address that is chosen.
 
 ## Names and values
 
