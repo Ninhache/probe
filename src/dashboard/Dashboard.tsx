@@ -3,7 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "../checkers/types";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { hiddenHeaderLine, serviceVariables, variableValueProblem } from "../config/headers";
-import { CONFIG_FILE, LOCAL_ENVIRONMENT, LOCAL_FILE, PROBE_DIR } from "../constants";
+import {
+  CONFIG_FILE,
+  LOCAL_ENVIRONMENT,
+  LOCAL_FILE,
+  NOTIFY_GRACE_SECONDS,
+  PROBE_DIR,
+} from "../constants";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
@@ -57,6 +63,11 @@ export interface DashboardProps {
   onOpen?: (name: string) => Promise<string>;
   onCopy?: (name: string, timeout: number | undefined) => Promise<string>;
   onNotify?: (message: string) => Promise<string | undefined>;
+  graceMs?: number;
+  now?: () => number;
+  /** Whether the terminal has the focus, when it says so: nothing is notified to someone looking at it. */
+  terminalFocused?: () => boolean | undefined;
+  onClose?: () => void;
   serviceFields?: (name: string) => ServiceFields | string | undefined;
   onServiceWrite?: (write: ServiceWrite, secrets?: Secrets) => Promise<ServiceWriteOutcome>;
   variables?: VariableTools;
@@ -167,6 +178,10 @@ export function Dashboard({
   onOpen,
   onCopy,
   onNotify,
+  graceMs = NOTIFY_GRACE_SECONDS * 1000,
+  now = Date.now,
+  terminalFocused,
+  onClose,
   serviceFields,
   onServiceWrite,
   variables,
@@ -214,10 +229,10 @@ export function Dashboard({
       environment === undefined
         ? known.current
         : (remoteKnown.current.get(environment) ?? NEVER_SEEN);
-    const { known: now, changes } = stateChanges(before, next);
-    if (environment === undefined) known.current = now;
-    else remoteKnown.current.set(environment, now);
-    if (!notifying.current || changes.length === 0) return;
+    const { known: after, changes } = stateChanges(before, next, now(), graceMs);
+    if (environment === undefined) known.current = after;
+    else remoteKnown.current.set(environment, after);
+    if (!notifying.current || changes.length === 0 || terminalFocused?.() === true) return;
     const scope = grid ? `${environment ?? LOCAL_ENVIRONMENT}/` : "";
     const named = changes.map((change) => ({ ...change, name: `${scope}${change.name}` }));
     // Not awaited: the checks go on whatever the desktop does.
@@ -227,6 +242,8 @@ export function Dashboard({
       setNotice(warning);
     });
   };
+
+  useEffect(() => onClose, [onClose]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a write to the config starts a new pass
   useEffect(() => {
