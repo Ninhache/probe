@@ -43,11 +43,11 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` and `-X <method>` are its own)    |
 | `probe add <name> --url <url> [--expect]`                 | Add a service by its full URL, `http` or `https`                       |
 | `probe rm <name> [--yes]`                                 | Remove a service                                                       |
-| `probe ls`                                                | List services                                                          |
+| `probe ls [--env <name>]`                                 | List services                                                          |
 | `probe check [name...] [--json] [--timeout <seconds>]`    | Check all services, or the named ones                                  |
 | `probe wait [name...] [--json] [--timeout <seconds>]`     | Check again until every service is up, or give up after the timeout    |
 | `probe open <name>`                                       | Open the URL of a service in the browser                               |
-| `probe curl <name>`                                       | Print the curl command that requests a service                         |
+| `probe curl <name> [--env <name>]`                        | Print the curl command that requests a service                         |
 | `probe var [name] [--unset]`                              | List the variables the headers use, or set one for this machine        |
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
 | `probe sync`                                              | Add or regenerate the Makefile block (optional)                        |
@@ -196,6 +196,29 @@ services:
 | `method`  | `GET`       | Method of the request, without a body   |
 | `timeout` | 3           | Seconds given to this service to answer |
 | `headers` | none        | Headers sent with the request           |
+
+### Environments
+
+`.probe/config.yml` holds the services of your machine. The same services on a shared environment go in a file
+of their own, written the same way:
+
+```yaml
+# .probe/envs/prod.yml
+schemaVersion: 1
+services:
+  api: { url: https://api.example.com/health }
+  front: { url: https://example.com }
+```
+
+`probe check --env prod` checks that file and nothing else; `wait`, `ls` and `curl` take `--env` too. The other
+commands (`add`, `rm`, `var`, `open`, the dashboard) work on the local services and refuse `--env`. Without
+`--env`, every command reads `config.yml` as before, and `make check` with it: a file in `envs/` is never
+reached unless you name it. The name is the file name, made of letters, digits, `_` and `-`; `local` is
+`config.yml` itself.
+
+What `.probe/local.yml` keeps is for the local services: a service skipped there is still checked in another
+environment, and a variable set by `probe var` is not sent to it. Export the variable in the shell that runs
+`probe` instead (`API_TOKEN=… probe check --env prod`). Needs `probe` 0.15.0 or later.
 
 Which timeout applies: `--timeout` when you pass it, else the service's `timeout`, else 3 s (in the dashboard,
 the timeout set in its options). A config with a `timeout` needs `probe` 0.4.0 or later: older versions refuse it.

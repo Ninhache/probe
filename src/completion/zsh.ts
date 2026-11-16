@@ -1,4 +1,10 @@
-import { type CommandSpec, ROOT_OPTIONS, SERVICES_QUERY } from "./spec";
+import {
+  type CommandSpec,
+  ENVIRONMENT_OPTION,
+  ENVIRONMENTS_QUERY,
+  ROOT_OPTIONS,
+  SERVICES_QUERY,
+} from "./spec";
 
 function described({ name, description }: CommandSpec): string {
   const text = `${name}:${description.replaceAll(":", "\\:")}`;
@@ -25,6 +31,11 @@ export function zshScript(commands: CommandSpec[]): string {
     "    else",
     "      _describe 'command' commands",
     "    fi",
+    "    return",
+    "  fi",
+    `  if [[ $words[CURRENT-1] == ${ENVIRONMENT_OPTION} ]]; then`,
+    `    services=(\${(f)"$(${ENVIRONMENTS_QUERY})"})`,
+    "    compadd -a services",
     "    return",
     "  fi",
     "  if [[ $words[CURRENT] == -* ]]; then",

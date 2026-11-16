@@ -7,7 +7,7 @@ export interface Diagnosis {
   hint?: string;
 }
 
-const CONFIG = `${PROBE_DIR}/${CONFIG_FILE}`;
+export const CONFIG = `${PROBE_DIR}/${CONFIG_FILE}`;
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
 const UNKNOWN_ISSUER_CODES = [
@@ -159,20 +159,25 @@ function sentBy(service: Service): string {
 
 const setCommand = (name: string) => `probe var ${name}`;
 
-export function diagnoseUnset(names: string[], localUnreadable: boolean): Diagnosis {
+export function diagnoseUnset(
+  names: string[],
+  { localUnreadable, exportedOnly }: { localUnreadable?: boolean; exportedOnly?: boolean },
+): Diagnosis {
   const [first = ""] = names;
   const error = `${names.join(", ")} ${names.length > 1 ? "are" : "is"} not set`;
+  if (exportedOnly) return { error, hint: `export ${first} in the shell that runs probe` };
   if (localUnreadable) {
     return { error, hint: `${LOCAL} is not valid YAML: fix it, or export ${first}` };
   }
   return { error, hint: `set it for this machine: ${setCommand(first)} (or export it)` };
 }
 
-export function diagnoseUnsendable(names: string[]): Diagnosis {
+export function diagnoseUnsendable(names: string[], exportedOnly = false): Diagnosis {
   const [first = ""] = names;
+  const again = exportedOnly ? `export ${first} again` : `set it again with ${setCommand(first)}`;
   return {
     error: `${names.join(", ")} cannot go in a header`,
-    hint: `a line break or an unusual character in its value: set it again with ${setCommand(first)}`,
+    hint: `a line break or an unusual character in its value: ${again}`,
   };
 }
 

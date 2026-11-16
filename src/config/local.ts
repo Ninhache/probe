@@ -128,6 +128,7 @@ export function writeDashboardPreferences(
 }
 
 export async function readSkippedServices(paths: ProbePaths): Promise<Set<string>> {
+  if (paths.environment !== undefined) return new Set();
   const text = await readLocal(paths);
   if (text === null) return new Set();
   const doc = parseDocument(text);
@@ -163,6 +164,7 @@ export interface Variables {
   lookup: VariableLookup;
   /** `local.yml` is there but cannot be read: a variable it may hold is not simply "not set". */
   localUnreadable?: true;
+  exportedOnly?: true;
 }
 
 export type VariableSource = "environment" | "local";
@@ -197,6 +199,10 @@ export async function loadVariables(
   paths: ProbePaths,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Variables> {
+  // The values of local.yml are those of the local environment: no other one is sent them.
+  if (paths.environment !== undefined) {
+    return { lookup: (name) => env[name] || undefined, exportedOnly: true };
+  }
   const { values, unreadable } = await readLocalVariables(paths);
   return {
     lookup: (name) => env[name] || values[name] || undefined,

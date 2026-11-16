@@ -12,7 +12,15 @@ import {
 } from "../constants";
 import { ProbeError } from "../errors";
 import { formatCheckResults } from "../ui/report";
-import { openProject, requireVariables, secondsToMs, stdoutTerminal } from "./shared";
+import {
+  configFile,
+  ENVIRONMENT_ARG,
+  noServices,
+  openProject,
+  requireVariables,
+  secondsToMs,
+  stdoutTerminal,
+} from "./shared";
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
@@ -41,6 +49,7 @@ export default defineCommand({
   },
   args: {
     json: { type: "boolean", description: "Print the final results as JSON" },
+    env: ENVIRONMENT_ARG,
     timeout: {
       type: "string",
       description: "Seconds to wait in total, all checks included, before giving up",
@@ -67,7 +76,7 @@ export default defineCommand({
         `--interval (${args.interval}s) cannot be longer than --max-interval (${args["max-interval"]}s).`,
       );
     }
-    const { config, paths } = await openProject();
+    const { config, paths } = await openProject(args.env);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);
     requireVariables(config, args._, variables, skipped);
@@ -79,7 +88,12 @@ export default defineCommand({
         runChecks(
           config,
           args._,
-          { timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000, maxTimeoutMs: remainingMs, variables },
+          {
+            timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000,
+            maxTimeoutMs: remainingMs,
+            variables,
+            configFile: configFile(paths),
+          },
           skipped,
         ),
       {
@@ -96,7 +110,7 @@ export default defineCommand({
     if (args.json) {
       console.log(JSON.stringify(results, null, 2));
     } else if (results.length === 0) {
-      console.log("No services yet. Add one: probe add api -p 3000");
+      console.log(noServices(paths));
     } else {
       console.log(formatCheckResults(results, stdoutTerminal()));
     }

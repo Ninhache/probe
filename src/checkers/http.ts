@@ -134,9 +134,10 @@ async function request(
     const resolved = resolveHeaders(service.headers, variables?.lookup ?? (() => undefined));
     // Nothing is sent: a request without its credentials would only say 401.
     if ("unset" in resolved) {
-      return failed(diagnoseUnset(resolved.unset, variables?.localUnreadable === true));
+      return failed(diagnoseUnset(resolved.unset, variables ?? {}));
     }
-    if ("unsendable" in resolved) return failed(diagnoseUnsendable(resolved.unsendable));
+    if ("unsendable" in resolved)
+      return failed(diagnoseUnsendable(resolved.unsendable, variables?.exportedOnly));
     try {
       headers = new Headers(resolved.headers);
     } catch {

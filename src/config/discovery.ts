@@ -9,6 +9,7 @@ export interface ProbePaths {
   config: string;
   lock: string;
   local: string;
+  environment?: string;
 }
 
 export function pathsFor(root: string): ProbePaths {
