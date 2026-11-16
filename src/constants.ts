@@ -57,6 +57,8 @@ export const DETECT_PORTS_ENV = "PROBE_DETECT_PORTS";
 export const DETECT_TIMEOUT_MS = 300;
 
 export const NOTIFY_WAIT_MS = 5_000;
+// Longer than a restart: a service that comes back by itself is not worth a notification.
+export const NOTIFY_GRACE_SECONDS = 60;
 
 export const DOCTOR_COMMAND_TIMEOUT_MS = 3_000;
 // Only this machine is asked: a port that is open answers at once.

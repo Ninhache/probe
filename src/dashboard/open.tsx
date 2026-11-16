@@ -11,6 +11,7 @@ import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { type ActionDeps, serviceActions } from "./actions";
 import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
+import { watchFocus } from "./focus";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
 import { type VariableSources, variableTools } from "./variables";
@@ -137,6 +138,7 @@ export async function openDashboard(
     if (!variableSources || unset.length === 0) return undefined;
     return `${unset.join(", ")} not set: open ${name} with enter, then enter on the variable`;
   };
+  const focus = watchFocus(process.stdin, process.stdout);
   const app = render(
     <Dashboard
       terminal={terminal}
@@ -144,6 +146,8 @@ export async function openDashboard(
       timeouts={timeouts}
       {...serviceActions(() => config)}
       {...state}
+      terminalFocused={focus.focused}
+      onClose={focus.stop}
       serviceFields={(name) => {
         const service = config.services[name];
         if (service?.url !== undefined) {
@@ -166,5 +170,9 @@ export async function openDashboard(
     />,
     { alternateScreen: true },
   );
-  await app.waitUntilExit();
+  try {
+    await app.waitUntilExit();
+  } finally {
+    focus.stop();
+  }
 }

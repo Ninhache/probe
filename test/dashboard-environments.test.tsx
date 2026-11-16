@@ -81,6 +81,7 @@ function open(
       settings={{ intervalMs: 60_000, timeoutMs: 3_000 }}
       check={async () => local}
       environments={environments}
+      graceMs={0}
       {...props}
     />,
   );

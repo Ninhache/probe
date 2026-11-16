@@ -75,6 +75,8 @@ function open(options: {
   onCopy?: DashboardProps["onCopy"];
   notify?: boolean;
   onNotify?: DashboardProps["onNotify"];
+  graceMs?: number;
+  terminalFocused?: DashboardProps["terminalFocused"];
   serviceFields?: DashboardProps["serviceFields"];
   onServiceWrite?: DashboardProps["onServiceWrite"];
   variables?: DashboardProps["variables"];
@@ -97,6 +99,8 @@ function open(options: {
       onOpen={options.onOpen}
       onCopy={options.onCopy}
       onNotify={options.onNotify}
+      graceMs={options.graceMs ?? 0}
+      terminalFocused={options.terminalFocused}
       serviceFields={options.serviceFields}
       onServiceWrite={options.onServiceWrite}
       variables={options.variables}
@@ -1463,6 +1467,58 @@ describe("dashboard desktop notifications", () => {
     await waitFor(() => expect(told).toEqual(["api is down", "api is back up"]));
     await tick(150);
     expect(told).toEqual(["api is down", "api is back up"]);
+  });
+
+  it("tells nothing of a service that comes back within the grace", async () => {
+    const { told, onNotify } = listener();
+    open({
+      intervalMs: 20,
+      notify: true,
+      graceMs: 60_000,
+      onNotify,
+      check: flapping([true, false, false, true, false]),
+    });
+
+    await tick(250);
+    expect(told).toEqual([]);
+  });
+
+  it("tells a service down once it has stayed down for the grace", async () => {
+    const { told, onNotify } = listener();
+    open({
+      intervalMs: 20,
+      notify: true,
+      graceMs: 100,
+      onNotify,
+      check: flapping([true, false]),
+    });
+
+    await tick(60);
+    expect(told).toEqual([]);
+    await waitFor(() => expect(told).toEqual(["api is down"]));
+  });
+
+  it("tells nothing while the terminal has the focus", async () => {
+    const { told, onNotify } = listener();
+    let focused: boolean | undefined = true;
+    let ok = true;
+    const { lastFrame } = open({
+      intervalMs: 20,
+      notify: true,
+      onNotify,
+      terminalFocused: () => focused,
+      check: async () => [{ ...api, ok }, db],
+    });
+    await shows(lastFrame, "1/2 up");
+
+    ok = false;
+    await shows(lastFrame, "0/2 up");
+    await tick(100);
+    expect(told).toEqual([]);
+
+    focused = false;
+    ok = true;
+    await waitFor(() => expect(told).toEqual(["api is back up"]));
   });
 
   it("tells nothing while the option is off", async () => {
