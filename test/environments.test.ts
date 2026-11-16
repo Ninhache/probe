@@ -297,7 +297,7 @@ describe("a command that works on the local services only", () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain(
-      "--env is read by ls, check, wait, curl, var only: the other commands work on the local services.",
+      "--env is read by ls, check, wait, curl, var, doctor only: the other commands work on the local services.",
     );
     expect(await readFile(join(dir, "config.yml"), "utf8")).toBe(before);
     expect((await readdir(root)).sort()).toEqual([".probe"]);

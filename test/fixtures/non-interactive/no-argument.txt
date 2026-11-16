@@ -2,7 +2,7 @@ exit code: 2
 --- stdout
 Health checks for your local dev services (probe vVERSION)
 
-USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|env|status|sync|migrate|completion
+USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|env|status|doctor|sync|migrate|completion
 
 OPTIONS
 
@@ -21,6 +21,7 @@ COMMANDS
          var    Set a variable the headers refer to, on this machine                
          env    List the environments, or create one from the services of another   
       status    Show pending migration, Makefile state and updates                  
+      doctor    Diagnose the project and the services that are down                 
         sync    Add or regenerate the probe block of the Makefile (optional)        
      migrate    Migrate the config to the current schema version                    
   completion    Print the shell completion script (zsh, bash, fish)                 

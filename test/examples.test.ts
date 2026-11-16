@@ -4,6 +4,7 @@ import add from "../src/commands/add";
 import check from "../src/commands/check";
 import completion from "../src/commands/completion";
 import curl from "../src/commands/curl";
+import doctor from "../src/commands/doctor";
 import init from "../src/commands/init";
 import ls from "../src/commands/ls";
 import migrate from "../src/commands/migrate";
@@ -26,6 +27,7 @@ const COMMANDS: Record<string, { args?: unknown }> = {
   curl,
   var: variable,
   status,
+  doctor,
   sync,
   migrate,
   completion: completion({}),

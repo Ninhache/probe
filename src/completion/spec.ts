@@ -17,7 +17,7 @@ export const SHELLS = ["zsh", "bash", "fish"] as const;
 export type Shell = (typeof SHELLS)[number];
 
 export const COMPLETION_COMMAND = "completion";
-export const SERVICE_COMMANDS = ["rm", "check", "wait", "open", "curl"];
+export const SERVICE_COMMANDS = ["rm", "check", "wait", "open", "curl", "doctor"];
 export const ROOT_OPTIONS = ["--interval", "--help", "--version"];
 export const SERVICES_QUERY = `probe ${COMPLETE_COMMAND} services 2>/dev/null`;
 

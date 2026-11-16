@@ -678,6 +678,59 @@ describe("something still pending once the report is printed", () => {
   });
 });
 
+describe("probe doctor", () => {
+  it("exits 0 on a project with nothing to report", async () => {
+    const root = await project();
+    await addApi(root);
+
+    const { code, stdout } = await probe(root, "doctor");
+
+    expect(code).toBe(0);
+    expect(stdout).toContain("migration  none pending");
+    expect(stdout).toContain("✓ api");
+    expect(stdout).not.toContain(ANSI);
+  });
+
+  it("exits 1 and says the port is closed for a service that is down", async () => {
+    const root = await project();
+    await addApi(root);
+    await addDown(root);
+
+    const text = await probe(root, "doctor", "down");
+    const json = await probe(root, "doctor", "--json");
+    const report = JSON.parse(json.stdout);
+
+    expect(text.code).toBe(1);
+    expect(text.stdout).toContain(`port ${closedPort}`);
+    expect(text.stdout).toContain("nothing listens on it");
+    expect(json.code).toBe(1);
+    expect(report.ok).toBe(false);
+    expect(report.project).toMatchObject({ migration: null, makefile: "missing" });
+    expect(report.services.map((service: { name: string }) => service.name)).toEqual([
+      "api",
+      "down",
+    ]);
+    expect(report.services[0].checks).toBeUndefined();
+    expect(report.services[1].checks.port).toEqual({ status: "closed" });
+    expect(report.services[1].checks.process).toEqual({ status: "none" });
+  });
+
+  it("exits 1 for a Makefile block edited by hand, with every service up", async () => {
+    const root = await makefileProject();
+    await addApi(root);
+    const makefile = join(root, "Makefile");
+    await writeFile(
+      makefile,
+      (await readFile(makefile, "utf8")).replace("check-api:", "check-api: extra"),
+    );
+
+    const { code, stdout } = await probe(root, "doctor");
+
+    expect(stdout).toContain("block edited by hand");
+    expect(code).toBe(1);
+  });
+});
+
 describe("probe status / sync", () => {
   it("does not ask for a Makefile block, and sync adds one", async () => {
     const root = await project();
@@ -800,7 +853,7 @@ describe("probe (top level)", () => {
     const usage = await exec(process.execPath, [CLI], cwd, env);
     expect(usage.code).toBe(2);
     expect(usage.stdout).toContain(
-      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|env|status|sync|migrate",
+      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|env|status|doctor|sync|migrate",
     );
   });
 

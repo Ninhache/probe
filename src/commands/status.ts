@@ -7,7 +7,7 @@ import { cacheDir, readCache, updateCheckDisabled, updateNotice } from "../updat
 import { CLI_VERSION } from "../version";
 import { stdoutColors } from "./shared";
 
-function describeBlock(state: BlockState, colors: Colors): string {
+export function describeBlock(state: BlockState, colors: Colors): string {
   switch (state) {
     case "in-sync":
       return colors.green("in sync");
@@ -20,7 +20,7 @@ function describeBlock(state: BlockState, colors: Colors): string {
   }
 }
 
-function describeUpdate(colors: Colors): string {
+export function describeUpdate(colors: Colors): string {
   if (updateCheckDisabled()) return colors.dim(`check disabled (${CLI_VERSION})`);
   const notice = updateNotice(CLI_VERSION, cacheDir());
   if (notice) return colors.yellow(notice);
