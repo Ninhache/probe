@@ -85,9 +85,10 @@ services:
   `skipped`. Name it (`probe check db`) and it is checked anyway.
 - **Notifications**: with `notify` on, a desktop notification says when a service has been down for 60 seconds,
   and when it comes back after that. A service that comes back sooner, a restart for instance, gives none
-  (since 0.20.0). Nothing is notified while the terminal of the dashboard has the focus, when the terminal reports
-  it (in tmux: `set -g focus-events on`). A notification names the services and nothing else. It needs
-  `notify-send` on Linux; nothing to install on macOS.
+  (since 0.20.0). Nothing is notified while the terminal of the dashboard has the focus. The terminal reports
+  it at each change of window (in tmux: `set -g focus-events on`): until the first one, or when it never does,
+  the focus is not known and the notification is shown. A notification names the services and nothing
+  else. It needs `notify-send` on Linux; nothing to install on macOS.
 
 A change that cannot be saved (a read-only file, or one that is not valid YAML) still applies until you quit.
 The dashboard shows `not saved: …`, and says it again when it closes.

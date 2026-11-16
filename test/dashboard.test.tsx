@@ -76,6 +76,7 @@ function open(options: {
   notify?: boolean;
   onNotify?: DashboardProps["onNotify"];
   graceMs?: number;
+  now?: DashboardProps["now"];
   terminalFocused?: DashboardProps["terminalFocused"];
   serviceFields?: DashboardProps["serviceFields"];
   onServiceWrite?: DashboardProps["onServiceWrite"];
@@ -100,6 +101,7 @@ function open(options: {
       onCopy={options.onCopy}
       onNotify={options.onNotify}
       graceMs={options.graceMs ?? 0}
+      now={options.now}
       terminalFocused={options.terminalFocused}
       serviceFields={options.serviceFields}
       onServiceWrite={options.onServiceWrite}
@@ -1485,16 +1487,21 @@ describe("dashboard desktop notifications", () => {
 
   it("tells a service down once it has stayed down for the grace", async () => {
     const { told, onNotify } = listener();
-    open({
+    let at = 0;
+    const { lastFrame } = open({
       intervalMs: 20,
       notify: true,
-      graceMs: 100,
+      graceMs: 60_000,
+      now: () => at,
       onNotify,
       check: flapping([true, false]),
     });
+    await shows(lastFrame, "0/2 up");
 
-    await tick(60);
+    at = 59_999;
+    await tick(100);
     expect(told).toEqual([]);
+    at = 60_000;
     await waitFor(() => expect(told).toEqual(["api is down"]));
   });
 
