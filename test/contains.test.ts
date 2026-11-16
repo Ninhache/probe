@@ -124,6 +124,12 @@ describe("a check with contains", () => {
     expect(await check("/stalled")).toMatchObject({ ok: false, error: "timeout after 0.3s" });
   });
 
+  it("reports the same timeout when the detail is asked", async () => {
+    const result = await check("/stalled", {}, true);
+
+    expect(result).toMatchObject({ ok: false, error: "timeout after 0.3s" });
+  });
+
   it("stops reading after the limit", async () => {
     const result = await check("/big", { timeout: 5 });
 
@@ -232,6 +238,17 @@ describe("probe add --contains", () => {
 
     expect(run.code).toBe(2);
     expect(run.stderr).toContain("--contains expects one line of text");
+    expect(await configText(root)).toBe(before);
+  });
+
+  it("refuses it with --method HEAD, writing nothing", async () => {
+    const root = await project();
+    const before = await configText(root);
+
+    const run = await add(root, "api", "/ok", "-X", "head", "--contains", "ok");
+
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain("--contains cannot go with --method HEAD");
     expect(await configText(root)).toBe(before);
   });
 

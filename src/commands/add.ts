@@ -231,6 +231,12 @@ export default defineCommand({
       const method = String(args.method).toUpperCase() as Method;
       if (method !== DEFAULT_METHOD) service.method = method;
     }
+    if (service.method === "HEAD" && service.contains !== undefined) {
+      throw new ProbeError(
+        "USAGE",
+        "--contains cannot go with --method HEAD, whose response has no body.",
+      );
+    }
     const headers = headersFrom(headerLines(rawArgs));
     // Never a service saved without a header that was asked for.
     if (args.header !== undefined && !headers) {
