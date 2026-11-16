@@ -57,6 +57,10 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 
 Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 
+On a terminal that supports hyperlinks (iTerm2, kitty, WezTerm, Ghostty, VS Code, GNOME Terminal…), the URL of a
+service in `check`, `wait` and `ls`, and the path of a config file in `probe env` and in a config error, open
+with Cmd/Ctrl+click. Elsewhere, in a pipe and with `--json`, the output has no such sequence.
+
 A service that is down comes with a hint when the cause is a known one: connection refused, timeout, host not
 found, unexpected status, certificate rejected after a redirect to https. With `--json` it is the `hint` field,
 next to `error`.

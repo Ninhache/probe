@@ -701,7 +701,8 @@ export function Dashboard({
       : // One line per service: the hint of the selected one goes under the list.
         formatCheckResults(
           results.map(({ hint: _, ...result }) => result),
-          { ...terminal, columns: Math.max(1, columns - MARKER_WIDTH) },
+          // No link here: ink measures and cuts these lines itself.
+          { ...terminal, hyperlinks: false, columns: Math.max(1, columns - MARKER_WIDTH) },
         ).split("\n");
   const empty = filter
     ? `no service matches "${filter}"`

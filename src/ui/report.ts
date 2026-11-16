@@ -2,6 +2,7 @@ import { targetUrl } from "../checkers/http";
 import type { CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
 import { createColors } from "./colors";
+import { link } from "./links";
 import { type Terminal, truncate } from "./terminal";
 
 const GAP = "  ";
@@ -37,7 +38,9 @@ export function formatCheckResults(results: CheckResult[], terminal: Terminal): 
           ? colors.green("✓")
           : colors.red("✗");
       const name = colors.bold(truncate(result.name, nameMax).padEnd(nameMax));
-      const target = compact ? "" : `${colors.dim(result.target.padEnd(targetWidth))}${GAP}`;
+      const padding = " ".repeat(targetWidth - result.target.length);
+      const linked = link(result.target, result.target, terminal.hyperlinks);
+      const target = compact ? "" : `${colors.dim(`${linked}${padding}`)}${GAP}`;
       const plain = outcomes[index] as string;
       let outcome: string;
       if (result.skipped) {
@@ -85,7 +88,8 @@ export function formatServices(
   return rows
     .map((row) => {
       const name = colors.bold(truncate(row.name, nameMax).padEnd(nameMax));
-      const url = urlMax === undefined ? row.url : truncate(row.url, urlMax);
+      const shown = urlMax === undefined ? row.url : truncate(row.url, urlMax);
+      const url = link(shown, row.url, terminal.hyperlinks);
       return `${name}${GAP}${url}${compact || !row.notes ? "" : colors.dim(row.notes)}`;
     })
     .join("\n");
