@@ -646,6 +646,7 @@ describe("dashboard", () => {
       "  d       Remove it",
       "  a       Add a service",
       "  /       Filter by name",
+      "  p       Parameter values",
       "  :       Find a command",
       "  o       Options",
     ];
@@ -927,7 +928,7 @@ describe("dashboard filter", () => {
 
     stdin.write(`/d${ENTER}u`);
 
-    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("db"));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("db", {}));
     expect(lastFrame()).toContain("probe · 1/2 up · every 60s · filter: d");
   });
 
@@ -967,6 +968,7 @@ describe("dashboard command palette", () => {
         "  Remove it          d",
         "  Add a service      a",
         "  Filter by name     /",
+        "  Parameter values   p",
         "  Options            o",
         "  This help          ?",
         "  Quit               q",
@@ -994,7 +996,7 @@ describe("dashboard command palette", () => {
     stdin.write(`j:curl${ENTER}`);
 
     await shows(lastFrame, "Copied");
-    expect(onCopy).toHaveBeenCalledWith("db", undefined);
+    expect(onCopy).toHaveBeenCalledWith("db", undefined, {});
     expect(lastFrame()).not.toContain(": curl");
   });
 
@@ -1098,7 +1100,7 @@ describe("dashboard command palette", () => {
     const { lastFrame, stdin } = open({ check: async () => services });
     await tick();
 
-    stdin.write(`:${`${ESCAPE}[B`.repeat(10)}`);
+    stdin.write(`:${`${ESCAPE}[B`.repeat(11)}`);
 
     await shows(lastFrame, "› Quit");
     expect((lastFrame() ?? "").split("\n").length).toBeLessThan(24);

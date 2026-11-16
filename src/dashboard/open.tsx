@@ -6,7 +6,7 @@ import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { loadConfig } from "../config/loader";
 import { loadVariables, readSkippedServices, type Variables } from "../config/local";
-import { applySelection } from "../config/parameters";
+import { applySelection, parameterChoices } from "../config/parameters";
 import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
@@ -68,21 +68,22 @@ export function environmentColumn(
 ): EnvironmentColumn {
   let known: Config | undefined;
   const { onOpen, onCopy } = serviceActions(
-    () => applySelection(known ?? { schemaVersion: 1, services: {} }),
+    (selection) => applySelection(known ?? { schemaVersion: 1, services: {} }, selection),
     deps,
   );
   return {
     name,
     file,
     onOpen,
-    onCopy: (service) => onCopy(service, known?.services[service]?.timeout),
-    async check(signal, timeoutMs) {
+    onCopy: (service, selection) => onCopy(service, known?.services[service]?.timeout, selection),
+    parameters: () => (known ? parameterChoices(known) : {}),
+    async check(signal, timeoutMs, selection) {
       const { config, variables, skipped } = await load();
       known = config;
       return runChecks(
         config,
         [],
-        { timeoutMs, signal, detail: true, variables, configFile: file },
+        { timeoutMs, signal, detail: true, variables, configFile: file, selection },
         skipped,
       );
     },
@@ -111,7 +112,13 @@ export async function openDashboard(
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
   let config = initial;
-  const check: DashboardProps["check"] = async (signal, timeoutMs, skipped, timeouts) => {
+  const check: DashboardProps["check"] = async (
+    signal,
+    timeoutMs,
+    skipped,
+    timeouts,
+    selection,
+  ) => {
     const services = Object.fromEntries(
       Object.entries(config.services).map(([name, service]) => [
         name,
@@ -122,7 +129,7 @@ export async function openDashboard(
     return runChecks(
       { ...config, services },
       [],
-      { timeoutMs, signal, detail: true, variables },
+      { timeoutMs, signal, detail: true, variables, selection },
       skipped,
     );
   };
@@ -145,7 +152,8 @@ export async function openDashboard(
       terminal={terminal}
       check={check}
       timeouts={timeouts}
-      {...serviceActions(() => applySelection(config))}
+      {...serviceActions((selection) => applySelection(config, selection))}
+      parameters={() => parameterChoices(config)}
       {...state}
       terminalFocused={focus.focused}
       onClose={focus.stop}

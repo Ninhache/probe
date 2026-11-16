@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "../checkers/types";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { hiddenHeaderLine, serviceVariables, variableValueProblem } from "../config/headers";
+import { effectiveSelection, type ParameterChoices, type Selection } from "../config/parameters";
 import {
   CONFIG_FILE,
   LOCAL_ENVIRONMENT,
@@ -56,12 +57,15 @@ export interface DashboardProps {
     timeoutMs: number,
     skipped: ReadonlySet<string>,
     timeouts: ServiceTimeouts,
+    selection: Selection,
   ) => Promise<CheckResult[]>;
+  /** The parameters of the local config and their values: chosen here for this run, written nowhere. */
+  parameters?: () => ParameterChoices;
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
-  onOpen?: (name: string) => Promise<string>;
-  onCopy?: (name: string, timeout: number | undefined) => Promise<string>;
+  onOpen?: (name: string, selection?: Selection) => Promise<string>;
+  onCopy?: (name: string, timeout: number | undefined, selection?: Selection) => Promise<string>;
   onNotify?: (message: string) => Promise<string | undefined>;
   graceMs?: number;
   now?: () => number;
@@ -78,9 +82,11 @@ export interface DashboardProps {
 export interface EnvironmentColumn {
   name: string;
   file: string;
-  check: (signal: AbortSignal, timeoutMs: number) => Promise<CheckResult[]>;
-  onOpen?: (name: string) => Promise<string>;
-  onCopy?: (name: string) => Promise<string>;
+  check: (signal: AbortSignal, timeoutMs: number, selection?: Selection) => Promise<CheckResult[]>;
+  onOpen?: (name: string, selection?: Selection) => Promise<string>;
+  onCopy?: (name: string, selection?: Selection) => Promise<string>;
+  /** Its file is read again at each pass: so are its parameters. */
+  parameters?: () => ParameterChoices;
 }
 
 interface RemoteState {
@@ -101,6 +107,7 @@ export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
 
 type Panel =
   | { kind: "options"; row: number }
+  | { kind: "parameters"; row: number }
   | { kind: "service"; name: string; environment?: string; row: number };
 
 interface Form {
@@ -132,6 +139,9 @@ const TIMEOUT_ROW = SERVICE_ROWS.indexOf("Timeout");
 const NO_TIMEOUTS: ServiceTimeouts = {};
 const NO_VARIABLES: readonly VariableRow[] = [];
 const NO_ENVIRONMENTS: readonly EnvironmentColumn[] = [];
+const NO_SELECTION: Selection = {};
+const NO_CHOICES: ParameterChoices = {};
+const CLOSING_KEYS = { options: "o", parameters: "p" };
 const NEVER_SEEN: KnownStates = new Map();
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 const SOURCES = { environment: "set in the environment", local: `set in ${LOCAL_FILE}` };
@@ -187,6 +197,7 @@ export function Dashboard({
   variables,
   onVariableWrite,
   environments = NO_ENVIRONMENTS,
+  parameters,
 }: DashboardProps) {
   const { exit } = useApp();
   const { columns, rows: windowRows } = useWindowSize();
@@ -209,6 +220,11 @@ export function Dashboard({
   const [variableRows, setVariableRows] = useState(NO_VARIABLES);
   const [column, setColumn] = useState(0);
   const [remote, setRemote] = useState<Readonly<Record<string, RemoteState>>>({});
+  const [selections, setSelections] = useState<Readonly<Record<string, Selection>>>({});
+  const localSelection = selections[LOCAL_ENVIRONMENT] ?? NO_SELECTION;
+  const remoteSelections = useRef(selections);
+  remoteSelections.current = selections;
+  const remoteSelectionKey = JSON.stringify(environments.map(({ name }) => selections[name]));
   const grid = environments.length > 0;
   const looking = useRef(false);
   const skipPause = useRef(() => {});
@@ -251,7 +267,7 @@ export function Dashboard({
     const { signal } = controller;
     const loop = async () => {
       while (!signal.aborted) {
-        const next = await check(signal, timeoutMs, skipped, timeouts);
+        const next = await check(signal, timeoutMs, skipped, timeouts, localSelection);
         if (signal.aborted) return;
         setLatest(next);
         tell(next);
@@ -263,10 +279,10 @@ export function Dashboard({
     };
     void loop();
     return () => controller.abort();
-  }, [check, intervalMs, timeoutMs, skipped, timeouts, writes]);
+  }, [check, intervalMs, timeoutMs, skipped, timeouts, writes, localSelection]);
 
   // Apart from the local loop: a skip or a write there does not cut the requests in flight here.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `tell` reads refs only
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tell` reads refs only, the key stands for the selections
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
@@ -274,7 +290,8 @@ export function Dashboard({
       const loop = async () => {
         while (!signal.aborted) {
           // A file that cannot be read now is read again at the next pass.
-          const outcome = await checkRemote(signal, timeoutMs).catch((error: unknown) =>
+          const chosen = remoteSelections.current[name] ?? NO_SELECTION;
+          const outcome = await checkRemote(signal, timeoutMs, chosen).catch((error: unknown) =>
             error instanceof Error ? error.message : String(error),
           );
           if (signal.aborted) return;
@@ -295,7 +312,7 @@ export function Dashboard({
       void loop();
     });
     return () => controller.abort();
-  }, [environments, intervalMs, timeoutMs]);
+  }, [environments, intervalMs, timeoutMs, remoteSelectionKey]);
 
   const detailedName =
     panel?.kind === "service" && panel.environment === undefined ? panel.name : undefined;
@@ -336,6 +353,11 @@ export function Dashboard({
   const cell = (environment ? remote[environment.name]?.results : latest)?.find(
     ({ name }) => name === selectedName,
   );
+  const place = environment?.name ?? LOCAL_ENVIRONMENT;
+  const choices = (environment ? environment.parameters?.() : parameters?.()) ?? NO_CHOICES;
+  const choiceNames = Object.keys(choices);
+  const selection = selections[place] ?? NO_SELECTION;
+  const effective = effectiveSelection(choices, selection);
 
   const write = async (change: ServiceWrite, done: string, secrets?: Secrets) => {
     const outcome = await (secrets ? onServiceWrite?.(change, secrets) : onServiceWrite?.(change));
@@ -503,6 +525,26 @@ export function Dashboard({
     track(onSkipChange?.(name, skip));
   };
 
+  const changeParameter = (rowIndex: number, direction: 1 | -1) => {
+    const name = choiceNames[rowIndex];
+    const values = name === undefined ? undefined : choices[name];
+    if (name === undefined || !values) return;
+    const at = values.indexOf(effective[name] as string) + direction;
+    const value = values[Math.max(0, Math.min(values.length - 1, at))];
+    if (value === undefined || value === effective[name]) return;
+    setSelections({ ...selections, [place]: { ...selection, [name]: value } });
+    // Another value is another target: its latencies and its state start again.
+    if (environment) {
+      remoteKnown.current.delete(place);
+      setRemote(({ [place]: before, ...others }) =>
+        before ? { ...others, [place]: { ...before, history: {} } } : others,
+      );
+    } else {
+      known.current = new Map();
+      setHistory({});
+    }
+  };
+
   const changeTimeout = (name: string, direction: 1 | -1) => {
     const value = stepServiceTimeout(timeouts[name], direction);
     if (value === timeouts[name]) return;
@@ -523,17 +565,26 @@ export function Dashboard({
         return;
       case "options":
         return setPanel({ kind: "options", row: 0 });
+      case "parameters":
+        if (choiceNames.length > 0) return setPanel({ kind: "parameters", row: 0 });
+        return setNotice(
+          `${environment?.file ?? `${PROBE_DIR}/${CONFIG_FILE}`} declares no parameter`,
+        );
       case "detail":
         return name
           ? setPanel({ kind: "service", name, environment: environment?.name, row: 0 })
           : undefined;
       case "open":
         if (!name) return;
-        return void (environment ? environment.onOpen?.(name) : onOpen?.(name))?.then(setNotice);
+        return void (
+          environment ? environment.onOpen?.(name, selection) : onOpen?.(name, selection)
+        )?.then(setNotice);
       case "copy":
         if (!name) return;
         return void (
-          environment ? environment.onCopy?.(name) : onCopy?.(name, timeouts[name])
+          environment
+            ? environment.onCopy?.(name, selection)
+            : onCopy?.(name, timeouts[name], selection)
         )?.then(setNotice);
       case "filter":
         return setFiltering(true);
@@ -612,15 +663,24 @@ export function Dashboard({
       else if (grid && (left || right))
         setColumn(Math.max(0, Math.min(environments.length, column + (right ? 1 : -1))));
     } else if (enter && variableRow) askVariable(variableRow);
-    else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter)) setPanel(null);
+    else if (
+      key === "escape" ||
+      (panel.kind === "service" ? enter : input === CLOSING_KEYS[panel.kind])
+    )
+      setPanel(null);
     else if (panel.kind === "service" && panel.environment !== undefined) {
       // The rows of this panel write for the local services: for another environment, `probe var --env` or local.yml by hand.
     } else if (up || down) {
       const lastRow =
-        panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length + variableRows.length - 1;
+        panel.kind === "options"
+          ? NOTIFY_ROW
+          : panel.kind === "parameters"
+            ? choiceNames.length - 1
+            : SERVICE_ROWS.length + variableRows.length - 1;
       setPanel({ ...panel, row: Math.max(0, Math.min(lastRow, panel.row + (down ? 1 : -1))) });
     } else if (left || right) {
       if (panel.kind === "options") change(panel.row, right ? 1 : -1);
+      else if (panel.kind === "parameters") changeParameter(panel.row, right ? 1 : -1);
       else if (panel.row === TIMEOUT_ROW) changeTimeout(panel.name, right ? 1 : -1);
       else if (panel.row === SKIP_ROW) toggleSkip(panel.name);
     }
@@ -693,6 +753,8 @@ export function Dashboard({
   const counts = environments.map(({ name }) => upCount(remote[name]?.results ?? []));
   const up = counts.reduce((sum, count) => sum + count.up, all.filter(({ ok }) => ok).length);
   const checked = counts.reduce((sum, count) => sum + count.checked, all.length);
+  const pairs = Object.entries(effective).map(([name, value]) => `${name}=${value}`);
+  const chosen = pairs.length > 0 ? `${grid ? `${place}: ` : ""}${pairs.join(" ")}` : undefined;
   const table = grid
     ? formatGrid(
         names,
@@ -705,6 +767,7 @@ export function Dashboard({
     "probe",
     `${up}/${checked} up`,
     ...(aside > 0 ? [`${aside} skipped`] : []),
+    ...(chosen ? [chosen] : []),
     `every ${seconds(intervalMs)}`,
     ...(table && table.hidden > 0
       ? [`${gridColumns[column]?.name} ${column + 1}/${gridColumns.length}`]
@@ -727,7 +790,7 @@ export function Dashboard({
       ? "no service: press a to add one"
       : "no service";
   const focused = cell && (environment ? cell : asShown(cell));
-  const place = grid ? `${gridColumns[column]?.name} ${dot} ` : "";
+  const placed = grid ? `${place} ${dot} ` : "";
   const problem = environment && remote[environment.name]?.problem;
   const answered = environment ? remote[environment.name]?.results !== undefined : true;
   const absent =
@@ -774,15 +837,17 @@ export function Dashboard({
           ...SETTING_ROWS.map((row): [string, string] => [row.label, seconds(settings[row.key])]),
           ["Notify", settings.notify ? "on" : "off"],
         ]
-      : panel && panel.environment === undefined
-        ? [
-            ["Skip", skipped.has(panel.name) ? "yes" : "no"],
-            [
-              "Timeout",
-              timeouts[panel.name] === undefined ? "default" : `${timeouts[panel.name]}s`,
-            ],
-          ]
-        : [];
+      : panel?.kind === "parameters"
+        ? choiceNames.map((name): [string, string] => [name, effective[name] ?? ""])
+        : panel && panel.environment === undefined
+          ? [
+              ["Skip", skipped.has(panel.name) ? "yes" : "no"],
+              [
+                "Timeout",
+                timeouts[panel.name] === undefined ? "default" : `${timeouts[panel.name]}s`,
+              ],
+            ]
+          : [];
   const shownVariables = panel?.kind === "service" ? variableRows : NO_VARIABLES;
   const labelWidth = Math.max(
     0,
@@ -806,7 +871,7 @@ export function Dashboard({
                   ? "readonly"
                   : "panel"
                 : "list";
-  const hint = helpBar(screen, unicode, columns, grid);
+  const hint = helpBar(screen, unicode, columns, grid, choiceNames.length > 0);
   const commands = palette ? paletteEntries(unicode, palette.query) : [];
   const commandWidth = Math.max(0, ...commands.map(({ label }) => label.length));
   const paletteRoom = Math.max(
@@ -852,15 +917,15 @@ export function Dashboard({
         <Text>
           {colors.dim(
             cut(
-              `${place}${focused.error ? `${focused.target} ${dot} ${focused.error}` : focused.target}`,
+              `${placed}${focused.error ? `${focused.target} ${dot} ${focused.error}` : focused.target}`,
             ),
           )}
         </Text>
       )}
       {absent !== undefined && problem === undefined && (
-        <Text>{colors.dim(cut(`${place}${absent}`))}</Text>
+        <Text>{colors.dim(cut(`${placed}${absent}`))}</Text>
       )}
-      {problem !== undefined && <Text>{colors.yellow(cut(`${place}${problem}`))}</Text>}
+      {problem !== undefined && <Text>{colors.yellow(cut(`${placed}${problem}`))}</Text>}
       {focused?.hint && panel?.kind !== "service" && <Text>{colors.dim(cut(focused.hint))}</Text>}
       {panel !== null && (
         <Box
@@ -874,9 +939,13 @@ export function Dashboard({
               truncate(
                 panel.kind === "options"
                   ? "Options"
-                  : panel.environment === undefined
-                    ? panel.name
-                    : `${panel.name} ${dot} ${panel.environment}`,
+                  : panel.kind === "parameters"
+                    ? grid
+                      ? `Parameters ${dot} ${place}`
+                      : "Parameters"
+                    : panel.environment === undefined
+                      ? panel.name
+                      : `${panel.name} ${dot} ${panel.environment}`,
                 panelRoom,
               ),
             )}

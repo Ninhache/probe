@@ -156,7 +156,7 @@ describe("dashboard with environments", () => {
     await waitFor(() => expect(lastFrame()).toContain("Opened prod api"));
     stdin.write("c");
     await waitFor(() => expect(lastFrame()).toContain("Copied prod api"));
-    expect(prod1.onOpen).toHaveBeenCalledWith("api");
+    expect(prod1.onOpen).toHaveBeenCalledWith("api", {});
     expect(onOpen).not.toHaveBeenCalled();
     expect(onCopy).not.toHaveBeenCalled();
   });

@@ -37,6 +37,28 @@ export function selectionFrom(config: Config, pairs: readonly string[]): Selecti
   return selection;
 }
 
+export type ParameterChoices = Readonly<Record<string, readonly string[]>>;
+
+export function parameterChoices(config: Config): ParameterChoices {
+  return Object.fromEntries(
+    Object.entries(config.parameters ?? {}).map(([name, { values }]) => [name, values]),
+  );
+}
+
+/** The value each parameter takes: the one asked for when it is listed, else the first. */
+export function effectiveSelection(
+  choices: ParameterChoices,
+  selection: Selection = {},
+): Selection {
+  return Object.fromEntries(
+    Object.entries(choices).flatMap(([name, values]) => {
+      const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
+      const value = asked !== undefined && values.includes(asked) ? asked : values[0];
+      return value === undefined ? [] : [[name, value]];
+    }),
+  );
+}
+
 function chosenValue(name: string, parameter: Parameter, selection: Selection): string {
   const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
   return asked !== undefined && parameter.values.includes(asked)

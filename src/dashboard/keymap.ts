@@ -19,6 +19,7 @@ export type Command =
   | "add"
   | "filter"
   | "options"
+  | "parameters"
   | "help"
   | "quit";
 
@@ -37,6 +38,8 @@ interface Binding {
   command?: Command;
   /** Only when several environments are shown. */
   grid?: true;
+  /** In the bar only when the selected config declares parameters. */
+  parameters?: true;
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
@@ -52,7 +55,7 @@ const BINDINGS: readonly Binding[] = [
     ascii: "hl",
     action: "environment",
     help: "Change environment",
-    drop: 6,
+    drop: 7,
     grid: true,
   }),
   list({ keys: "r", action: "check", help: "Check now", barless: true, command: "check" }),
@@ -61,7 +64,7 @@ const BINDINGS: readonly Binding[] = [
     ascii: "enter",
     action: "service",
     help: "Service detail",
-    drop: 5,
+    drop: 6,
     command: "detail",
   }),
   list({ keys: "u", action: "open", help: "Open its URL", barless: true, command: "open" }),
@@ -69,7 +72,15 @@ const BINDINGS: readonly Binding[] = [
   list({ keys: "e", action: "edit", help: "Edit the service", barless: true, command: "edit" }),
   list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
   list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
-  list({ keys: "/", action: "filter", help: "Filter by name", drop: 4, command: "filter" }),
+  list({ keys: "/", action: "filter", help: "Filter by name", drop: 5, command: "filter" }),
+  list({
+    keys: "p",
+    action: "parameters",
+    help: "Parameter values",
+    drop: 4,
+    command: "parameters",
+    parameters: true,
+  }),
   list({ keys: ":", action: "commands", help: "Find a command", drop: 1 }),
   list({ keys: "o", action: "options", help: "Options", barless: true, command: "options" }),
   {
@@ -193,9 +204,16 @@ const written = (binding: Binding, unicode: boolean) =>
 
 const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
 
-export function helpBar(screen: Screen, unicode: boolean, columns: number, grid = false): string {
+export function helpBar(
+  screen: Screen,
+  unicode: boolean,
+  columns: number,
+  grid = false,
+  parameters = false,
+): string {
   const shown = offered(grid).filter(
-    ({ screens, barless }) => screens.includes(screen) && !barless,
+    (binding) =>
+      binding.screens.includes(screen) && !binding.barless && (parameters || !binding.parameters),
   );
   const line = () =>
     shown

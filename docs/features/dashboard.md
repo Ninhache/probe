@@ -19,6 +19,7 @@ Off a terminal, in CI or in a pipe, use `probe check`.
 | `u`             | Open its URL in the browser                    |
 | `c`             | Copy its curl command                          |
 | `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
+| `p`             | Choose the value of a [parameter](#parameters) |
 | `a`             | Add a service                                  |
 | `e`             | Edit the selected service                      |
 | `d`             | Remove the selected service, after a question  |
@@ -70,6 +71,27 @@ Under it, the panel has:
 - skip: leave the service out on this machine;
 - the variables its headers use, and where each is set. `Enter` on one asks for its value, hidden, and keeps
   it in `.probe/local.yml`, as `probe var` does. A variable set in the environment is not changed there.
+
+## Parameters
+
+With [parameters](parameters.md) in the config, the first line says the value each one has, and `p` opens
+their list (since 0.21.0):
+
+```
+probe · 2/2 up · tenant=globex · every 2s
+› ✓ api  http://localhost:3000/health  200  4ms
+┌────────────────────────────┐
+│ Parameters                 │
+│ › tenant  ‹ globex ›       │
+│   env     ‹ local ›        │
+└────────────────────────────┘
+```
+
+- `↑` `↓` choose a parameter, `←` `→` its value. `p` or `Esc` closes.
+- The next check, `u`, `c` and the detail use the chosen value.
+- A parameter starts on its first value. The choice lasts until you quit: nothing is written.
+- With [several environments](#several-environments), `p` is about the selected one, which has its own
+  parameters: the first line names it (`prod: tenant=acme`).
 
 ## Options saved for your machine
 

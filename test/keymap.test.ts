@@ -147,6 +147,17 @@ describe("paletteEntries", () => {
   });
 });
 
+describe("the key of the parameters", () => {
+  it("should be in the bar only when the config declares parameters", () => {
+    expect(helpBar("list", true, 200)).not.toContain("p parameters");
+    expect(helpBar("list", true, 200, false, true)).toContain("/ filter · p parameters · :");
+  });
+
+  it("should leave the bar before the filter when the terminal is narrow", () => {
+    expect(helpBar("list", true, 50, false, true)).toBe("↵ service · / filter · ? help · q quit");
+  });
+});
+
 describe("helpColumns", () => {
   it("should put the keys of the list on the left on 80 columns, in unicode and in ASCII", () => {
     for (const unicode of [true, false]) {
