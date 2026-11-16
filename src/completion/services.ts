@@ -10,16 +10,29 @@ export async function completableEnvironments(cwd: string): Promise<string[]> {
   return paths ? [LOCAL_ENVIRONMENT, ...(await listEnvironments(paths))] : [];
 }
 
-// A shell expands the words it is given: a key that is not a valid service name is left out.
-export async function completableServices(cwd: string): Promise<string[]> {
+async function declaredServices(cwd: string): Promise<Record<string, unknown>> {
   try {
     const paths = findProbeDir(cwd);
-    if (!paths) return [];
+    if (!paths) return {};
     const raw: unknown = parse(await readFile(paths.config, "utf8"));
     const services = (raw as { services?: unknown } | null)?.services;
-    if (typeof services !== "object" || services === null) return [];
-    return Object.keys(services).filter((name) => SERVICE_NAME_PATTERN.test(name));
+    return typeof services === "object" && services !== null ? { ...services } : {};
   } catch {
-    return [];
+    return {};
   }
+}
+
+// A shell expands the words it is given: a key that is not a valid service name is left out.
+export async function completableServices(cwd: string): Promise<string[]> {
+  return Object.keys(await declaredServices(cwd)).filter((name) => SERVICE_NAME_PATTERN.test(name));
+}
+
+export async function completableTags(cwd: string): Promise<string[]> {
+  const tags = Object.values(await declaredServices(cwd)).flatMap((service) => {
+    const own = (service as { tags?: unknown } | null)?.tags;
+    return Array.isArray(own) ? own : [];
+  });
+  return [...new Set(tags)].filter(
+    (tag): tag is string => typeof tag === "string" && SERVICE_NAME_PATTERN.test(tag),
+  );
 }

@@ -74,7 +74,7 @@ const headersSchema = z
 const HINT_FORBIDDEN = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 export const HINT_EXPECTED = "one line of text, e.g. start it with: make api";
 
-export const TAG_EXPECTED = "letters, digits, _ and - only";
+export const NAME_EXPECTED = "letters, digits, _ and - only";
 
 export const serviceObjectV1 = z.strictObject({
   url: z
@@ -101,7 +101,7 @@ export const serviceObjectV1 = z.strictObject({
       error: `expected ${HINT_EXPECTED}`,
     })
     .optional(),
-  tags: z.array(z.string().regex(SERVICE_NAME_PATTERN, TAG_EXPECTED)).optional(),
+  tags: z.array(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED)).optional(),
 });
 
 export const serviceShapeV1 = serviceObjectV1.shape;
@@ -145,7 +145,7 @@ export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service
 export const configSchemaV1 = z.strictObject({
   schemaVersion: z.literal(1),
   services: z
-    .record(z.string().regex(SERVICE_NAME_PATTERN, TAG_EXPECTED), serviceSchemaV1)
+    .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), serviceSchemaV1)
     // `services:` with nothing under it parses as null.
     .nullish()
     .transform((services) => services ?? {}),

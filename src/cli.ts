@@ -24,7 +24,11 @@ import status from "./commands/status";
 import sync from "./commands/sync";
 import variable from "./commands/var";
 import wait from "./commands/wait";
-import { completableEnvironments, completableServices } from "./completion/services";
+import {
+  completableEnvironments,
+  completableServices,
+  completableTags,
+} from "./completion/services";
 import { COMPLETION_COMMAND } from "./completion/spec";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { listEnvironments } from "./config/environments";
@@ -284,6 +288,7 @@ async function printCompletions(kind: string | undefined): Promise<void> {
   const lists: Record<string, (cwd: string) => Promise<string[]>> = {
     services: completableServices,
     environments: completableEnvironments,
+    tags: completableTags,
   };
   const names = kind !== undefined && Object.hasOwn(lists, kind) ? lists[kind] : undefined;
   for (const name of (await names?.(process.cwd()).catch(() => [])) ?? []) console.log(name);

@@ -1,4 +1,5 @@
 import { selectServices } from "../checkers/select";
+import { TAG_OPTION } from "../completion/spec";
 import { type ProbePaths, requireProbeDir } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
@@ -17,8 +18,6 @@ export const ENVIRONMENT_ARG = {
   valueHint: "name",
   description: `Read .probe/${ENVIRONMENTS_DIR}/<name>.yml instead of the local services`,
 } as const;
-
-const TAG_OPTION = "--tag";
 
 export const TAG_ARG = {
   type: "string",

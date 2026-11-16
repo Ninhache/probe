@@ -8,7 +8,6 @@ import { selectServices } from "../src/checkers/select";
 import { tagsFrom } from "../src/commands/shared";
 import { loadConfig } from "../src/config/loader";
 import { type Config, serviceSchemaV1 } from "../src/config/schema";
-import { renderBlock } from "../src/makefile/generator";
 import { tempDir, tempProject } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -130,10 +129,6 @@ describe("tagsFrom", () => {
   ])("refuses %j", (rawArgs) => {
     expect(() => tagsFrom(rawArgs)).toThrow(/--tag expects tags made of/);
   });
-});
-
-it("leaves the Makefile block as it is when tags change", () => {
-  expect(renderBlock(["api", "db"])).not.toContain("tag");
 });
 
 function probe(
@@ -296,4 +291,19 @@ describe("--tag on the other commands", () => {
     expect(run.code).toBe(2);
     expect(run.stderr).toContain("unknown tag: bak");
   });
+});
+
+it("leaves the Makefile block in sync when tags are added by hand", async () => {
+  const root = await project();
+  await probe(root, ["sync"]);
+  const config = join(root, ".probe", "config.yml");
+  await writeFile(
+    config,
+    (await readFile(config, "utf8")).replace("path: /down }", "path: /down, tags: [web] }"),
+  );
+
+  const status = await probe(root, ["status"]);
+
+  expect((await probe(root, ["ls"])).stdout).toMatch(/^front .*tags web$/m);
+  expect(status.stdout).not.toMatch(/outdated|modified/);
 });
