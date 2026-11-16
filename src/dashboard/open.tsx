@@ -7,7 +7,7 @@ import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { serviceActions } from "./actions";
-import { Dashboard, type DashboardProps, type Secrets } from "./Dashboard";
+import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
 import { type VariableSources, variableTools } from "./variables";
@@ -26,6 +26,36 @@ export interface DashboardState {
   ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
+  environments?: readonly EnvironmentSource[];
+}
+
+export interface EnvironmentSource {
+  name: string;
+  file: string;
+  /** Read before each pass: the file is edited by hand while the dashboard runs. */
+  load: () => Promise<{ config: Config; variables: Variables }>;
+}
+
+function environmentColumn({ name, file, load }: EnvironmentSource): EnvironmentColumn {
+  let known: Config | undefined;
+  const { onOpen, onCopy } = serviceActions(() => known ?? { schemaVersion: 1, services: {} });
+  return {
+    name,
+    file,
+    onOpen,
+    onCopy: (service) => onCopy(service, known?.services[service]?.timeout),
+    async check(signal, timeoutMs) {
+      const { config, variables } = await load();
+      known = config;
+      return runChecks(config, [], {
+        timeoutMs,
+        signal,
+        detail: true,
+        variables,
+        configFile: file,
+      });
+    },
+  };
 }
 
 const pickFields = ({ host, port, path, expect, method, headers }: Service): ServiceFields => ({
@@ -40,7 +70,13 @@ const pickFields = ({ host, port, path, expect, method, headers }: Service): Ser
 export async function openDashboard(
   initial: Config,
   terminal: Terminal,
-  { onServiceWrite, variables: readVariables, variableSources, ...state }: DashboardState,
+  {
+    onServiceWrite,
+    variables: readVariables,
+    variableSources,
+    environments = [],
+    ...state
+  }: DashboardState,
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
   let config = initial;
@@ -97,6 +133,7 @@ export async function openDashboard(
         })
       }
       variables={tools}
+      environments={environments.map(environmentColumn)}
     />,
     { alternateScreen: true },
   );

@@ -25,6 +25,7 @@ import wait from "./commands/wait";
 import { completableEnvironments, completableServices } from "./completion/services";
 import { COMPLETION_COMMAND } from "./completion/spec";
 import { findProbeDir, requireProbeDir } from "./config/discovery";
+import { environmentPaths, listEnvironments } from "./config/environments";
 import { loadConfig, writeServiceTimeout } from "./config/loader";
 import {
   changedPreferences,
@@ -42,6 +43,7 @@ import {
   COMPLETE_COMMAND,
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
+  ENVIRONMENTS_DIR,
   EXIT_ERROR,
   LOCAL_FILE,
   PROBE_DIR,
@@ -149,7 +151,8 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const paths = asked ? requireProbeDir(process.cwd()) : findProbeDir(process.cwd());
   if (!paths) return false;
   const { config } = await loadConfig(paths);
-  if (Object.keys(config.services).length === 0) {
+  const environments = await listEnvironments(paths);
+  if (Object.keys(config.services).length === 0 && environments.length === 0) {
     if (!asked) return false;
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
   }
@@ -165,6 +168,16 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     return writeVariable(paths, name, value);
   };
   await openDashboard(config, stdoutTerminal(), {
+    environments: environments.map((name) => ({
+      name,
+      file: `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${name}.yml`,
+      async load() {
+        const found = await environmentPaths(paths, name);
+        // Not on stderr: a line printed there would land in the middle of the screen.
+        const loaded = await loadConfig(found, { log: () => {} });
+        return { config: loaded.config, variables: await loadVariables(found) };
+      },
+    })),
     settings,
     skipped: await readSkippedServices(paths),
     variables: () => loadVariables(paths),

@@ -34,6 +34,8 @@ interface Binding {
   drop?: number;
   barless?: true;
   command?: Command;
+  /** Only when several environments are shown. */
+  grid?: true;
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
@@ -44,6 +46,14 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
 
 const BINDINGS: readonly Binding[] = [
   list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 2 }),
+  list({
+    keys: "←→ hl",
+    ascii: "hl",
+    action: "environment",
+    help: "Change environment",
+    drop: 6,
+    grid: true,
+  }),
   list({ keys: "r", action: "check", help: "Check now", barless: true, command: "check" }),
   list({
     keys: "↵",
@@ -174,8 +184,12 @@ const SECTIONS: readonly Section[] = [
 const written = (binding: Binding, unicode: boolean) =>
   unicode ? binding.keys : (binding.ascii ?? binding.keys);
 
-export function helpBar(screen: Screen, unicode: boolean, columns: number): string {
-  const shown = BINDINGS.filter(({ screens, barless }) => screens.includes(screen) && !barless);
+const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
+
+export function helpBar(screen: Screen, unicode: boolean, columns: number, grid = false): string {
+  const shown = offered(grid).filter(
+    ({ screens, barless }) => screens.includes(screen) && !barless,
+  );
   const line = () =>
     shown
       .map((binding) => `${written(binding, unicode)} ${binding.action}`)
@@ -218,8 +232,8 @@ export interface HelpLine {
 
 const HELP_GAP = 3;
 
-function sectionLines(sections: readonly Section[], unicode: boolean): HelpLine[] {
-  const described = BINDINGS.filter(({ help }) => help !== undefined);
+function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
+  const described = offered(grid).filter(({ help }) => help !== undefined);
   const width = Math.max(...described.map((binding) => written(binding, unicode).length));
   return sections.flatMap((title) => [
     { id: title, text: title, heading: true },
@@ -233,16 +247,19 @@ function sectionLines(sections: readonly Section[], unicode: boolean): HelpLine[
   ]);
 }
 
-export function helpLines(unicode: boolean): HelpLine[] {
-  return sectionLines(SECTIONS, unicode);
+export function helpLines(unicode: boolean, grid = false): HelpLine[] {
+  return sectionLines(SECTIONS, unicode, grid);
 }
 
-export function helpColumns(unicode: boolean, columns: number): HelpLine[][] {
+export function helpColumns(unicode: boolean, columns: number, grid = false): HelpLine[][] {
   const [first, ...others] = SECTIONS;
-  const sides = [sectionLines([first as Section], unicode), sectionLines(others, unicode)];
+  const sides = [
+    sectionLines([first as Section], unicode, grid),
+    sectionLines(others, unicode, grid),
+  ];
   const widths = sides.map((side) => Math.max(...side.map(({ text }) => text.length)));
   const fits = (widths[0] as number) + HELP_GAP + (widths[1] as number) <= columns;
-  return fits ? sides : [helpLines(unicode)];
+  return fits ? sides : [helpLines(unicode, grid)];
 }
 
 export { HELP_GAP };

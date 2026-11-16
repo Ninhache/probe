@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "../checkers/types";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { hiddenHeaderLine, serviceVariables, variableValueProblem } from "../config/headers";
-import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
+import { CONFIG_FILE, LOCAL_ENVIRONMENT, LOCAL_FILE, PROBE_DIR } from "../constants";
 import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
@@ -24,6 +24,7 @@ import {
   withHeaderLine,
   withVariable,
 } from "./form";
+import { formatGrid, type GridColumn, rowNames, upCount } from "./grid";
 import {
   type Command,
   HELP_GAP,
@@ -60,6 +61,21 @@ export interface DashboardProps {
   onServiceWrite?: (write: ServiceWrite, secrets?: Secrets) => Promise<ServiceWriteOutcome>;
   variables?: VariableTools;
   onVariableWrite?: (name: string, value: string) => Saved;
+  environments?: readonly EnvironmentColumn[];
+}
+
+export interface EnvironmentColumn {
+  name: string;
+  file: string;
+  check: (signal: AbortSignal, timeoutMs: number) => Promise<CheckResult[]>;
+  onOpen?: (name: string) => Promise<string>;
+  onCopy?: (name: string) => Promise<string>;
+}
+
+interface RemoteState {
+  results?: CheckResult[];
+  problem?: string;
+  history: LatencyHistory;
 }
 
 export type Secrets = Readonly<Record<string, string>>;
@@ -72,7 +88,9 @@ export interface ServiceWriteOutcome {
 
 export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
 
-type Panel = { kind: "options"; row: number } | { kind: "service"; name: string; row: number };
+type Panel =
+  | { kind: "options"; row: number }
+  | { kind: "service"; name: string; environment?: string; row: number };
 
 interface Form {
   kind: "form";
@@ -102,6 +120,8 @@ const SKIP_ROW = SERVICE_ROWS.indexOf("Skip");
 const TIMEOUT_ROW = SERVICE_ROWS.indexOf("Timeout");
 const NO_TIMEOUTS: ServiceTimeouts = {};
 const NO_VARIABLES: readonly VariableRow[] = [];
+const NO_ENVIRONMENTS: readonly EnvironmentColumn[] = [];
+const NEVER_SEEN: KnownStates = new Map();
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 const SOURCES = { environment: "set in the environment", local: `set in ${LOCAL_FILE}` };
 
@@ -115,6 +135,18 @@ const CURSOR = "_";
 const PANEL_FRAME_WIDTH = 4;
 
 const seconds = (ms: number) => `${ms / 1000}s`;
+
+function pause(ms: number, signal: AbortSignal, keep: (skip: () => void) => void): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    const skip = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    keep(skip);
+    signal.addEventListener("abort", skip, { once: true });
+  });
+}
 
 function ending(text: string, max: number): string {
   const characters = Array.from(text);
@@ -139,6 +171,7 @@ export function Dashboard({
   onServiceWrite,
   variables,
   onVariableWrite,
+  environments = NO_ENVIRONMENTS,
 }: DashboardProps) {
   const { exit } = useApp();
   const { columns, rows: windowRows } = useWindowSize();
@@ -159,8 +192,12 @@ export function Dashboard({
   const [unsaved, setUnsaved] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [variableRows, setVariableRows] = useState(NO_VARIABLES);
+  const [column, setColumn] = useState(0);
+  const [remote, setRemote] = useState<Readonly<Record<string, RemoteState>>>({});
+  const grid = environments.length > 0;
   const looking = useRef(false);
   const skipPause = useRef(() => {});
+  const skipRemotePauses = useRef<(() => void)[]>([]);
   // A change stays in effect for this run even when saving it failed: the failure is shown instead.
   const track = (saved: Saved | undefined) => {
     void saved?.then(setUnsaved);
@@ -168,15 +205,23 @@ export function Dashboard({
   const { intervalMs, timeoutMs } = settings;
   // Kept across passes and settings: a change is told once, and turning the notifications on tells nothing old.
   const known = useRef<KnownStates>(new Map());
+  const remoteKnown = useRef(new Map<string, KnownStates>());
   const notifying = useRef(false);
   notifying.current = settings.notify === true;
   const warned = useRef(false);
-  const tell = (next: CheckResult[]) => {
-    const { known: now, changes } = stateChanges(known.current, next);
-    known.current = now;
+  const tell = (next: CheckResult[], environment?: string) => {
+    const before =
+      environment === undefined
+        ? known.current
+        : (remoteKnown.current.get(environment) ?? NEVER_SEEN);
+    const { known: now, changes } = stateChanges(before, next);
+    if (environment === undefined) known.current = now;
+    else remoteKnown.current.set(environment, now);
     if (!notifying.current || changes.length === 0) return;
+    const scope = grid ? `${environment ?? LOCAL_ENVIRONMENT}/` : "";
+    const named = changes.map((change) => ({ ...change, name: `${scope}${change.name}` }));
     // Not awaited: the checks go on whatever the desktop does.
-    void onNotify?.(changeMessage(changes)).then((warning) => {
+    void onNotify?.(changeMessage(named)).then((warning) => {
       if (warning === undefined || warned.current) return;
       warned.current = true;
       setNotice(warning);
@@ -194,13 +239,8 @@ export function Dashboard({
         setLatest(next);
         tell(next);
         setHistory((before) => recordLatencies(before, next));
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, intervalMs);
-          skipPause.current = () => {
-            clearTimeout(timer);
-            resolve();
-          };
-          signal.addEventListener("abort", skipPause.current, { once: true });
+        await pause(intervalMs, signal, (skip) => {
+          skipPause.current = skip;
         });
       }
     };
@@ -208,7 +248,40 @@ export function Dashboard({
     return () => controller.abort();
   }, [check, intervalMs, timeoutMs, skipped, timeouts, writes]);
 
-  const detailedName = panel?.kind === "service" ? panel.name : undefined;
+  // Apart from the local loop: a skip or a write there does not cut the requests in flight here.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tell` reads refs only
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    environments.forEach(({ name, check: checkRemote }, index) => {
+      const loop = async () => {
+        while (!signal.aborted) {
+          // A file that cannot be read now is read again at the next pass.
+          const outcome = await checkRemote(signal, timeoutMs).catch((error: unknown) =>
+            error instanceof Error ? error.message : String(error),
+          );
+          if (signal.aborted) return;
+          setRemote((before) => {
+            const history = before[name]?.history ?? {};
+            const state: RemoteState =
+              typeof outcome === "string"
+                ? { problem: outcome, history }
+                : { results: outcome, history: recordLatencies(history, outcome) };
+            return { ...before, [name]: state };
+          });
+          if (typeof outcome !== "string") tell(outcome, name);
+          await pause(intervalMs, signal, (skip) => {
+            skipRemotePauses.current[index] = skip;
+          });
+        }
+      };
+      void loop();
+    });
+    return () => controller.abort();
+  }, [environments, intervalMs, timeoutMs]);
+
+  const detailedName =
+    panel?.kind === "service" && panel.environment === undefined ? panel.name : undefined;
   // biome-ignore lint/correctness/useExhaustiveDependencies: each pass may find a variable set meanwhile
   useEffect(() => {
     if (detailedName === undefined || !variables) return setVariableRows(NO_VARIABLES);
@@ -221,10 +294,31 @@ export function Dashboard({
     };
   }, [detailedName, variables, latest]);
 
+  // A service just set aside is shown as such at once, not when the pass that skips it ends.
+  const asShown = (result: CheckResult): CheckResult => {
+    if (result.skipped || !skipped.has(result.name)) return result;
+    const { name, type, target } = result;
+    return { name, type, target, ok: true, skipped: true, latencyMs: 0 };
+  };
   const wanted = filter.toLowerCase();
-  const shown = (latest ?? []).filter(({ name }) => name.toLowerCase().includes(wanted));
-  const last = Math.max(0, shown.length - 1);
+  const matches = (name: string) => name.toLowerCase().includes(wanted);
+  const shown = (latest ?? []).filter(({ name }) => matches(name));
+  const gridColumns: GridColumn[] = [
+    { name: LOCAL_ENVIRONMENT, results: latest?.map(asShown) },
+    ...environments.map(({ name }) => ({
+      name,
+      results: remote[name]?.results,
+      problem: remote[name]?.problem,
+    })),
+  ];
+  const names = grid ? rowNames(gridColumns).filter(matches) : shown.map(({ name }) => name);
+  const last = Math.max(0, names.length - 1);
   const current = Math.min(selected, last);
+  const environment = column > 0 ? environments[column - 1] : undefined;
+  const selectedName = names[current];
+  const cell = (environment ? remote[environment.name]?.results : latest)?.find(
+    ({ name }) => name === selectedName,
+  );
 
   const write = async (change: ServiceWrite, done: string, secrets?: Secrets) => {
     const outcome = await (secrets ? onServiceWrite?.(change, secrets) : onServiceWrite?.(change));
@@ -400,29 +494,44 @@ export function Dashboard({
   };
 
   const run = (command: Command) => {
-    const name = shown[current]?.name;
+    // The name of a cell that holds a service: an empty one gives nothing to act on.
+    const name = cell?.name;
+    // Every write below goes to the local files: none is offered from another environment.
+    const elsewhere =
+      environment && `${environment.name} is not edited here: change ${environment.file}`;
     switch (command) {
       case "check":
-        return skipPause.current();
+        skipPause.current();
+        for (const skip of skipRemotePauses.current) skip();
+        return;
       case "options":
         return setPanel({ kind: "options", row: 0 });
       case "detail":
-        return name ? setPanel({ kind: "service", name, row: 0 }) : undefined;
+        return name
+          ? setPanel({ kind: "service", name, environment: environment?.name, row: 0 })
+          : undefined;
       case "open":
-        return name ? void onOpen?.(name).then(setNotice) : undefined;
+        if (!name) return;
+        return void (environment ? environment.onOpen?.(name) : onOpen?.(name))?.then(setNotice);
       case "copy":
-        return name ? void onCopy?.(name, timeouts[name]).then(setNotice) : undefined;
+        if (!name) return;
+        return void (
+          environment ? environment.onCopy?.(name) : onCopy?.(name, timeouts[name])
+        )?.then(setNotice);
       case "filter":
         return setFiltering(true);
       case "add":
+        if (elsewhere) return setNotice(elsewhere);
         return onServiceWrite ? setDialog({ kind: "form", row: 0, values: EMPTY_FORM }) : undefined;
       case "edit": {
+        if (elsewhere) return setNotice(elsewhere);
         const fields = onServiceWrite && name ? serviceFields?.(name) : undefined;
         if (typeof fields === "string") return setNotice(fields);
         if (fields) setDialog({ kind: "form", editing: name, row: 0, values: formValues(fields) });
         return;
       }
       case "remove":
+        if (elsewhere) return setNotice(elsewhere);
         return onServiceWrite && name ? setDialog({ kind: "confirm", name }) : undefined;
       case "help":
         return setHelp(true);
@@ -483,9 +592,13 @@ export function Dashboard({
       else if (key === "escape") setFilter("");
       else if (up) setSelected(Math.max(0, current - 1));
       else if (down) setSelected(Math.min(last, current + 1));
+      else if (grid && (left || right))
+        setColumn(Math.max(0, Math.min(environments.length, column + (right ? 1 : -1))));
     } else if (enter && variableRow) askVariable(variableRow);
     else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter)) setPanel(null);
-    else if (up || down) {
+    else if (panel.kind === "service" && panel.environment !== undefined) {
+      // Skip, timeout and variables are kept in the local files: this panel has no row to change.
+    } else if (up || down) {
       const lastRow =
         panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length + variableRows.length - 1;
       setPanel({ ...panel, row: Math.max(0, Math.min(lastRow, panel.row + (down ? 1 : -1))) });
@@ -530,7 +643,7 @@ export function Dashboard({
   const cut = (text: string) => truncate(text, Math.max(1, columns));
 
   if (help) {
-    const [left = [], right = []] = helpColumns(unicode, columns);
+    const [left = [], right = []] = helpColumns(unicode, columns, grid);
     const leftWidth = Math.max(...left.map(({ text }) => text.length));
     const paint = (line: HelpLine | undefined) =>
       line?.heading ? colors.bold(cut(line.text)) : cut(line?.text ?? "");
@@ -556,26 +669,34 @@ export function Dashboard({
 
   if (!latest) return <Text>{cut("probe: checking…")}</Text>;
 
-  // A service just set aside is shown as such at once, not when the pass that skips it ends.
-  const asShown = (result: CheckResult): CheckResult => {
-    if (result.skipped || !skipped.has(result.name)) return result;
-    const { name, type, target } = result;
-    return { name, type, target, ok: true, skipped: true, latencyMs: 0 };
-  };
   const results = shown.map(asShown);
 
   const all = latest.filter((result) => !result.skipped && !skipped.has(result.name));
-  const up = all.filter((result) => result.ok).length;
   const aside = latest.length - all.length;
+  const counts = environments.map(({ name }) => upCount(remote[name]?.results ?? []));
+  const up = counts.reduce((sum, count) => sum + count.up, all.filter(({ ok }) => ok).length);
+  const checked = counts.reduce((sum, count) => sum + count.checked, all.length);
+  const table = grid
+    ? formatGrid(
+        names,
+        gridColumns,
+        { row: current, column },
+        { width: Math.max(1, columns), unicode, colors },
+      )
+    : undefined;
   const summary = [
     "probe",
-    `${up}/${all.length} up`,
+    `${up}/${checked} up`,
     ...(aside > 0 ? [`${aside} skipped`] : []),
     `every ${seconds(intervalMs)}`,
+    ...(table && table.hidden > 0
+      ? [`${gridColumns[column]?.name} ${column + 1}/${gridColumns.length}`]
+      : []),
     ...(filter && !filtering ? [`filter: ${filter}`] : []),
   ].join(` ${dot} `);
-  const rows =
-    results.length === 0
+  const rows = table
+    ? table.rows
+    : results.length === 0
       ? []
       : // One line per service: the hint of the selected one goes under the list.
         formatCheckResults(
@@ -587,21 +708,39 @@ export function Dashboard({
     : onServiceWrite
       ? "no service: press a to add one"
       : "no service";
-  const focused = results[current];
+  const focused = cell && (environment ? cell : asShown(cell));
+  const place = grid ? `${gridColumns[column]?.name} ${dot} ` : "";
+  const problem = environment && remote[environment.name]?.problem;
+  const answered = environment ? remote[environment.name]?.results !== undefined : true;
+  const absent =
+    grid && selectedName !== undefined && !focused && answered
+      ? `${selectedName} is not in ${environment?.file ?? `${PROBE_DIR}/${CONFIG_FILE}`}`
+      : undefined;
   const panelWidth = Math.min(panel?.kind === "service" ? DETAIL_WIDTH : PANEL_WIDTH, columns);
   const panelRoom = Math.max(1, panelWidth - PANEL_FRAME_WIDTH);
+  const detailedIn = panel?.kind === "service" ? panel.environment : undefined;
   const detailed =
-    panel?.kind === "service" ? latest.find(({ name }) => name === panel.name) : undefined;
+    panel?.kind === "service"
+      ? (detailedIn === undefined ? latest : remote[detailedIn]?.results)?.find(
+          ({ name }) => name === panel.name,
+        )
+      : undefined;
+  const detailedHistory = detailedIn === undefined ? history : (remote[detailedIn]?.history ?? {});
   // Around the detail: summary, list, target, border, title, rule, the settings, the bar.
   // One more line stays free: ink clears the whole screen on each draw of a frame as tall as it.
   const settingRows = SERVICE_ROWS.length + (panel?.kind === "service" ? variableRows.length : 0);
-  const taken = 1 + Math.max(1, rows.length) + 1 + 2 + 1 + 1 + settingRows + 1 + 1;
+  const listLines = Math.max(1, rows.length) + (grid ? 1 : 0);
+  const taken = 1 + listLines + 1 + 2 + 1 + 1 + settingRows + 1 + 1;
   const detail = detailed
-    ? detailLines(asShown(detailed), history[detailed.name] ?? [], {
-        unicode,
-        width: panelRoom,
-        room: (windowRows || DEFAULT_ROWS) - taken - (unsaved === undefined ? 0 : 1),
-      })
+    ? detailLines(
+        detailedIn === undefined ? asShown(detailed) : detailed,
+        detailedHistory[detailed.name] ?? [],
+        {
+          unicode,
+          width: panelRoom,
+          room: (windowRows || DEFAULT_ROWS) - taken - (unsaved === undefined ? 0 : 1),
+        },
+      )
     : [];
   const toned = ({ text, tone }: (typeof detail)[number]) =>
     tone === "good"
@@ -617,7 +756,7 @@ export function Dashboard({
           ...SETTING_ROWS.map((row): [string, string] => [row.label, seconds(settings[row.key])]),
           ["Notify", settings.notify ? "on" : "off"],
         ]
-      : panel
+      : panel && panel.environment === undefined
         ? [
             ["Skip", skipped.has(panel.name) ? "yes" : "no"],
             [
@@ -647,13 +786,13 @@ export function Dashboard({
               : panel
                 ? "panel"
                 : "list";
-  const hint = helpBar(screen, unicode, columns);
+  const hint = helpBar(screen, unicode, columns, grid);
   const commands = palette ? paletteEntries(unicode, palette.query) : [];
   const commandWidth = Math.max(0, ...commands.map(({ label }) => label.length));
   const paletteRoom = Math.max(
     1,
     (windowRows || DEFAULT_ROWS) -
-      (1 + Math.max(1, rows.length) + (focused ? 1 : 0) + (focused?.hint ? 1 : 0) + 1 + 1 + 1) -
+      (1 + listLines + (focused ? 1 : 0) + (focused?.hint ? 1 : 0) + 1 + 1 + 1) -
       (unsaved === undefined ? 0 : 1),
   );
   const firstCommand = Math.max(0, (palette?.row ?? 0) - paletteRoom + 1);
@@ -681,9 +820,10 @@ export function Dashboard({
   return (
     <Box flexDirection="column">
       <Text>{colors.bold(cut(summary))}</Text>
+      {table && <Text>{table.header}</Text>}
       {rows.map((row, index) => (
-        <Text key={results[index]?.name}>
-          {index === current ? marker : "  "}
+        <Text key={names[index]}>
+          {!table && (index === current ? marker : "  ")}
           {row}
         </Text>
       ))}
@@ -691,10 +831,16 @@ export function Dashboard({
       {focused && (
         <Text>
           {colors.dim(
-            cut(focused.error ? `${focused.target} ${dot} ${focused.error}` : focused.target),
+            cut(
+              `${place}${focused.error ? `${focused.target} ${dot} ${focused.error}` : focused.target}`,
+            ),
           )}
         </Text>
       )}
+      {absent !== undefined && problem === undefined && (
+        <Text>{colors.dim(cut(`${place}${absent}`))}</Text>
+      )}
+      {problem !== undefined && <Text>{colors.yellow(cut(`${place}${problem}`))}</Text>}
       {focused?.hint && panel?.kind !== "service" && <Text>{colors.dim(cut(focused.hint))}</Text>}
       {panel !== null && (
         <Box
@@ -704,12 +850,23 @@ export function Dashboard({
           paddingX={1}
         >
           <Text>
-            {colors.bold(truncate(panel.kind === "options" ? "Options" : panel.name, panelRoom))}
+            {colors.bold(
+              truncate(
+                panel.kind === "options"
+                  ? "Options"
+                  : panel.environment === undefined
+                    ? panel.name
+                    : `${panel.name} ${dot} ${panel.environment}`,
+                panelRoom,
+              ),
+            )}
           </Text>
           {detail.map((line) => (
             <Text key={line.id}>{toned(line)}</Text>
           ))}
-          {detail.length > 0 && <Text>{colors.dim((unicode ? "─" : "-").repeat(panelRoom))}</Text>}
+          {detail.length > 0 && panelRows.length > 0 && (
+            <Text>{colors.dim((unicode ? "─" : "-").repeat(panelRoom))}</Text>
+          )}
           {panelRows.map(([label, value], index) => {
             const line = `${index === panel.row ? marker : "  "}${label.padEnd(labelWidth)}  ${
               unicode ? `‹ ${value} ›` : `< ${value} >`

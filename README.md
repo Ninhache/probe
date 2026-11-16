@@ -172,6 +172,26 @@ commit it.
 A change that cannot be saved (a file that is read-only, or not valid YAML) still applies until you quit. The
 dashboard shows `not saved: …`, and says it again on stderr when it closes.
 
+With [environments](#environments) in `.probe/envs/`, the list becomes a grid: one line per service name, one
+column per environment, `local` first.
+
+```
+probe · 4/6 up · every 2s
+        local 1/2                 dev 2/2                   prod 1/2
+api   › ✓ 200 4ms                 ✓ 200 120ms               ✗ expected 200, got 503
+db      ✗ connection refused      ✓ 200 80ms
+front                                                       ✓ 200 90ms
+local · http://localhost:3000/health
+```
+
+`←` `→` or `h` `l` change environment; `›` marks the selected cell, and the line under the grid says what it
+is. An empty cell is a service the environment does not have. `Enter`, `u` and `c` work on the selected cell.
+The other environments are read-only there: `a`, `e` and `d` say which file to change, and their panel has no
+setting. Each file is read again at every pass; one that cannot be read shows `!` next to its name, with the
+reason when you select it, and the other columns go on. When the columns do not all fit, the ones around the
+selected one are drawn. A notification names the environment (`prod/api`). Without `.probe/envs/`, the
+dashboard is the list it was.
+
 ## Config
 
 `.probe/config.yml`:
@@ -211,7 +231,8 @@ services:
 ```
 
 `probe check --env prod` checks that file and nothing else; `wait`, `ls` and `curl` take `--env` too. The other
-commands (`add`, `rm`, `var`, `open`, the dashboard) work on the local services and refuse `--env`. Without
+commands (`add`, `rm`, `var`, `open`) work on the local services and refuse `--env`; so does the
+[dashboard](#dashboard), which shows every environment at once. Without
 `--env`, every command reads `config.yml` as before, and `make check` with it: a file in `envs/` is never
 reached unless you name it. The name is the file name, made of letters, digits, `_` and `-`; `local` is
 `config.yml` itself.
