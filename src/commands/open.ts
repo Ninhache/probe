@@ -1,17 +1,21 @@
 import { defineCommand } from "citty";
 import { targetUrl } from "../checkers/http";
+import { applySelection } from "../config/parameters";
 import { EXIT_DOWN } from "../constants";
 import { openerCommand, openUrl } from "../open-url";
-import { namedService, openProject } from "./shared";
+import { namedService, openProject, SET_ARG, selectionFrom } from "./shared";
 
 export default defineCommand({
   meta: { name: "open", description: "Open the URL of a service in the browser" },
   args: {
     name: { type: "positional", description: "Service name", required: true },
+    set: SET_ARG,
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
     const { config } = await openProject();
-    const url = targetUrl(namedService(config, args.name));
+    const url = targetUrl(
+      namedService(applySelection(config, selectionFrom(config, rawArgs)), args.name),
+    );
     if (await openUrl(url)) {
       console.log(`Opened ${url}`);
       return;

@@ -1,11 +1,12 @@
 import { selectServices } from "../checkers/select";
-import { TAG_OPTION } from "../completion/spec";
+import { SET_OPTION, TAG_OPTION } from "../completion/spec";
 import { type ProbePaths, requireProbeDir } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { type LoadedConfig, loadConfig, saveConfig } from "../config/loader";
 import type { Variables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
+import { type Selection, selectionFrom as selectionOf } from "../config/parameters";
 import { type Config, SERVICE_NAME_PATTERN, type Service } from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, MAX_TIMEOUT_SECONDS, PROBE_DIR } from "../constants";
 import { ProbeError } from "../errors";
@@ -25,14 +26,30 @@ export const TAG_ARG = {
   description: "Only the services that carry one of these tags, e.g. --tag back,infra",
 } as const;
 
-/** Every `--tag` of the command line: the argument parser keeps the last one only. */
-export function tagsFrom(rawArgs: readonly string[]): string[] {
+export const SET_ARG = {
+  type: "string",
+  valueHint: "name=value",
+  description:
+    "Value of a parameter of the config, e.g. --set tenant=globex (default: its first value)",
+} as const;
+
+/** Every value given to `option`: the argument parser keeps the last one only. */
+function optionValues(rawArgs: readonly string[], option: string): string[] {
   const values: string[] = [];
   for (const [index, arg] of rawArgs.entries()) {
     if (arg === "--") break;
-    if (arg === TAG_OPTION) values.push(rawArgs[index + 1] ?? "");
-    else if (arg.startsWith(`${TAG_OPTION}=`)) values.push(arg.slice(TAG_OPTION.length + 1));
+    if (arg === option) values.push(rawArgs[index + 1] ?? "");
+    else if (arg.startsWith(`${option}=`)) values.push(arg.slice(option.length + 1));
   }
+  return values;
+}
+
+export function selectionFrom(config: Config, rawArgs: readonly string[]): Selection {
+  return selectionOf(config, optionValues(rawArgs, SET_OPTION));
+}
+
+export function tagsFrom(rawArgs: readonly string[]): string[] {
+  const values = optionValues(rawArgs, TAG_OPTION);
   const tags = values.flatMap((value) => value.split(",").map((tag) => tag.trim()));
   if (tags.some((tag) => !SERVICE_NAME_PATTERN.test(tag))) {
     throw new ProbeError(

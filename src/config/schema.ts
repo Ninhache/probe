@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MAX_TIMEOUT_SECONDS } from "../constants";
-import { headerNameProblem, headerValueProblem } from "./headers";
+import { headerNameProblem, headerValueProblem, isSensitiveHeader } from "./headers";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -154,8 +154,67 @@ export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service
   };
 });
 
+export const PARAMETER_VALUE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+export const VALUE_EXPECTED = "letters, digits, ., _ and - only";
+
+const parameterWord = z.string().regex(PARAMETER_VALUE_PATTERN, VALUE_EXPECTED);
+
+function strategyHeaderProblem(name: string): string | undefined {
+  const problem = headerNameProblem(name);
+  if (problem) return problem;
+  // The values are written in config.yml, which is shared: nothing secret goes in it.
+  return isSensitiveHeader(name) ? "a header that carries no secret" : undefined;
+}
+
+const strategySchemaV1 = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("header"),
+    name: z.string().refine((name) => strategyHeaderProblem(name) === undefined, {
+      error: (issue) => `expected ${strategyHeaderProblem(String(issue.input))}`,
+    }),
+  }),
+  z.strictObject({ kind: z.literal("query"), name: parameterWord }),
+  z.strictObject({ kind: z.literal("path") }),
+]);
+
+const parameterSchemaV1 = z.strictObject({
+  values: z
+    // `values: [1, 2]` is read as numbers.
+    .array(z.union([z.string(), z.number()]).transform(String).pipe(parameterWord))
+    .min(1)
+    .refine((values) => new Set(values).size === values.length, {
+      error: "expected each value once",
+    }),
+  strategy: strategySchemaV1,
+});
+
+export type Parameter = z.infer<typeof parameterSchemaV1>;
+
 export const configSchemaV1 = z.strictObject({
   schemaVersion: z.literal(1),
+  parameters: z
+    .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), parameterSchemaV1)
+    .superRefine((parameters, ctx) => {
+      const taken = new Map<string, string>();
+      for (const [name, { strategy }] of Object.entries(parameters)) {
+        if (strategy.kind === "path") continue;
+        // Header names ignore case, query names do not.
+        const place =
+          strategy.kind === "header"
+            ? `header ${strategy.name.toLowerCase()}`
+            : `query ${strategy.name}`;
+        const twin = taken.get(place);
+        taken.set(place, name);
+        if (twin === undefined) continue;
+        ctx.issues.push({
+          code: "custom",
+          message: `sets the same ${strategy.kind} as ${twin}`,
+          input: strategy.name,
+          path: [name, "strategy", "name"],
+        });
+      }
+    })
+    .nullish(),
   services: z
     .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), serviceSchemaV1)
     // `services:` with nothing under it parses as null.

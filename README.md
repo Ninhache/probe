@@ -68,6 +68,7 @@ Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 | [Doctor](docs/features/doctor.md)               | Who holds the port, which container is stopped                     |
 | [Environments](docs/features/environments.md)   | The same checks against dev, staging or prod: `--env prod`         |
 | [Tags](docs/features/tags.md)                   | `probe check --tag back`: check a group of services                |
+| [Parameters](docs/features/parameters.md)       | One tenant or API version for every service: `--set tenant=acme`   |
 | [Headers and secrets](docs/features/headers.md) | Check a service behind an API key without writing the key in git   |
 | [Makefile](docs/features/makefile.md)           | `make check`, kept up to date for you                              |
 | [Completion](docs/features/completion.md)       | Tab completes commands, options and service names                  |

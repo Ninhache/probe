@@ -8,7 +8,9 @@ import {
   ENVIRONMENT_ARG,
   noServices,
   openProject,
+  SET_ARG,
   secondsToMs,
+  selectionFrom,
   stdoutTerminal,
   TAG_ARG,
   tagsFrom,
@@ -20,6 +22,7 @@ export default defineCommand({
     json: { type: "boolean", description: "Print results as JSON" },
     env: ENVIRONMENT_ARG,
     tag: TAG_ARG,
+    set: SET_ARG,
     timeout: {
       type: "string",
       // No citty default: a value given here must be told apart from none, it beats the services' own.
@@ -31,12 +34,13 @@ export default defineCommand({
     const forceTimeout = args.timeout !== undefined;
     const timeoutMs = secondsToMs("--timeout", args.timeout ?? String(DEFAULT_TIMEOUT_SECONDS));
     const { config, paths } = await openProject(args.env);
+    const selection = selectionFrom(config, rawArgs);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);
     const results = await runChecks(
       config,
       args._,
-      { timeoutMs, forceTimeout, variables, configFile: configFile(paths), tags },
+      { timeoutMs, forceTimeout, variables, configFile: configFile(paths), tags, selection },
       skipped,
     );
 

@@ -6,6 +6,7 @@ import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { loadConfig } from "../config/loader";
 import { loadVariables, readSkippedServices, type Variables } from "../config/local";
+import { applySelection } from "../config/parameters";
 import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
@@ -67,7 +68,7 @@ export function environmentColumn(
 ): EnvironmentColumn {
   let known: Config | undefined;
   const { onOpen, onCopy } = serviceActions(
-    () => known ?? { schemaVersion: 1, services: {} },
+    () => applySelection(known ?? { schemaVersion: 1, services: {} }),
     deps,
   );
   return {
@@ -144,7 +145,7 @@ export async function openDashboard(
       terminal={terminal}
       check={check}
       timeouts={timeouts}
-      {...serviceActions(() => config)}
+      {...serviceActions(() => applySelection(config))}
       {...state}
       terminalFocused={focus.focused}
       onClose={focus.stop}

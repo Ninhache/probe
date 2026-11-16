@@ -292,6 +292,7 @@ describe("bash completion", () => {
       "--json",
       "--env",
       "--tag",
+      "--set",
       "--timeout",
       "--help",
     ]);
@@ -365,6 +366,7 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
       "--json",
       "--env",
       "--tag",
+      "--set",
       "--timeout",
       "--help",
     ]);
@@ -447,6 +449,7 @@ describe.skipIf(!FISH)("fish completion", () => {
       "--env",
       "--help",
       "--json",
+      "--set",
       "--tag",
       "--timeout",
     ]);
