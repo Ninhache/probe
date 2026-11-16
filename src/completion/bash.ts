@@ -4,6 +4,8 @@ import {
   ENVIRONMENTS_QUERY,
   ROOT_OPTIONS,
   SERVICES_QUERY,
+  TAG_OPTION,
+  TAGS_QUERY,
 } from "./spec";
 
 // Must run on bash 3.2 (stock macOS): no `mapfile`, no associative array, loaded with `eval`.
@@ -25,6 +27,8 @@ export function bashScript(commands: CommandSpec[]): string {
     "  done",
     `  if [ -n "$cmd" ] && [ "\${COMP_WORDS[COMP_CWORD-1]}" = "${ENVIRONMENT_OPTION}" ]; then`,
     `    words="$(${ENVIRONMENTS_QUERY})"`,
+    `  elif [ -n "$cmd" ] && [ "\${COMP_WORDS[COMP_CWORD-1]}" = "${TAG_OPTION}" ]; then`,
+    `    words="$(${TAGS_QUERY})"`,
     '  elif [ -z "$cmd" ]; then',
     '    case "$cur" in',
     `      -*) words="${ROOT_OPTIONS.join(" ")}" ;;`,

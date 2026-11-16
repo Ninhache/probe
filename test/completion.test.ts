@@ -71,6 +71,15 @@ async function projectWithEnvironments(): Promise<string> {
   return root;
 }
 
+const TAGGED =
+  "schemaVersion: 1\nservices:\n  api: { port: 3000, tags: [back, infra] }\n  db: { port: 5432, tags: [back] }\n";
+
+async function projectWithTags(): Promise<string> {
+  const root = await project();
+  await writeFile(join(root, ".probe", "config.yml"), TAGGED);
+  return root;
+}
+
 async function pathWithProbe(): Promise<string> {
   const bin = await tempDir();
   const shim = join(bin, "probe");
@@ -128,6 +137,7 @@ describe("completionSpec", () => {
       "--method",
       "--header",
       "--hint",
+      "--tag",
       "--help",
     ]);
   });
@@ -267,12 +277,20 @@ describe("bash completion", () => {
     expect(await bashCompletions(root, "probe", "ls", "--env", "p")).toEqual(["prod"]);
   });
 
+  it("completes the tags after --tag, not the services", async () => {
+    const root = await projectWithTags();
+
+    expect(await bashCompletions(root, "probe", "check", "--tag", "")).toEqual(["back", "infra"]);
+    expect(await bashCompletions(root, "probe", "wait", "--tag", "i")).toEqual(["infra"]);
+  });
+
   it("completes the options of a command", async () => {
     const root = await project();
 
     expect(await bashCompletions(root, "probe", "check", "--")).toEqual([
       "--json",
       "--env",
+      "--tag",
       "--timeout",
       "--help",
     ]);
@@ -333,12 +351,19 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
     expect(await zshCompletions(root, "probe", "check", "api", "--env", "")).toEqual(ENVIRONMENTS);
   });
 
+  it("completes the tags after --tag, not the services", async () => {
+    const root = await projectWithTags();
+
+    expect(await zshCompletions(root, "probe", "check", "--tag", "")).toEqual(["back", "infra"]);
+  });
+
   it("offers the options of a command, and the shells after completion", async () => {
     const root = await project();
 
     expect(await zshCompletions(root, "probe", "check", "--")).toEqual([
       "--json",
       "--env",
+      "--tag",
       "--timeout",
       "--help",
     ]);
@@ -408,6 +433,12 @@ describe.skipIf(!FISH)("fish completion", () => {
     );
   });
 
+  it("completes the tags after --tag, not the services", async () => {
+    const root = await projectWithTags();
+
+    expect((await fishCompletions(root, "probe check --tag ")).sort()).toEqual(["back", "infra"]);
+  });
+
   it("offers the options of a command, and the shells after completion", async () => {
     const root = await project();
 
@@ -415,6 +446,7 @@ describe.skipIf(!FISH)("fish completion", () => {
       "--env",
       "--help",
       "--json",
+      "--tag",
       "--timeout",
     ]);
     expect((await fishCompletions(root, "probe completion ")).sort()).toEqual([

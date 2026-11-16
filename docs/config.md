@@ -35,6 +35,7 @@ services:
 | `timeout` | 3           | Seconds given to this service to answer | 0.4.0  |
 | `headers` | none        | Headers sent with the request           | 0.13.0 |
 | `hint`    | none        | What to do when it is down, one line    | 0.19.0 |
+| `tags`    | none        | Groups it belongs to: `tags: [back]`    | 0.20.0 |
 
 A `probe` older than the "Since" version refuses a config that uses the key: upgrade it.
 
@@ -73,6 +74,10 @@ $ probe check
 ```
 
 It is shared with the config: nothing secret goes in it.
+
+### tags
+
+A list of names, to check a group of services at once: `probe check --tag back`. See [Tags](features/tags.md).
 
 ### https
 

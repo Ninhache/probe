@@ -42,6 +42,7 @@ export interface Service {
   method?: Method;
   headers?: Record<string, string>;
   hint?: string;
+  tags?: string[];
 }
 
 // What is wrong is said without the value: it may be a secret pasted where a reference is expected.
@@ -73,6 +74,8 @@ const headersSchema = z
 const HINT_FORBIDDEN = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 export const HINT_EXPECTED = "one line of text, e.g. start it with: make api";
 
+export const NAME_EXPECTED = "letters, digits, _ and - only";
+
 export const serviceObjectV1 = z.strictObject({
   url: z
     .string()
@@ -98,6 +101,7 @@ export const serviceObjectV1 = z.strictObject({
       error: `expected ${HINT_EXPECTED}`,
     })
     .optional(),
+  tags: z.array(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED)).optional(),
 });
 
 export const serviceShapeV1 = serviceObjectV1.shape;
@@ -141,10 +145,7 @@ export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service
 export const configSchemaV1 = z.strictObject({
   schemaVersion: z.literal(1),
   services: z
-    .record(
-      z.string().regex(SERVICE_NAME_PATTERN, "letters, digits, _ and - only"),
-      serviceSchemaV1,
-    )
+    .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), serviceSchemaV1)
     // `services:` with nothing under it parses as null.
     .nullish()
     .transform((services) => services ?? {}),

@@ -4,11 +4,17 @@ import {
   ENVIRONMENTS_QUERY,
   ROOT_OPTIONS,
   SERVICES_QUERY,
+  TAG_OPTION,
+  TAGS_QUERY,
 } from "./spec";
 
 const quoted = (text: string) => `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+const VALUES: Record<string, string> = {
+  [ENVIRONMENT_OPTION]: "__probe_environments",
+  [TAG_OPTION]: "__probe_tags",
+};
 const longOption = (option: string) =>
-  `-l ${option.replace(/^--/, "")}${option === ENVIRONMENT_OPTION ? " -x -a '(__probe_environments)'" : ""}`;
+  `-l ${option.replace(/^--/, "")}${Object.hasOwn(VALUES, option) ? ` -x -a '(${VALUES[option]})'` : ""}`;
 
 export function fishScript(commands: CommandSpec[]): string {
   const inCommand = (names: string[]) => `-n '__fish_seen_subcommand_from ${names.join(" ")}'`;
@@ -20,6 +26,9 @@ export function fishScript(commands: CommandSpec[]): string {
     "end",
     "function __probe_environments",
     `    ${ENVIRONMENTS_QUERY}`,
+    "end",
+    "function __probe_tags",
+    `    ${TAGS_QUERY}`,
     "end",
     // No file names: probe takes none.
     "complete -c probe -f",

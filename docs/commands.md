@@ -34,17 +34,18 @@ probe add api -p 3000 --path /health
 probe add secure --url https://localhost:8443/health
 ```
 
-| Option                    | Default     | Meaning                                                  |
-| ------------------------- | ----------- | -------------------------------------------------------- |
-| `-p`, `--port <port>`     | required    | Port                                                     |
-| `--host <host>`           | `localhost` | Host name or IP                                          |
-| `--path <path>`           | `/`         | Path to request                                          |
-| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above  |
-| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                     |
-| `--timeout <seconds>`     | 3           | Seconds given to this service                            |
-| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body               |
-| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'` |
-| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`     |
+| Option                    | Default     | Meaning                                                        |
+| ------------------------- | ----------- | -------------------------------------------------------------- |
+| `-p`, `--port <port>`     | required    | Port                                                           |
+| `--host <host>`           | `localhost` | Host name or IP                                                |
+| `--path <path>`           | `/`         | Path to request                                                |
+| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above        |
+| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                           |
+| `--timeout <seconds>`     | 3           | Seconds given to this service                                  |
+| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                     |
+| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`       |
+| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`           |
+| `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra` |
 
 - `probe add` alone, on a terminal, asks for each value: see [Discover](features/discover.md).
 - What each value means: [Config](config.md). Headers and their secrets: [Headers](features/headers.md).
@@ -60,7 +61,7 @@ once.
 
 ## probe ls
 
-Lists the services and their URL.
+Lists the services, their URL and their [tags](features/tags.md).
 
 | Option         | Meaning                                                 |
 | -------------- | ------------------------------------------------------- |
@@ -71,13 +72,15 @@ Lists the services and their URL.
 ```sh
 probe check            # every service
 probe check api db     # these two only
+probe check --tag back # those tagged back
 ```
 
-| Option                | Default                   | Meaning                                                  |
-| --------------------- | ------------------------- | -------------------------------------------------------- |
-| `--json`              | off                       | Print results as JSON                                    |
-| `--env <name>`        | local                     | Check an [environment](features/environments.md) instead |
-| `--timeout <seconds>` | the service's own, else 3 | Seconds given to each service                            |
+| Option                | Default                   | Meaning                                                      |
+| --------------------- | ------------------------- | ------------------------------------------------------------ |
+| `--json`              | off                       | Print results as JSON                                        |
+| `--env <name>`        | local                     | Check an [environment](features/environments.md) instead     |
+| `--tag <a,b>`         | none                      | Only the services with one of these [tags](features/tags.md) |
+| `--timeout <seconds>` | the service's own, else 3 | Seconds given to each service                                |
 
 A service that is down comes with a hint: the one you gave it (`hint` in the [config](config.md)), else one for
 the known causes (connection refused, timeout, host not found, unexpected status, certificate rejected). With
@@ -91,24 +94,26 @@ service opens with Cmd/Ctrl+click.
 Checks again until every service is up, for scripts: `probe wait && pnpm test`. See
 [Wait](features/wait.md).
 
-| Option                     | Default | Meaning                                                 |
-| -------------------------- | ------- | ------------------------------------------------------- |
-| `--timeout <seconds>`      | 60      | Seconds to wait in total before giving up               |
-| `--interval <seconds>`     | 0.5     | Seconds before the second check; the pause then doubles |
-| `--max-interval <seconds>` | 5       | Longest pause between two checks                        |
-| `--json`                   | off     | Print the final results as JSON                         |
-| `--env <name>`             | local   | Wait for an [environment](features/environments.md)     |
+| Option                     | Default | Meaning                                                      |
+| -------------------------- | ------- | ------------------------------------------------------------ |
+| `--timeout <seconds>`      | 60      | Seconds to wait in total before giving up                    |
+| `--interval <seconds>`     | 0.5     | Seconds before the second check; the pause then doubles      |
+| `--max-interval <seconds>` | 5       | Longest pause between two checks                             |
+| `--json`                   | off     | Print the final results as JSON                              |
+| `--env <name>`             | local   | Wait for an [environment](features/environments.md)          |
+| `--tag <a,b>`              | none    | Only the services with one of these [tags](features/tags.md) |
 
 ## probe doctor
 
 Says why a service is down: who holds the port, which container is stopped. See
 [Doctor](features/doctor.md).
 
-| Option                | Meaning                                                    |
-| --------------------- | ---------------------------------------------------------- |
-| `--json`              | Print the diagnosis as JSON                                |
-| `--env <name>`        | Look at an [environment](features/environments.md) instead |
-| `--timeout <seconds>` | Seconds given to each service                              |
+| Option                | Meaning                                                      |
+| --------------------- | ------------------------------------------------------------ |
+| `--json`              | Print the diagnosis as JSON                                  |
+| `--env <name>`        | Look at an [environment](features/environments.md) instead   |
+| `--tag <a,b>`         | Only the services with one of these [tags](features/tags.md) |
+| `--timeout <seconds>` | Seconds given to each service                                |
 
 ## probe open
 

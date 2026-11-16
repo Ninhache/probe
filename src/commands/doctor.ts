@@ -19,6 +19,8 @@ import {
   secondsToMs,
   stdoutColors,
   stdoutTerminal,
+  TAG_ARG,
+  tagsFrom,
 } from "./shared";
 import { describeBlock, describeUpdate } from "./status";
 
@@ -30,12 +32,14 @@ export default defineCommand({
   args: {
     json: { type: "boolean", description: "Print the diagnosis as JSON" },
     env: ENVIRONMENT_ARG,
+    tag: TAG_ARG,
     timeout: {
       type: "string",
       description: `Seconds to wait for each service (default: its own timeout, else ${DEFAULT_TIMEOUT_SECONDS})`,
     },
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
+    const tags = tagsFrom(rawArgs);
     const forceTimeout = args.timeout !== undefined;
     const timeoutMs = secondsToMs("--timeout", args.timeout ?? String(DEFAULT_TIMEOUT_SECONDS));
     const paths = await environmentPaths(requireProbeDir(process.cwd()), args.env);
@@ -56,6 +60,7 @@ export default defineCommand({
           forceTimeout,
           variables: await loadVariables(paths),
           configFile: configFile(paths),
+          tags,
         },
         await readSkippedServices(paths),
       );

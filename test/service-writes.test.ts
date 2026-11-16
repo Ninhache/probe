@@ -88,6 +88,24 @@ describe("writeService", () => {
     expect(await readFile(paths.config, "utf8")).toBe(config.replace("port: 5173", "port: 5174"));
   });
 
+  it("should keep the tags of a service that is edited", async () => {
+    const config = CONFIG.replace(
+      "front: { port: 5173 }",
+      "front: { port: 5173, tags: [web, infra] }",
+    );
+    const paths = await tempProject(config);
+
+    await writeService(paths, {
+      kind: "edit",
+      name: "front",
+      fields: fields({ port: 5174, path: "/" }),
+    });
+
+    expect(await readFile(paths.config, "utf8")).toContain(
+      "front: { port: 5174, tags: [ web, infra ] }",
+    );
+  });
+
   it("should keep the headers of a service that is edited", async () => {
     const headers = "headers: { Accept: text/plain, X-Api-Key: '$" + "{API_KEY}' }";
     const config = CONFIG.replace("front: { port: 5173 }", `front: { port: 5173, ${headers} }`);

@@ -4,6 +4,8 @@ import {
   ENVIRONMENTS_QUERY,
   ROOT_OPTIONS,
   SERVICES_QUERY,
+  TAG_OPTION,
+  TAGS_QUERY,
 } from "./spec";
 
 function described({ name, description }: CommandSpec): string {
@@ -35,6 +37,11 @@ export function zshScript(commands: CommandSpec[]): string {
     "  fi",
     `  if [[ $words[CURRENT-1] == ${ENVIRONMENT_OPTION} ]]; then`,
     `    services=(\${(f)"$(${ENVIRONMENTS_QUERY})"})`,
+    "    compadd -a services",
+    "    return",
+    "  fi",
+    `  if [[ $words[CURRENT-1] == ${TAG_OPTION} ]]; then`,
+    `    services=(\${(f)"$(${TAGS_QUERY})"})`,
     "    compadd -a services",
     "    return",
     "  fi",
