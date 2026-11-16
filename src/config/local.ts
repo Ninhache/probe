@@ -35,16 +35,32 @@ function scope(paths: ProbePaths): string[] {
   return paths.environment === undefined ? [] : [LOCAL_ENVIRONMENTS_KEY, paths.environment];
 }
 
+// A key left without a value (`envs:`) parses as a null scalar: nothing is there.
+const isAbsent = (node: unknown) =>
+  node === null || node === undefined || (isScalar(node) && node.value === null);
+
 /** The map at `path`: undefined when nothing is there, null when something else is in the way. */
 function mapAt(doc: Document, path: readonly string[]): YAMLMap | undefined | null {
   let node: unknown = doc.contents;
   for (const key of path) {
-    if (node === null || node === undefined) return undefined;
+    if (isAbsent(node)) return undefined;
     if (!isMap(node)) return null;
     node = node.get(key, true);
   }
-  if (node === null || node === undefined) return undefined;
+  if (isAbsent(node)) return undefined;
   return isMap(node) ? node : null;
+}
+
+// `setIn` does not write through a null scalar: the empty key goes first.
+function clearEmptyKeys(doc: Document, path: readonly string[]): void {
+  for (let depth = 1; depth <= path.length; depth++) {
+    const at = path.slice(0, depth);
+    const node = doc.getIn(at, true);
+    if (isScalar(node) && node.value === null) {
+      doc.deleteIn(at);
+      return;
+    }
+  }
 }
 
 function pruneEmpty(doc: Document, path: readonly string[]): void {
@@ -183,6 +199,7 @@ export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean)
     if (entry === null) return false;
     if (skip) {
       if (entry?.get(SKIP) === true) return null;
+      clearEmptyKeys(doc, path);
       doc.setIn([...path, SKIP], true);
       return true;
     }
@@ -252,6 +269,7 @@ export function writeVariable(
     const section = mapAt(doc, path);
     if (section === null) return false;
     if (value !== undefined) {
+      clearEmptyKeys(doc, path);
       doc.setIn([...path, name], value);
       return true;
     }

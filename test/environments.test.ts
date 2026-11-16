@@ -425,6 +425,23 @@ describe("what local.yml keeps for an environment", () => {
     },
   );
 
+  it.each(["envs:\n", "envs:\n  prod:\n", "envs:\n  prod:\n    variables:\n", "variables:\n"])(
+    "writes through a key left empty: %j",
+    async (text) => {
+      const local = await prodAndStaging();
+      await writeFile(local.local, text);
+      const prod = await environmentPaths(local, "prod");
+
+      expect(await writeVariable(prod, "API_KEY", SECRET)).toBe(true);
+      expect(await writeVariable(local, "API_KEY", "local-value")).toBe(true);
+      expect(await writeServiceSkip(prod, "api", true)).toBe(true);
+
+      expect((await loadVariables(prod, {})).lookup("API_KEY")).toBe(SECRET);
+      expect((await loadVariables(local, {})).lookup("API_KEY")).toBe("local-value");
+      expect(await readSkippedServices(prod)).toEqual(new Set(["api"]));
+    },
+  );
+
   it("says so when local.yml cannot be read", async () => {
     const local = await prodAndStaging();
     await writeFile(local.local, "envs: [\n");
@@ -530,6 +547,31 @@ describe("probe var --env", () => {
 
     expect(result.code).toBe(0);
     expect(seen).toEqual(["/prod"]);
+  });
+});
+
+describe("a value kept for an environment", () => {
+  it("is never printed by probe curl", async () => {
+    const { root, local } = await prodAndStaging();
+    await writeFile(local, KEPT_FOR_PROD);
+
+    const result = await probe(root, ["curl", "api", "--env", "prod"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("$API_KEY");
+    expect(result.stdout + result.stderr).not.toContain(SECRET);
+  });
+
+  it("is never in the command the dashboard copies", async () => {
+    const local = await prodAndStaging();
+    await writeFile(local.local, KEPT_FOR_PROD);
+
+    const column = environmentColumn(environmentSource(local, "prod", {}));
+    await column.check(new AbortController().signal, 2000);
+    const copied = await column.onCopy?.("api");
+
+    expect(copied).toContain("$API_KEY");
+    expect(copied).not.toContain(SECRET);
   });
 });
 

@@ -245,7 +245,7 @@ alone lists the environments.
 Each environment has its own values in `.probe/local.yml`, under `envs.<name>`, and none is ever used for
 another: a variable set by `probe var API_TOKEN` is sent to the local services only, one set by
 `probe var API_TOKEN --env prod` to `prod` only. An exported variable (`API_TOKEN=… probe check --env prod`)
-wins over both. A service is skipped per environment the same way:
+wins over both. A service is skipped for one environment in the same place, by editing the file:
 
 ```yaml
 # .probe/local.yml

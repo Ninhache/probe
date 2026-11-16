@@ -597,7 +597,7 @@ export function Dashboard({
     } else if (enter && variableRow) askVariable(variableRow);
     else if (key === "escape" || (panel.kind === "options" ? input === "o" : enter)) setPanel(null);
     else if (panel.kind === "service" && panel.environment !== undefined) {
-      // The rows of this panel write for the local services: another environment is set with `probe var --env`.
+      // The rows of this panel write for the local services: for another environment, `probe var --env` or local.yml by hand.
     } else if (up || down) {
       const lastRow =
         panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length + variableRows.length - 1;
