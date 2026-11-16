@@ -34,6 +34,41 @@ describe("confirm", () => {
     expect((await ask(`n${ENTER}`)).answer).toBe(false);
   });
 
+  it.each([
+    ["right", "\u001b[C"],
+    ["down", "\u001b[B"],
+    ["l", "l"],
+    ["j", "j"],
+    ["right twice", "\u001b[C\u001b[C"],
+    ["tab", "\t"],
+    ["space", " "],
+  ])("should stay on no when %s is pressed, since no is already on that side", async (_, keys) => {
+    expect((await ask(`${keys}${ENTER}`)).answer).toBe(false);
+  });
+
+  it.each([
+    ["left", "\u001b[D"],
+    ["up", "\u001b[A"],
+    ["h", "h"],
+    ["k", "k"],
+  ])("should move to yes when %s is pressed", async (_, keys) => {
+    expect((await ask(`${keys}${ENTER}`)).answer).toBe(true);
+  });
+
+  it("should come back to no with the right arrow after the left one", async () => {
+    expect((await ask(`\u001b[D\u001b[C${ENTER}`)).answer).toBe(false);
+  });
+
+  it("should stay on yes when space is pressed after the left arrow", async () => {
+    expect((await ask(`\u001b[D ${ENTER}`)).answer).toBe(true);
+  });
+
+  it("should strike no, not yes, when the question is cancelled with Escape", async () => {
+    const { answer, screen } = await ask("\u001b");
+    expect(answer).toBe(false);
+    expect(screen.slice(screen.lastIndexOf("Remove api?"))).not.toContain("Yes");
+  });
+
   it("should return false when the question is cancelled", async () => {
     expect((await ask(CTRL_C)).answer).toBe(false);
   });
