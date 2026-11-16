@@ -53,7 +53,7 @@ import { createSaveQueue } from "./dashboard/saves";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
 import { formatExamples } from "./ui/examples";
-import { linkFile } from "./ui/links";
+import { linkFileIn } from "./ui/links";
 import { confirm } from "./ui/prompt";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
 import {
@@ -306,8 +306,7 @@ async function run(rawArgs: string[]): Promise<void> {
     if (error instanceof ProbeError) {
       const { file, message } = error;
       const { hyperlinks } = detectTerminal(process.stderr, process.env);
-      const shown =
-        file === undefined ? message : message.replaceAll(file, linkFile(file, file, hyperlinks));
+      const shown = file === undefined ? message : linkFileIn(message, file, hyperlinks);
       console.error(`probe: ${shown}`);
     } else if (error instanceof Error && error.name === "CLIError") {
       if (rawArgs.length === 0) await printUsage(main);

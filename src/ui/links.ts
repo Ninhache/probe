@@ -26,3 +26,9 @@ export function fileUrl(path: string): string {
 export function linkFile(text: string, path: string, enabled: boolean): string {
   return link(text, fileUrl(path), enabled);
 }
+
+export function linkFileIn(message: string, path: string, enabled: boolean): string {
+  const linked = linkFile(path, path, enabled);
+  // A function: a `$` in the path means nothing to it.
+  return message.replaceAll(path, () => linked);
+}

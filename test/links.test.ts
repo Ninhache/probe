@@ -2,7 +2,7 @@ import { hostname } from "node:os";
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { configSchemaV1 } from "../src/config/schema";
-import { fileUrl, link, linkFile } from "../src/ui/links";
+import { fileUrl, link, linkFile, linkFileIn } from "../src/ui/links";
 import { formatCheckResults, formatServices } from "../src/ui/report";
 import { detectTerminal } from "../src/ui/terminal";
 
@@ -59,8 +59,26 @@ describe("link", () => {
   });
 
   it("points a file at this machine", () => {
-    expect(fileUrl("/tmp/a b/config.yml")).toBe(`file://${hostname()}/tmp/a%20b/config.yml`);
+    expect(fileUrl("/tmp/a b/config.yml")).toBe(
+      `file://${hostname().toLowerCase()}/tmp/a%20b/config.yml`,
+    );
     expect(linkFile(".probe/config.yml", "/p/.probe/config.yml", false)).toBe(".probe/config.yml");
+  });
+});
+
+describe("linkFileIn", () => {
+  const path = "/tmp/pro$&ject/$'/.probe/config.yml";
+  const message = `${path} is invalid:\n  services: expected a mapping (${path})`;
+
+  it("links each mention of the file and keeps the rest", () => {
+    const linked = linkFileIn(message, path, true);
+
+    expect(linked.split(OSC8)).toHaveLength(5);
+    expect(withoutLinks(linked)).toBe(message);
+  });
+
+  it("changes nothing when links are off", () => {
+    expect(linkFileIn(message, path, false)).toBe(message);
   });
 });
 
