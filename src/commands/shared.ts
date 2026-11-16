@@ -72,10 +72,11 @@ export function requireVariables(
     const service = Object.hasOwn(config.services, name) ? config.services[name] : undefined;
     const [unset] = serviceVariables(service?.headers).filter((v) => !variables.lookup(v));
     if (unset === undefined) continue;
-    const how = variables.exportedOnly
-      ? `Export ${unset} in the shell that runs probe.`
-      : `Set it for this machine: probe var ${unset} (or export it).`;
-    throw new ProbeError("VARIABLE_UNSET", `${name} sends ${unset}, which is not set. ${how}`);
+    const scope = variables.environment === undefined ? "" : ` --env ${variables.environment}`;
+    throw new ProbeError(
+      "VARIABLE_UNSET",
+      `${name} sends ${unset}, which is not set. Set it for this machine: probe var ${unset}${scope} (or export it).`,
+    );
   }
 }
 

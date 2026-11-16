@@ -5,7 +5,7 @@ import type { ProbePaths } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { loadConfig } from "../config/loader";
-import { loadVariables, type Variables } from "../config/local";
+import { loadVariables, readSkippedServices, type Variables } from "../config/local";
 import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
@@ -36,7 +36,7 @@ export interface EnvironmentSource {
   name: string;
   file: string;
   /** Read before each pass: the file is edited by hand while the dashboard runs. */
-  load: () => Promise<{ config: Config; variables: Variables }>;
+  load: () => Promise<{ config: Config; variables: Variables; skipped: ReadonlySet<string> }>;
 }
 
 export function environmentSource(
@@ -51,7 +51,11 @@ export function environmentSource(
       const found = await environmentPaths(paths, name);
       // Not on stderr: a line printed there would land in the middle of the screen.
       const loaded = await loadConfig(found, { log: () => {} });
-      return { config: loaded.config, variables: await loadVariables(found, env) };
+      return {
+        config: loaded.config,
+        variables: await loadVariables(found, env),
+        skipped: await readSkippedServices(found),
+      };
     },
   };
 }
@@ -71,15 +75,14 @@ export function environmentColumn(
     onOpen,
     onCopy: (service) => onCopy(service, known?.services[service]?.timeout),
     async check(signal, timeoutMs) {
-      const { config, variables } = await load();
+      const { config, variables, skipped } = await load();
       known = config;
-      return runChecks(config, [], {
-        timeoutMs,
-        signal,
-        detail: true,
-        variables,
-        configFile: file,
-      });
+      return runChecks(
+        config,
+        [],
+        { timeoutMs, signal, detail: true, variables, configFile: file },
+        skipped,
+      );
     },
   };
 }

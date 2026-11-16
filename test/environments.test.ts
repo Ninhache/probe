@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
@@ -7,7 +7,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { type ProbePaths, pathsFor } from "../src/config/discovery";
 import { environmentPaths, listEnvironments } from "../src/config/environments";
 import { backupPath } from "../src/config/loader";
-import { loadVariables, readSkippedServices } from "../src/config/local";
+import {
+  loadVariables,
+  readSkippedServices,
+  writeServiceSkip,
+  writeVariable,
+} from "../src/config/local";
+import { environmentColumn, environmentSource } from "../src/dashboard/open";
 import { tempProject } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -19,12 +25,13 @@ interface Run {
   stderr: string;
 }
 
-function probe(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}): Promise<Run> {
+function probe(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input = ""): Promise<Run> {
   return new Promise((done) => {
     const child = spawn(process.execPath, [CLI, ...args], {
       cwd,
       env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", API_KEY: undefined, ...env },
     });
+    child.stdin.end(input);
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => {
@@ -191,7 +198,7 @@ describe("probe check --env", () => {
     expect(JSON.parse(result.stdout)[0]).toMatchObject({
       ok: false,
       error: "API_KEY is not set",
-      hint: "export API_KEY in the shell that runs probe",
+      hint: "set it for this machine: probe var API_KEY --env prod (or export it)",
     });
     expect(result.stdout + result.stderr).not.toContain(SECRET);
   });
@@ -218,17 +225,28 @@ describe("probe check --env", () => {
     );
   });
 
-  it.each([
-    ["wrong", "expected 2xx, got 401"],
-    ["caf\u00e9\u2603", "API_KEY cannot go in a header"],
-  ])("never points at probe var for a value it refuses (%j)", async (value, error) => {
+  it("never points at probe var for a value the service refuses", async () => {
     const { root } = await twoEnvironments();
+
+    const result = await probe(root, ["check", "--env", "prod", "--json"], { API_KEY: "wrong" });
+
+    expect(JSON.parse(result.stdout)[0]).toMatchObject({ error: "expected 2xx, got 401" });
+    expect(result.stdout + result.stderr).not.toContain("probe var");
+    expect(result.stdout + result.stderr).not.toContain("config.yml");
+  });
+
+  it("points at the value of the environment when it cannot go in a header", async () => {
+    const { root } = await twoEnvironments();
+    const value = "caf\u00e9\u2603";
 
     const result = await probe(root, ["check", "--env", "prod", "--json"], { API_KEY: value });
 
-    expect(JSON.parse(result.stdout)[0]).toMatchObject({ ok: false, error });
-    expect(result.stdout + result.stderr).not.toContain("probe var");
-    expect(result.stdout + result.stderr).not.toContain("config.yml");
+    expect(JSON.parse(result.stdout)[0]).toMatchObject({
+      ok: false,
+      error: "API_KEY cannot go in a header",
+      hint: "a line break or an unusual character in its value: set it again with probe var API_KEY --env prod",
+    });
+    expect(result.stdout + result.stderr).not.toContain(value);
   });
 
   it("ignores a skip kept for the local service of the same name", async () => {
@@ -266,7 +284,6 @@ describe("a command that works on the local services only", () => {
     [["rm", "api", "--yes", "--env", "prod"]],
     [["rm", "api", "--yes", "--env=prod"]],
     [["add", "other", "-p", "3000", "--env", "prod"]],
-    [["var", "API_KEY", "--env", "prod"]],
     [["open", "api", "--env", "prod"]],
     [["sync", "--env", "prod"]],
     [["status", "--env", "prod"]],
@@ -280,7 +297,7 @@ describe("a command that works on the local services only", () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain(
-      "--env is read by ls, check, wait, curl only: the other commands work on the local services.",
+      "--env is read by ls, check, wait, curl, var only: the other commands work on the local services.",
     );
     expect(await readFile(join(dir, "config.yml"), "utf8")).toBe(before);
     expect((await readdir(root)).sort()).toEqual([".probe"]);
@@ -296,7 +313,7 @@ describe("the other commands with --env", () => {
     expect(seen.sort()).toEqual(["/dev", "/dev-worker"]);
   });
 
-  it("wait for nothing when a variable is not exported", async () => {
+  it("wait for nothing when a variable is not set for them", async () => {
     const paths = await twoEnvironments();
     await writeFile(paths.local, `variables:\n  API_KEY: ${SECRET}\n`);
 
@@ -304,7 +321,7 @@ describe("the other commands with --env", () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain(
-      "api sends API_KEY, which is not set. Export API_KEY in the shell that runs probe.",
+      "api sends API_KEY, which is not set. Set it for this machine: probe var API_KEY --env prod (or export it).",
     );
     expect(seen).toEqual([]);
   });
@@ -331,5 +348,293 @@ describe("the other commands with --env", () => {
     expect((await probe(root, ["curl", "api", "--env", "dev"])).stdout).toBe(
       `curl -i -L --max-time 3 'http://127.0.0.1:${port}/dev'\n`,
     );
+  });
+});
+
+const PROD = (path = "/prod") =>
+  config(
+    `  api:\n    host: 127.0.0.1\n    port: ${port}\n    path: ${path}\n    headers:\n      X-Api-Key: \${API_KEY}\n`,
+  );
+const KEPT_FOR_PROD = `envs:\n  prod:\n    variables:\n      API_KEY: ${SECRET}\n`;
+
+const prodAndStaging = () => project({ "prod.yml": PROD(), "staging.yml": PROD() });
+
+describe("what local.yml keeps for an environment", () => {
+  it("gives each environment its own value and no other", async () => {
+    const local = await prodAndStaging();
+    await writeFile(local.local, `variables:\n  API_KEY: local-value\n${KEPT_FOR_PROD}`);
+    const prod = await environmentPaths(local, "prod");
+    const staging = await environmentPaths(local, "staging");
+
+    expect((await loadVariables(prod, {})).lookup("API_KEY")).toBe(SECRET);
+    expect((await loadVariables(staging, {})).lookup("API_KEY")).toBeUndefined();
+    expect((await loadVariables(local, {})).lookup("API_KEY")).toBe("local-value");
+    expect((await loadVariables(prod, { API_KEY: "exported" })).lookup("API_KEY")).toBe("exported");
+  });
+
+  it("writes a value under the environment, in a file nobody else reads", async () => {
+    const local = await prodAndStaging();
+    await writeFile(local.local, "dashboard:\n  interval: 5\n");
+    await chmod(local.local, 0o644);
+    const prod = await environmentPaths(local, "prod");
+
+    expect(await writeVariable(prod, "API_KEY", SECRET)).toBe(true);
+
+    expect(await readFile(local.local, "utf8")).toBe(`dashboard:\n  interval: 5\n${KEPT_FOR_PROD}`);
+    expect((await stat(local.local)).mode & 0o777).toBe(0o600);
+  });
+
+  it("forgets a value and the maps it leaves empty, and nothing else", async () => {
+    const local = await prodAndStaging();
+    await writeFile(local.local, `variables:\n  API_KEY: local-value\n${KEPT_FOR_PROD}`);
+    const prod = await environmentPaths(local, "prod");
+
+    expect(await writeVariable(prod, "API_KEY", undefined)).toBe(true);
+
+    expect(await readFile(local.local, "utf8")).toBe("variables:\n  API_KEY: local-value\n");
+  });
+
+  it("skips a service in one environment only", async () => {
+    const local = await prodAndStaging();
+    const prod = await environmentPaths(local, "prod");
+    const staging = await environmentPaths(local, "staging");
+
+    expect(await writeServiceSkip(prod, "api", true)).toBe(true);
+
+    expect(await readFile(local.local, "utf8")).toBe(
+      "envs:\n  prod:\n    services:\n      api:\n        skip: true\n",
+    );
+    expect(await readSkippedServices(prod)).toEqual(new Set(["api"]));
+    expect(await readSkippedServices(staging)).toEqual(new Set());
+    expect(await readSkippedServices(local)).toEqual(new Set());
+
+    expect(await writeServiceSkip(prod, "api", false)).toBe(true);
+    expect(await readFile(local.local, "utf8")).toBe("");
+  });
+
+  it.each(["envs: 3\n", "envs:\n  prod: 3\n", "envs:\n  prod:\n    variables: 3\n"])(
+    "writes nothing through %j",
+    async (text) => {
+      const local = await prodAndStaging();
+      await writeFile(local.local, text);
+      const prod = await environmentPaths(local, "prod");
+
+      expect(await writeVariable(prod, "API_KEY", SECRET)).toBe(false);
+      expect(await writeServiceSkip(prod, "api", true)).toBe(text.includes("variables"));
+      expect(await readFile(local.local, "utf8")).not.toContain(SECRET);
+    },
+  );
+
+  it.each(["envs:\n", "envs:\n  prod:\n", "envs:\n  prod:\n    variables:\n", "variables:\n"])(
+    "writes through a key left empty: %j",
+    async (text) => {
+      const local = await prodAndStaging();
+      await writeFile(local.local, text);
+      const prod = await environmentPaths(local, "prod");
+
+      expect(await writeVariable(prod, "API_KEY", SECRET)).toBe(true);
+      expect(await writeVariable(local, "API_KEY", "local-value")).toBe(true);
+      expect(await writeServiceSkip(prod, "api", true)).toBe(true);
+
+      expect((await loadVariables(prod, {})).lookup("API_KEY")).toBe(SECRET);
+      expect((await loadVariables(local, {})).lookup("API_KEY")).toBe("local-value");
+      expect(await readSkippedServices(prod)).toEqual(new Set(["api"]));
+    },
+  );
+
+  it("says so when local.yml cannot be read", async () => {
+    const local = await prodAndStaging();
+    await writeFile(local.local, "envs: [\n");
+
+    const variables = await loadVariables(await environmentPaths(local, "prod"), {});
+
+    expect(variables).toMatchObject({ localUnreadable: true, environment: "prod" });
+  });
+
+  it("reaches the column of that environment in the dashboard, skips included", async () => {
+    const local = await prodAndStaging();
+    await writeFile(local.local, KEPT_FOR_PROD);
+    const check = (name: string) =>
+      environmentColumn(environmentSource(local, name, {})).check(
+        new AbortController().signal,
+        2000,
+      );
+
+    expect(await check("prod")).toMatchObject([{ name: "api", ok: true }]);
+    expect(await check("staging")).toMatchObject([{ ok: false, error: "API_KEY is not set" }]);
+    expect(seen).toEqual(["/prod"]);
+
+    await writeServiceSkip(await environmentPaths(local, "prod"), "api", true);
+    expect(await check("prod")).toMatchObject([{ name: "api", skipped: true }]);
+    expect(seen).toEqual(["/prod"]);
+  });
+});
+
+describe("probe var --env", () => {
+  it("keeps a value for that environment only, and shows it nowhere", async () => {
+    const { root, local } = await prodAndStaging();
+
+    const kept = await probe(root, ["var", "API_KEY", "--env", "prod"], {}, `${SECRET}\n`);
+
+    expect(kept).toMatchObject({
+      code: 0,
+      stdout: "Kept API_KEY in .probe/local.yml for prod, for this machine only.\n",
+    });
+    expect(await readFile(local, "utf8")).toBe(KEPT_FOR_PROD);
+
+    const prod = await probe(root, ["check", "--env", "prod", "--json"]);
+    const staging = await probe(root, ["check", "--env", "staging", "--json"]);
+    const here = await probe(root, ["var"]);
+
+    expect(prod.code).toBe(0);
+    expect(seen).toEqual(["/prod"]);
+    expect(JSON.parse(staging.stdout)[0]).toMatchObject({
+      ok: false,
+      error: "API_KEY is not set",
+      hint: "set it for this machine: probe var API_KEY --env staging (or export it)",
+    });
+    expect(here.stdout).toContain("No variable yet.");
+    const shown = [kept, prod, staging, here].map((run) => run.stdout + run.stderr).join("");
+    expect(shown).not.toContain(SECRET);
+  });
+
+  it("lists what is set for that environment", async () => {
+    const { root, local } = await prodAndStaging();
+    await writeFile(local, KEPT_FOR_PROD);
+
+    expect((await probe(root, ["var", "--env", "prod"])).stdout).toBe(
+      "API_KEY  set in .probe/local.yml for prod  (sent by api)\n",
+    );
+    expect((await probe(root, ["var", "--env", "staging"])).stdout).toBe(
+      "API_KEY  not set: probe var API_KEY --env staging  (sent by api)\n",
+    );
+  });
+
+  it("forgets the value of that environment and leaves the local one", async () => {
+    const { root, local } = await prodAndStaging();
+    await writeFile(local, `variables:\n  API_KEY: local-value\n${KEPT_FOR_PROD}`);
+
+    const result = await probe(root, ["var", "API_KEY", "--unset", "--env", "prod"]);
+
+    expect(result).toMatchObject({ code: 0, stdout: "Forgot API_KEY for prod.\n" });
+    expect(await readFile(local, "utf8")).toBe("variables:\n  API_KEY: local-value\n");
+  });
+
+  it("writes at the top with --env local, as without it", async () => {
+    const { root, local } = await prodAndStaging();
+
+    await probe(root, ["var", "API_KEY", "--env", "local"], {}, "local-value");
+
+    expect(await readFile(local, "utf8")).toBe("variables:\n  API_KEY: local-value\n");
+  });
+
+  it("refuses an environment that is not there, and keeps nothing", async () => {
+    const { root, local } = await prodAndStaging();
+
+    const result = await probe(root, ["var", "API_KEY", "--env", "qa"], {}, SECRET);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('no environment "qa"');
+    await expect(readFile(local, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("leaves aside a service skipped for that environment", async () => {
+    const { root, local } = await prodAndStaging();
+    await writeFile(local, "envs:\n  prod:\n    services:\n      api:\n        skip: true\n");
+
+    const result = await probe(root, ["check", "--env", "prod"], { API_KEY: SECRET });
+    await probe(root, ["check", "--env", "staging"], { API_KEY: SECRET });
+
+    expect(result.code).toBe(0);
+    expect(seen).toEqual(["/prod"]);
+  });
+});
+
+describe("a value kept for an environment", () => {
+  it("is never printed by probe curl", async () => {
+    const { root, local } = await prodAndStaging();
+    await writeFile(local, KEPT_FOR_PROD);
+
+    const result = await probe(root, ["curl", "api", "--env", "prod"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("$API_KEY");
+    expect(result.stdout + result.stderr).not.toContain(SECRET);
+  });
+
+  it("is never in the command the dashboard copies", async () => {
+    const local = await prodAndStaging();
+    await writeFile(local.local, KEPT_FOR_PROD);
+
+    const column = environmentColumn(environmentSource(local, "prod", {}));
+    await column.check(new AbortController().signal, 2000);
+    const copied = await column.onCopy?.("api");
+
+    expect(copied).toContain("$API_KEY");
+    expect(copied).not.toContain(SECRET);
+  });
+});
+
+describe("probe env", () => {
+  it("lists the environments and their files", async () => {
+    const { root } = await twoEnvironments();
+
+    expect((await probe(root, ["env"])).stdout).toBe(
+      "local  .probe/config.yml\ndev    .probe/envs/dev.yml\nprod   .probe/envs/prod.yml\n",
+    );
+  });
+
+  it("creates one from another, and copies no value", async () => {
+    const paths = await project({ "prod.yml": `# production\n${PROD()}` });
+    await writeFile(paths.local, KEPT_FOR_PROD);
+
+    const result = await probe(paths.root, ["env", "staging", "--from", "prod"]);
+
+    expect(result).toMatchObject({
+      code: 0,
+      stdout: [
+        "Created .probe/envs/staging.yml from .probe/envs/prod.yml.",
+        "Change the addresses there, then: probe check --env staging",
+        "It sends API_KEY: probe var API_KEY --env staging (or export it).",
+        "",
+      ].join("\n"),
+    });
+    expect(await readFile(join(paths.dir, "envs", "staging.yml"), "utf8")).toBe(
+      await readFile(join(paths.dir, "envs", "prod.yml"), "utf8"),
+    );
+    expect(await readFile(paths.local, "utf8")).toBe(KEPT_FOR_PROD);
+    expect(result.stdout + result.stderr).not.toContain(SECRET);
+    const staging = await environmentPaths(paths, "staging");
+    expect((await loadVariables(staging, {})).lookup("API_KEY")).toBeUndefined();
+  });
+
+  it("copies the local services by default, in a project without envs/", async () => {
+    const paths = await tempProject(config(`  api: ${at("/local")}\n`));
+
+    const result = await probe(paths.root, ["env", "prod"]);
+
+    expect(result.stdout).toContain("Created .probe/envs/prod.yml from .probe/config.yml.");
+    expect(await readFile(join(paths.dir, "envs", "prod.yml"), "utf8")).toBe(
+      await readFile(paths.config, "utf8"),
+    );
+    expect((await probe(paths.root, ["check", "--env", "prod"])).code).toBe(0);
+  });
+
+  it.each([
+    [["env", "prod"], ".probe/envs/prod.yml is already there"],
+    [["env", "local"], "local is .probe/config.yml"],
+    [["env", "../x"], "an environment name is made of letters"],
+    [["env", "qa", "--from", "nope"], 'no environment "nope"'],
+    [["env", "--from", "dev"], "--from expects the name to create"],
+  ])("refuses %j", async (args, message) => {
+    const paths = await twoEnvironments();
+    const before = await readFile(join(paths.dir, "envs", "prod.yml"), "utf8");
+
+    const result = await probe(paths.root, args);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(message);
+    expect(await readFile(join(paths.dir, "envs", "prod.yml"), "utf8")).toBe(before);
+    expect((await readdir(join(paths.dir, "envs"))).sort()).toEqual(["dev.yml", "prod.yml"]);
   });
 });

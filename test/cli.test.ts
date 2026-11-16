@@ -800,7 +800,7 @@ describe("probe (top level)", () => {
     const usage = await exec(process.execPath, [CLI], cwd, env);
     expect(usage.code).toBe(2);
     expect(usage.stdout).toContain(
-      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|status|sync|migrate",
+      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|env|status|sync|migrate",
     );
   });
 

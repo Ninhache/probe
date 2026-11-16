@@ -157,27 +157,29 @@ function sentBy(service: Service): string {
   return variables.length > 0 ? variables.join(", ") : `\`headers\` in ${CONFIG}`;
 }
 
-const setCommand = (name: string) => `probe var ${name}`;
+const setCommand = (name: string, environment?: string) =>
+  `probe var ${name}${environment === undefined ? "" : ` --env ${environment}`}`;
 
 export function diagnoseUnset(
   names: string[],
-  { localUnreadable, exportedOnly }: { localUnreadable?: boolean; exportedOnly?: boolean },
+  { localUnreadable, environment }: { localUnreadable?: boolean; environment?: string },
 ): Diagnosis {
   const [first = ""] = names;
   const error = `${names.join(", ")} ${names.length > 1 ? "are" : "is"} not set`;
-  if (exportedOnly) return { error, hint: `export ${first} in the shell that runs probe` };
   if (localUnreadable) {
     return { error, hint: `${LOCAL} is not valid YAML: fix it, or export ${first}` };
   }
-  return { error, hint: `set it for this machine: ${setCommand(first)} (or export it)` };
+  return {
+    error,
+    hint: `set it for this machine: ${setCommand(first, environment)} (or export it)`,
+  };
 }
 
-export function diagnoseUnsendable(names: string[], exportedOnly = false): Diagnosis {
+export function diagnoseUnsendable(names: string[], environment?: string): Diagnosis {
   const [first = ""] = names;
-  const again = exportedOnly ? `export ${first} again` : `set it again with ${setCommand(first)}`;
   return {
     error: `${names.join(", ")} cannot go in a header`,
-    hint: `a line break or an unusual character in its value: ${again}`,
+    hint: `a line break or an unusual character in its value: set it again with ${setCommand(first, environment)}`,
   };
 }
 

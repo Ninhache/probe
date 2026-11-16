@@ -11,6 +11,7 @@ import add, { guidedAdd } from "./commands/add";
 import check from "./commands/check";
 import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
+import environment from "./commands/env";
 import init, { ignoreLocalFiles, initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
@@ -73,6 +74,7 @@ const commands = {
   open,
   curl,
   var: variable,
+  env: environment,
   status,
   sync,
   migrate,

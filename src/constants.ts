@@ -12,6 +12,7 @@ export const LOCAL_DRAFT_FILE = "local.draft.bak.yml";
 // local.yml is where credentials go: a new one is readable by its owner only.
 export const LOCAL_FILE_MODE = 0o600;
 export const LOCAL_VARIABLES_KEY = "variables";
+export const LOCAL_ENVIRONMENTS_KEY = "envs";
 /** Redirects followed for a service that sends headers, as many as `fetch` follows by itself. */
 export const MAX_REDIRECTS = 20;
 

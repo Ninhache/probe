@@ -48,7 +48,8 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | `probe wait [name...] [--json] [--timeout <seconds>]`     | Check again until every service is up, or give up after the timeout    |
 | `probe open <name>`                                       | Open the URL of a service in the browser                               |
 | `probe curl <name> [--env <name>]`                        | Print the curl command that requests a service                         |
-| `probe var [name] [--unset]`                              | List the variables the headers use, or set one for this machine        |
+| `probe var [name] [--unset] [--env <name>]`               | List the variables the headers use, or set one for this machine        |
+| `probe env [name] [--from <name>]`                        | List the environments, or create one from the services of another      |
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
 | `probe sync`                                              | Add or regenerate the Makefile block (optional)                        |
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
@@ -230,16 +231,35 @@ services:
   front: { url: https://example.com }
 ```
 
-`probe check --env prod` checks that file and nothing else; `wait`, `ls` and `curl` take `--env` too. The other
-commands (`add`, `rm`, `var`, `open`) work on the local services and refuse `--env`; so does the
+`probe check --env prod` checks that file and nothing else; `wait`, `ls`, `curl` and `var` take `--env` too. The
+other commands (`add`, `rm`, `open`) work on the local services and refuse `--env`; so does the
 [dashboard](#dashboard), which shows every environment at once. Without
 `--env`, every command reads `config.yml` as before, and `make check` with it: a file in `envs/` is never
 reached unless you name it. The name is the file name, made of letters, digits, `_` and `-`; `local` is
 `config.yml` itself.
 
-What `.probe/local.yml` keeps is for the local services: a service skipped there is still checked in another
-environment, and a variable set by `probe var` is not sent to it. Export the variable in the shell that runs
-`probe` instead (`API_TOKEN=… probe check --env prod`). Needs `probe` 0.15.0 or later.
+`probe env staging --from prod` creates `.probe/envs/staging.yml` as a copy of `envs/prod.yml` (of `config.yml`
+without `--from`), then names the variables to set; it never overwrites a file, and copies no value. `probe env`
+alone lists the environments.
+
+Each environment has its own values in `.probe/local.yml`, under `envs.<name>`, and none is ever used for
+another: a variable set by `probe var API_TOKEN` is sent to the local services only, one set by
+`probe var API_TOKEN --env prod` to `prod` only. An exported variable (`API_TOKEN=… probe check --env prod`)
+wins over both. A service is skipped for one environment in the same place, by editing the file:
+
+```yaml
+# .probe/local.yml
+variables:
+  API_TOKEN: … # local services
+envs:
+  prod:
+    variables:
+      API_TOKEN: … # prod only
+    services:
+      worker: { skip: true }
+```
+
+Environments need `probe` 0.15.0 or later; `probe env` and the values under `envs` come after 0.15.0.
 
 Which timeout applies: `--timeout` when you pass it, else the service's `timeout`, else 3 s (in the dashboard,
 the timeout set in its options). A config with a `timeout` needs `probe` 0.4.0 or later: older versions refuse it.
@@ -293,6 +313,7 @@ else from `.probe/local.yml`, which stays on your machine:
 probe var API_TOKEN            # asks for the value, hidden, and keeps it in .probe/local.yml
 probe var API_TOKEN < key.txt  # or reads it from a file or a pipe
 probe var                      # which variables are used, and where each is set
+probe var API_TOKEN --env prod # the value sent to the environment prod, and to no other
 ```
 
 The [dashboard](#dashboard) does both: `e` edits the headers of a service, `Enter` then `Enter` on a variable
