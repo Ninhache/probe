@@ -259,7 +259,7 @@ envs:
       worker: { skip: true }
 ```
 
-Environments need `probe` 0.15.0 or later; `probe env` and the values under `envs` come after 0.15.0.
+Environments need `probe` 0.15.0 or later; `probe env` and the values under `envs` need 0.16.0.
 
 Which timeout applies: `--timeout` when you pass it, else the service's `timeout`, else 3 s (in the dashboard,
 the timeout set in its options). A config with a `timeout` needs `probe` 0.4.0 or later: older versions refuse it.
