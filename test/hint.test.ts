@@ -33,12 +33,17 @@ describe("the hint of a service in the config", () => {
     expect(serviceSchemaV1.parse({ port: 3000, hint: HINT }).hint).toBe(HINT);
   });
 
-  it.each(["", "   ", "two\nlines", "a \u001b[31mred\u001b[0m one", "tab\there", 3])(
-    "refuses %j",
-    (hint) => {
-      expect(serviceSchemaV1.safeParse({ port: 3000, hint }).success).toBe(false);
-    },
-  );
+  it.each([
+    "",
+    "   ",
+    "two\nlines",
+    "a \u001b[31mred\u001b[0m one",
+    "tab\there",
+    "line\u2028separator",
+    3,
+  ])("refuses %j", (hint) => {
+    expect(serviceSchemaV1.safeParse({ port: 3000, hint }).success).toBe(false);
+  });
 });
 
 describe("runChecks with a hint", () => {

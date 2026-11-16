@@ -72,6 +72,22 @@ describe("writeService", () => {
     expect(await readFile(paths.config, "utf8")).toBe(CONFIG.replace("port: 3000", "port: 3001"));
   });
 
+  it("should keep the hint of a service that is edited", async () => {
+    const config = CONFIG.replace(
+      "front: { port: 5173 }",
+      "front: { port: 5173, hint: run make front }",
+    );
+    const paths = await tempProject(config);
+
+    await writeService(paths, {
+      kind: "edit",
+      name: "front",
+      fields: fields({ port: 5174, path: "/" }),
+    });
+
+    expect(await readFile(paths.config, "utf8")).toBe(config.replace("port: 5173", "port: 5174"));
+  });
+
   it("should keep the headers of a service that is edited", async () => {
     const headers = "headers: { Accept: text/plain, X-Api-Key: '$" + "{API_KEY}' }";
     const config = CONFIG.replace("front: { port: 5173 }", `front: { port: 5173, ${headers} }`);

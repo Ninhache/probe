@@ -40,7 +40,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | Command                                                   | What it does                                                           |
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `probe init`                                              | Create `.probe/` and the `.gitignore` entries                          |
-| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout <seconds>` and `-X <method>` are its own)    |
+| `probe add <name> -p <port> [--host] [--path] [--expect]` | Add a service (`--timeout`, `-X <method>` and `--hint` are its own)    |
 | `probe add <name> --url <url> [--expect]`                 | Add a service by its full URL, `http` or `https`                       |
 | `probe rm <name> [--yes]`                                 | Remove a service                                                       |
 | `probe ls [--env <name>]`                                 | List services                                                          |

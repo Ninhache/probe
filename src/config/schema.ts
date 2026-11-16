@@ -70,7 +70,7 @@ const headersSchema = z
   });
 
 // One line of plain text: it is printed as is under the service, in any terminal.
-const HINT_FORBIDDEN = /\p{Cc}/u;
+const HINT_FORBIDDEN = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 export const HINT_EXPECTED = "one line of text, e.g. start it with: make api";
 
 export const serviceObjectV1 = z.strictObject({
