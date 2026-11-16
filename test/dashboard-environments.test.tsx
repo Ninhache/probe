@@ -306,6 +306,7 @@ describe("dashboard with environments on a narrow terminal", () => {
       write: (frame: string) => written.push(frame),
     });
     const noop = () => {};
+    const typed: string[] = [];
     const stdin = Object.assign(new EventEmitter(), {
       isTTY: true,
       setEncoding: noop,
@@ -314,7 +315,7 @@ describe("dashboard with environments on a narrow terminal", () => {
       pause: noop,
       ref: noop,
       unref: noop,
-      read: () => null,
+      read: () => typed.shift() ?? null,
     });
     const lines = () => (written.findLast((text) => text.includes("probe ")) ?? "").split("\n");
     const slow = [
@@ -341,8 +342,9 @@ describe("dashboard with environments on a narrow terminal", () => {
     );
     try {
       await waitFor(() => expect(lines().join("\n")).toContain("prod 1/2"));
-      stdin.emit("data", "ll");
+      typed.push("l", "l");
       stdin.emit("readable");
+      await waitFor(() => expect(lines().some((line) => line.startsWith("prod · "))).toBe(true));
       expect(lines()).toContain("        local 1/2               dev 2/2                 prod 1/2");
       for (const line of lines()) expect(line.length).toBeLessThanOrEqual(80);
       expect(lines().at(-1)).toContain("? help · q quit");
