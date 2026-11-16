@@ -58,6 +58,10 @@ export const EXAMPLES: Record<string, Example[]> = {
     { command: "probe var API_KEY --unset", note: "Forget it" },
   ],
   status: [{ command: "probe status", note: "Version, migration, Makefile block" }],
+  doctor: [
+    { command: "probe doctor", note: "Project state, and who holds a down port" },
+    { command: "probe doctor api --json", note: "One service, for a script" },
+  ],
   sync: [{ command: "probe sync", note: "Write the probe block of the Makefile" }],
   migrate: [{ command: "probe migrate", note: "Bring .probe/config.yml up to date" }],
   completion: [

@@ -51,6 +51,7 @@ Want `make check` too? See [Makefile](#makefile): it is optional.
 | `probe var [name] [--unset] [--env <name>]`               | List the variables the headers use, or set one for this machine        |
 | `probe env [name] [--from <name>]`                        | List the environments, or create one from the services of another      |
 | `probe status`                                            | CLI version, pending migration, Makefile block state, available update |
+| `probe doctor [name...] [--json] [--env <name>]`          | [Diagnose](#doctor) the project and the services that are down         |
 | `probe sync`                                              | Add or regenerate the Makefile block (optional)                        |
 | `probe migrate`                                           | Migrate `.probe/config.yml` to the current schema                      |
 | `probe completion <zsh\|bash\|fish>`                      | Print the shell completion script                                      |
@@ -196,6 +197,41 @@ setting. Each file is read again at every pass; one that cannot be read shows `!
 reason when you select it, and the other columns go on. When the columns do not all fit, the ones around the
 selected one are drawn. A notification names the environment (`prod/api`). Without `.probe/envs/`, the
 dashboard is the list it was.
+
+## Doctor
+
+`probe doctor` prints what `probe status` prints, checks the services, then looks at this machine for each
+one that is down:
+
+```
+migration  none pending
+makefile   in sync
+update     up to date (0.17.0)
+
+✓ web  http://localhost:5173/  200  4ms
+✗ api  http://localhost:3000/  expected 2xx, got 500
+  the service answers with an error: look at its logs
+    port 3000  node (pid 4242) listens on it
+    docker     no container publishes this port
+✗ db   http://localhost:5432/  connection refused
+  nothing listens on :5432: is the service started?
+    port 5432  nothing listens on it
+    docker     container demo-db (exited) publishes this port → docker start demo-db
+```
+
+- The process comes from `lsof` (`ss` on Linux when `lsof` is missing). A port held by another user or by a
+  container has no visible owner: doctor says so.
+- A container counts when it publishes the port on the host, stopped or not.
+- A missing tool, or a Docker daemon that does not answer, marks its check `skipped`: the others still run.
+- A service on another host gets no local check. Only the name and the pid of a process, and the name and the
+  state of a container, are read: never a command line nor an environment.
+- It changes nothing: a pending migration is reported, not applied.
+
+With `--env`, the Makefile block is left out: it lists the local services. `--timeout` works as in `check`.
+
+Exit code `0` when there is nothing to report, `1` when a service is down, a migration is pending or the
+Makefile block is edited or out of date. `--json` prints `{ ok, project, services }`, each down service with
+its `checks` (`port`, `process`, `docker`).
 
 ## Config
 

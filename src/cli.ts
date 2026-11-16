@@ -11,6 +11,7 @@ import add, { guidedAdd } from "./commands/add";
 import check from "./commands/check";
 import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
+import doctor from "./commands/doctor";
 import environment from "./commands/env";
 import init, { ignoreLocalFiles, initProject } from "./commands/init";
 import ls from "./commands/ls";
@@ -77,6 +78,7 @@ const commands = {
   var: variable,
   env: environment,
   status,
+  doctor,
   sync,
   migrate,
 };
@@ -119,7 +121,8 @@ function notifyUpdate(rawArgs: string[]): void {
   if (
     !detectTerminal(process.stderr, process.env).isTTY ||
     rawArgs.includes("--json") ||
-    rawArgs[0] === "status"
+    rawArgs[0] === "status" ||
+    rawArgs[0] === "doctor"
   )
     return;
   const notice = updateNotice(CLI_VERSION, cacheDir());
