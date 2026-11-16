@@ -34,12 +34,12 @@ line nor an environment.
 
 ## Options
 
-| Option                | Meaning                                                    |
-| --------------------- | ---------------------------------------------------------- |
-| `probe doctor api db` | Look at these services only                                |
-| `--json`              | Print `{ ok, project, services }`                          |
-| `--env <name>`        | Look at an [environment](environments.md)                  |
-| `--timeout <seconds>` | Seconds given to each service, as in `probe check`         |
+| Option                | Meaning                                            |
+| --------------------- | -------------------------------------------------- |
+| `probe doctor api db` | Look at these services only                        |
+| `--json`              | Print `{ ok, project, services }`                  |
+| `--env <name>`        | Look at an [environment](environments.md)          |
+| `--timeout <seconds>` | Seconds given to each service, as in `probe check` |
 
 With `--env`, the Makefile block is left out of the report: it lists the local services.
 

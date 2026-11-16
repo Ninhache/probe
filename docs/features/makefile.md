@@ -16,13 +16,13 @@ Commit the `Makefile` and `.probe/lock.yml`.
 
 ## Targets
 
-| Target              | What it runs                                  |
-| ------------------- | --------------------------------------------- |
-| `make help`         | Lists the targets                             |
-| `make check`        | `probe check`                                 |
-| `make check-<name>` | `probe check <name>`, one target per service  |
-| `make status`       | `probe status`                                |
-| `make probe`        | Opens the [dashboard](dashboard.md)           |
+| Target              | What it runs                                 |
+| ------------------- | -------------------------------------------- |
+| `make help`         | Lists the targets                            |
+| `make check`        | `probe check`                                |
+| `make check-<name>` | `probe check <name>`, one target per service |
+| `make status`       | `probe status`                               |
+| `make probe`        | Opens the [dashboard](dashboard.md)          |
 
 The block uses `probe` when it is in your `PATH`, else `npx -y @ninhache/probe@latest`. It works with GNU Make
 3.81 (the macOS default).

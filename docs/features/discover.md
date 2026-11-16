@@ -9,12 +9,12 @@ project, as a list to tick.
 
 ## Where it looks
 
-| Source                        | What it proposes                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| Compose file                  | The ports a service publishes (`"8080:80"`), under the name of the service        |
-| `.env`, `.env.local`          | `PORT`, and the `*_URL` that point to `http://localhost`                          |
-| `package.json`                | The port a script names (`--port 4000`), or the usual one of its dev server       |
-| Local ports                   | 3000, 3001, 4200, 4321, 5173, 8000 and 8080, when an HTTP server answers there    |
+| Source               | What it proposes                                                               |
+| -------------------- | ------------------------------------------------------------------------------ |
+| Compose file         | The ports a service publishes (`"8080:80"`), under the name of the service     |
+| `.env`, `.env.local` | `PORT`, and the `*_URL` that point to `http://localhost`                       |
+| `package.json`       | The port a script names (`--port 4000`), or the usual one of its dev server    |
+| Local ports          | 3000, 3001, 4200, 4321, 5173, 8000 and 8080, when an HTTP server answers there |
 
 Details:
 

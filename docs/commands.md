@@ -7,12 +7,12 @@
   terminal it stops with exit code `2`.
 - Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 
-| Declare                 | Check                       | Use                     | Maintain                        |
-| ----------------------- | --------------------------- | ----------------------- | ------------------------------- |
-| [`init`](#probe-init)   | [`check`](#probe-check)     | [`open`](#probe-open)   | [`status`](#probe-status)       |
-| [`add`](#probe-add)     | [`wait`](#probe-wait)       | [`curl`](#probe-curl)   | [`sync`](#probe-sync)           |
-| [`rm`](#probe-rm)       | [`doctor`](#probe-doctor)   | [`var`](#probe-var)     | [`migrate`](#probe-migrate)     |
-| [`ls`](#probe-ls)       | [`probe`](#probe)           | [`env`](#probe-env)     | [`completion`](#probe-completion) |
+| Declare               | Check                     | Use                   | Maintain                          |
+| --------------------- | ------------------------- | --------------------- | --------------------------------- |
+| [`init`](#probe-init) | [`check`](#probe-check)   | [`open`](#probe-open) | [`status`](#probe-status)         |
+| [`add`](#probe-add)   | [`wait`](#probe-wait)     | [`curl`](#probe-curl) | [`sync`](#probe-sync)             |
+| [`rm`](#probe-rm)     | [`doctor`](#probe-doctor) | [`var`](#probe-var)   | [`migrate`](#probe-migrate)       |
+| [`ls`](#probe-ls)     | [`probe`](#probe)         | [`env`](#probe-env)   | [`completion`](#probe-completion) |
 
 ## probe
 
@@ -34,17 +34,17 @@ probe add api -p 3000 --path /health
 probe add secure --url https://localhost:8443/health
 ```
 
-| Option                   | Default     | Meaning                                                  |
-| ------------------------ | ----------- | -------------------------------------------------------- |
-| `-p`, `--port <port>`    | required    | Port                                                     |
-| `--host <host>`          | `localhost` | Host name or IP                                          |
-| `--path <path>`          | `/`         | Path to request                                          |
-| `--url <url>`            | none        | Full URL, `http` or `https`, instead of the three above  |
-| `--expect <status>`      | any 2xx     | Expected status: `200`, or `200,204`                     |
-| `--timeout <seconds>`    | 3           | Seconds given to this service                            |
-| `-X`, `--method <method>` | `GET`      | Method of the request, sent without a body               |
-| `-H`, `--header <h>`     | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'` |
-| `--hint <text>`          | none        | What to do when it is down: `--hint 'run: make api'`     |
+| Option                    | Default     | Meaning                                                  |
+| ------------------------- | ----------- | -------------------------------------------------------- |
+| `-p`, `--port <port>`     | required    | Port                                                     |
+| `--host <host>`           | `localhost` | Host name or IP                                          |
+| `--path <path>`           | `/`         | Path to request                                          |
+| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above  |
+| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                     |
+| `--timeout <seconds>`     | 3           | Seconds given to this service                            |
+| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body               |
+| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'` |
+| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`     |
 
 - `probe add` alone, on a terminal, asks for each value: see [Discover](features/discover.md).
 - What each value means: [Config](config.md). Headers and their secrets: [Headers](features/headers.md).
@@ -62,9 +62,9 @@ once.
 
 Lists the services and their URL.
 
-| Option         | Meaning                                                    |
-| -------------- | ---------------------------------------------------------- |
-| `--env <name>` | List an [environment](features/environments.md) instead    |
+| Option         | Meaning                                                 |
+| -------------- | ------------------------------------------------------- |
+| `--env <name>` | List an [environment](features/environments.md) instead |
 
 ## probe check
 
@@ -73,11 +73,11 @@ probe check            # every service
 probe check api db     # these two only
 ```
 
-| Option                | Default                     | Meaning                                                  |
-| --------------------- | --------------------------- | -------------------------------------------------------- |
-| `--json`              | off                         | Print results as JSON                                    |
-| `--env <name>`        | local                       | Check an [environment](features/environments.md) instead |
-| `--timeout <seconds>` | the service's own, else 3   | Seconds given to each service                            |
+| Option                | Default                   | Meaning                                                  |
+| --------------------- | ------------------------- | -------------------------------------------------------- |
+| `--json`              | off                       | Print results as JSON                                    |
+| `--env <name>`        | local                     | Check an [environment](features/environments.md) instead |
+| `--timeout <seconds>` | the service's own, else 3 | Seconds given to each service                            |
 
 A service that is down comes with a hint: the one you gave it (`hint` in the [config](config.md)), else one for
 the known causes (connection refused, timeout, host not found, unexpected status, certificate rejected). With
@@ -91,13 +91,13 @@ service opens with Cmd/Ctrl+click.
 Checks again until every service is up, for scripts: `probe wait && pnpm test`. See
 [Wait](features/wait.md).
 
-| Option                     | Default | Meaning                                                  |
-| -------------------------- | ------- | -------------------------------------------------------- |
-| `--timeout <seconds>`      | 60      | Seconds to wait in total before giving up                |
-| `--interval <seconds>`     | 0.5     | Seconds before the second check; the pause then doubles  |
-| `--max-interval <seconds>` | 5       | Longest pause between two checks                         |
-| `--json`                   | off     | Print the final results as JSON                          |
-| `--env <name>`             | local   | Wait for an [environment](features/environments.md)      |
+| Option                     | Default | Meaning                                                 |
+| -------------------------- | ------- | ------------------------------------------------------- |
+| `--timeout <seconds>`      | 60      | Seconds to wait in total before giving up               |
+| `--interval <seconds>`     | 0.5     | Seconds before the second check; the pause then doubles |
+| `--max-interval <seconds>` | 5       | Longest pause between two checks                        |
+| `--json`                   | off     | Print the final results as JSON                         |
+| `--env <name>`             | local   | Wait for an [environment](features/environments.md)     |
 
 ## probe doctor
 
@@ -132,19 +132,19 @@ probe var                # list them, and where each is set
 probe var API_TOKEN      # type its value, hidden
 ```
 
-| Option         | Meaning                                                               |
-| -------------- | --------------------------------------------------------------------- |
-| `--unset`      | Forget the value kept for this variable                               |
-| `--env <name>` | Keep the value for one [environment](features/environments.md) only   |
+| Option         | Meaning                                                             |
+| -------------- | ------------------------------------------------------------------- |
+| `--unset`      | Forget the value kept for this variable                             |
+| `--env <name>` | Keep the value for one [environment](features/environments.md) only |
 
 ## probe env
 
 `probe env` lists the environments. `probe env staging` creates one. See
 [Environments](features/environments.md).
 
-| Option          | Default | Meaning                                |
-| --------------- | ------- | -------------------------------------- |
-| `--from <name>` | local   | Environment whose services are copied  |
+| Option          | Default | Meaning                               |
+| --------------- | ------- | ------------------------------------- |
+| `--from <name>` | local   | Environment whose services are copied |
 
 ## probe status
 

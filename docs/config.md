@@ -2,12 +2,12 @@
 
 Everything lives in `.probe/`, at the root of your project.
 
-| File         | What it holds                                                             | Git             |
-| ------------ | ------------------------------------------------------------------------- | --------------- |
-| `config.yml` | The services                                                              | Commit it       |
-| `lock.yml`   | State of the Makefile block. Only there once `probe sync` has run         | Commit it       |
-| `local.yml`  | Values of your machine: dashboard options, skipped services, variables    | Ignored by git  |
-| `envs/*.yml` | The services of another [environment](features/environments.md)           | Commit them     |
+| File         | What it holds                                                          | Git            |
+| ------------ | ---------------------------------------------------------------------- | -------------- |
+| `config.yml` | The services                                                           | Commit it      |
+| `lock.yml`   | State of the Makefile block. Only there once `probe sync` has run      | Commit it      |
+| `local.yml`  | Values of your machine: dashboard options, skipped services, variables | Ignored by git |
+| `envs/*.yml` | The services of another [environment](features/environments.md)        | Commit them    |
 
 Never put secrets in `config.yml`, `lock.yml` or `envs/`: use a [variable](features/headers.md).
 

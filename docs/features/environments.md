@@ -31,9 +31,9 @@ probe env staging --from prod    # or from envs/prod.yml
 
 ## Which commands take `--env`
 
-| Takes `--env`                                 | Local services only   |
-| --------------------------------------------- | --------------------- |
-| `check`, `wait`, `ls`, `curl`, `var`, `doctor` | `add`, `rm`, `open`   |
+| Takes `--env`                                  | Local services only |
+| ---------------------------------------------- | ------------------- |
+| `check`, `wait`, `ls`, `curl`, `var`, `doctor` | `add`, `rm`, `open` |
 
 Without `--env`, every command reads `config.yml`, and so does `make check`. To change the services of an
 environment, edit its file.

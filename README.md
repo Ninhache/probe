@@ -35,24 +35,24 @@ Use the full name with `npx`: `npx probe` is another package.
 
 ## Commands
 
-| Command            | What it does                                             |
-| ------------------ | -------------------------------------------------------- |
-| `probe`            | Open the [dashboard](docs/features/dashboard.md)         |
-| `probe init`       | Create `.probe/` in this directory                       |
-| `probe add <name>` | Add a service                                            |
-| `probe rm <name>`  | Remove a service                                         |
-| `probe ls`         | List services                                            |
-| `probe check`      | Check all services, or the named ones                    |
-| `probe wait`       | Check again until every service is up                    |
-| `probe doctor`     | Say why a service is down                                |
-| `probe open`       | Open the URL of a service in the browser                 |
-| `probe curl`       | Print the curl command that requests a service           |
-| `probe var`        | Set a variable the headers use, on this machine          |
-| `probe env`        | List the environments, or create one                     |
-| `probe status`     | Version, pending migration, Makefile block, update       |
-| `probe sync`       | Add or regenerate the Makefile block                     |
-| `probe migrate`    | Migrate `.probe/config.yml` to the current schema        |
-| `probe completion` | Print the shell completion script                        |
+| Command            | What it does                                       |
+| ------------------ | -------------------------------------------------- |
+| `probe`            | Open the [dashboard](docs/features/dashboard.md)   |
+| `probe init`       | Create `.probe/` in this directory                 |
+| `probe add <name>` | Add a service                                      |
+| `probe rm <name>`  | Remove a service                                   |
+| `probe ls`         | List services                                      |
+| `probe check`      | Check all services, or the named ones              |
+| `probe wait`       | Check again until every service is up              |
+| `probe doctor`     | Say why a service is down                          |
+| `probe open`       | Open the URL of a service in the browser           |
+| `probe curl`       | Print the curl command that requests a service     |
+| `probe var`        | Set a variable the headers use, on this machine    |
+| `probe env`        | List the environments, or create one               |
+| `probe status`     | Version, pending migration, Makefile block, update |
+| `probe sync`       | Add or regenerate the Makefile block               |
+| `probe migrate`    | Migrate `.probe/config.yml` to the current schema  |
+| `probe completion` | Print the shell completion script                  |
 
 Every option of every command: [docs/commands.md](docs/commands.md), or `probe <command> --help`.
 
@@ -60,16 +60,16 @@ Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 
 ## Features
 
-| Feature                                           | In one line                                                         |
-| ------------------------------------------------- | ------------------------------------------------------------------- |
-| [Dashboard](docs/features/dashboard.md)           | A live list of your services, with keys to add, edit and inspect    |
-| [Discover](docs/features/discover.md)             | `probe init` proposes the services of your compose file, `.env`...  |
-| [Wait](docs/features/wait.md)                     | `probe wait && pnpm test`: go on once everything is up              |
-| [Doctor](docs/features/doctor.md)                 | Who holds the port, which container is stopped                      |
-| [Environments](docs/features/environments.md)     | The same checks against dev, staging or prod: `--env prod`          |
-| [Headers and secrets](docs/features/headers.md)   | Check a service behind an API key without writing the key in git    |
-| [Makefile](docs/features/makefile.md)             | `make check`, kept up to date for you                               |
-| [Completion](docs/features/completion.md)         | Tab completes commands, options and service names                   |
+| Feature                                         | In one line                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| [Dashboard](docs/features/dashboard.md)         | A live list of your services, with keys to add, edit and inspect   |
+| [Discover](docs/features/discover.md)           | `probe init` proposes the services of your compose file, `.env`... |
+| [Wait](docs/features/wait.md)                   | `probe wait && pnpm test`: go on once everything is up             |
+| [Doctor](docs/features/doctor.md)               | Who holds the port, which container is stopped                     |
+| [Environments](docs/features/environments.md)   | The same checks against dev, staging or prod: `--env prod`         |
+| [Headers and secrets](docs/features/headers.md) | Check a service behind an API key without writing the key in git   |
+| [Makefile](docs/features/makefile.md)           | `make check`, kept up to date for you                              |
+| [Completion](docs/features/completion.md)       | Tab completes commands, options and service names                  |
 
 ## Config
 
