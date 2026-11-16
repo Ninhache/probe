@@ -107,6 +107,18 @@ browser, on the latest Node 22, 24 or later. A certificate that is expired, made
 makes the service down, with the reason. For a CA that is only in a file, set
 `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`.
 
+## Parameters
+
+A value that changes how every service is requested, such as a tenant sent in a header. Since 0.20.0. See
+[Parameters](features/parameters.md).
+
+```yaml
+parameters:
+  tenant:
+    values: [acme, globex]
+    strategy: { kind: header, name: X-Tenant }
+```
+
 ## Migrations
 
 `config.yml` carries a `schemaVersion`. When a newer `probe` needs a newer schema, the first command you run:

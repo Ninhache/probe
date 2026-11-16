@@ -1,4 +1,5 @@
 import type { Variables } from "../config/local";
+import { applySelection, type Selection } from "../config/parameters";
 import type { Config, Service } from "../config/schema";
 import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { CONFIG } from "./diagnosis";
@@ -16,6 +17,7 @@ export interface RunOptions {
   variables?: Variables;
   configFile?: string;
   tags?: readonly string[];
+  selection?: Selection;
 }
 
 export function resolveTimeoutMs(service: Service, options: RunOptions): number {
@@ -25,11 +27,12 @@ export function resolveTimeoutMs(service: Service, options: RunOptions): number 
 }
 
 export async function runChecks(
-  config: Config,
+  declared: Config,
   names: string[],
   options: RunOptions,
   skipped: ReadonlySet<string> = new Set(),
 ): Promise<CheckResult[]> {
+  const config = applySelection(declared, options.selection);
   const selected = selectServices(config, names, options.tags ?? [], skipped);
   const results = await Promise.all(
     selected.map(({ name, skipped: skip }) => {

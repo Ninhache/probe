@@ -16,7 +16,9 @@ import {
   configFile,
   ENVIRONMENT_ARG,
   noServices,
+  SET_ARG,
   secondsToMs,
+  selectionFrom,
   stdoutColors,
   stdoutTerminal,
   TAG_ARG,
@@ -33,6 +35,7 @@ export default defineCommand({
     json: { type: "boolean", description: "Print the diagnosis as JSON" },
     env: ENVIRONMENT_ARG,
     tag: TAG_ARG,
+    set: SET_ARG,
     timeout: {
       type: "string",
       description: `Seconds to wait for each service (default: its own timeout, else ${DEFAULT_TIMEOUT_SECONDS})`,
@@ -61,6 +64,7 @@ export default defineCommand({
           variables: await loadVariables(paths),
           configFile: configFile(paths),
           tags,
+          selection: selectionFrom(config, rawArgs),
         },
         await readSkippedServices(paths),
       );

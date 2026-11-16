@@ -18,7 +18,9 @@ import {
   noServices,
   openProject,
   requireVariables,
+  SET_ARG,
   secondsToMs,
+  selectionFrom,
   stdoutTerminal,
   TAG_ARG,
   tagsFrom,
@@ -53,6 +55,7 @@ export default defineCommand({
     json: { type: "boolean", description: "Print the final results as JSON" },
     env: ENVIRONMENT_ARG,
     tag: TAG_ARG,
+    set: SET_ARG,
     timeout: {
       type: "string",
       description: "Seconds to wait in total, all checks included, before giving up",
@@ -81,6 +84,7 @@ export default defineCommand({
       );
     }
     const { config, paths } = await openProject(args.env);
+    const selection = selectionFrom(config, rawArgs);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);
     requireVariables(config, args._, variables, skipped, tags);
@@ -98,6 +102,7 @@ export default defineCommand({
             variables,
             configFile: configFile(paths),
             tags,
+            selection,
           },
           skipped,
         ),

@@ -25,6 +25,8 @@ export const ENVIRONMENT_OPTION = "--env";
 export const ENVIRONMENTS_QUERY = `probe ${COMPLETE_COMMAND} environments 2>/dev/null`;
 
 export const TAG_OPTION = "--tag";
+export const SET_OPTION = "--set";
+
 export const TAGS_QUERY = `probe ${COMPLETE_COMMAND} tags 2>/dev/null`;
 
 const HELP_OPTION = "--help";

@@ -243,27 +243,27 @@ function wantsGuidedAdd(rawArgs: string[]): boolean {
   );
 }
 
-const ENVIRONMENT_FLAG = "--env";
+// Ignored, `--env` would let `probe rm api --env prod` remove the local service.
+const SCOPED_OPTIONS = [
+  { arg: "env", elsewhere: "the other commands work on the local services" },
+  { arg: "set", elsewhere: "elsewhere a parameter takes its first value" },
+];
 
-// Ignored, the flag would let `probe rm api --env prod` remove the local service.
-function refuseStrayEnvironment(rawArgs: string[]): void {
-  const given = rawArgs.some(
-    (arg) => arg === ENVIRONMENT_FLAG || arg.startsWith(`${ENVIRONMENT_FLAG}=`),
-  );
-  if (!given) return;
-  const reading = Object.entries(commands)
-    .filter(([, command]) => "env" in (command.args ?? {}))
-    .map(([name]) => name);
-  const typed = rawArgs.find((arg) => !arg.startsWith("-"));
-  if (typed !== undefined && reading.includes(typed)) return;
-  throw new ProbeError(
-    "USAGE",
-    `${ENVIRONMENT_FLAG} is read by ${reading.join(", ")} only: the other commands work on the local services.`,
-  );
+function refuseStrayOptions(rawArgs: string[]): void {
+  for (const { arg, elsewhere } of SCOPED_OPTIONS) {
+    const flag = `--${arg}`;
+    if (!rawArgs.some((given) => given === flag || given.startsWith(`${flag}=`))) continue;
+    const reading = Object.entries(commands)
+      .filter(([, command]) => arg in (command.args ?? {}))
+      .map(([name]) => name);
+    const typed = rawArgs.find((given) => !given.startsWith("-"));
+    if (typed !== undefined && reading.includes(typed)) continue;
+    throw new ProbeError("USAGE", `${flag} is read by ${reading.join(", ")} only: ${elsewhere}.`);
+  }
 }
 
 async function dispatch(rawArgs: string[]): Promise<void> {
-  refuseStrayEnvironment(rawArgs);
+  refuseStrayOptions(rawArgs);
   if (wantsGuidedAdd(rawArgs)) return guidedAdd();
   if (!(await openedDashboard(rawArgs))) await runCommand(main, { rawArgs });
 }

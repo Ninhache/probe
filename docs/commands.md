@@ -64,9 +64,10 @@ once.
 
 Lists the services, their URL and what each one declares, such as `expect`, `contains` or [tags](features/tags.md).
 
-| Option         | Meaning                                                 |
-| -------------- | ------------------------------------------------------- |
-| `--env <name>` | List an [environment](features/environments.md) instead |
+| Option               | Meaning                                                 |
+| -------------------- | ------------------------------------------------------- |
+| `--env <name>`       | List an [environment](features/environments.md) instead |
+| `--set <name=value>` | Value of a [parameter](features/parameters.md)          |
 
 ## probe check
 
@@ -81,6 +82,7 @@ probe check --tag back # those tagged back
 | `--json`              | off                       | Print results as JSON                                        |
 | `--env <name>`        | local                     | Check an [environment](features/environments.md) instead     |
 | `--tag <a,b>`         | none                      | Only the services with one of these [tags](features/tags.md) |
+| `--set <name=value>`  | its first value           | Value of a [parameter](features/parameters.md)               |
 | `--timeout <seconds>` | the service's own, else 3 | Seconds given to each service                                |
 
 A service that is down comes with a hint: the one you gave it (`hint` in the [config](config.md)), else one for
@@ -95,14 +97,15 @@ service opens with Cmd/Ctrl+click.
 Checks again until every service is up, for scripts: `probe wait && pnpm test`. See
 [Wait](features/wait.md).
 
-| Option                     | Default | Meaning                                                      |
-| -------------------------- | ------- | ------------------------------------------------------------ |
-| `--timeout <seconds>`      | 60      | Seconds to wait in total before giving up                    |
-| `--interval <seconds>`     | 0.5     | Seconds before the second check; the pause then doubles      |
-| `--max-interval <seconds>` | 5       | Longest pause between two checks                             |
-| `--json`                   | off     | Print the final results as JSON                              |
-| `--env <name>`             | local   | Wait for an [environment](features/environments.md)          |
-| `--tag <a,b>`              | none    | Only the services with one of these [tags](features/tags.md) |
+| Option                     | Default         | Meaning                                                      |
+| -------------------------- | --------------- | ------------------------------------------------------------ |
+| `--timeout <seconds>`      | 60              | Seconds to wait in total before giving up                    |
+| `--interval <seconds>`     | 0.5             | Seconds before the second check; the pause then doubles      |
+| `--max-interval <seconds>` | 5               | Longest pause between two checks                             |
+| `--json`                   | off             | Print the final results as JSON                              |
+| `--env <name>`             | local           | Wait for an [environment](features/environments.md)          |
+| `--tag <a,b>`              | none            | Only the services with one of these [tags](features/tags.md) |
+| `--set <name=value>`       | its first value | Value of a [parameter](features/parameters.md)               |
 
 ## probe doctor
 
@@ -114,6 +117,7 @@ Says why a service is down: who holds the port, which container is stopped. See
 | `--json`              | Print the diagnosis as JSON                                  |
 | `--env <name>`        | Look at an [environment](features/environments.md) instead   |
 | `--tag <a,b>`         | Only the services with one of these [tags](features/tags.md) |
+| `--set <name=value>`  | Value of a [parameter](features/parameters.md)               |
 | `--timeout <seconds>` | Seconds given to each service                                |
 
 ## probe open
@@ -121,13 +125,18 @@ Says why a service is down: who holds the port, which container is stopped. See
 `probe open front` opens the URL of a service in the browser. It uses `open` on macOS and `xdg-open` elsewhere.
 Without it, the URL is printed and the exit code is `1`.
 
+| Option               | Meaning                                        |
+| -------------------- | ---------------------------------------------- |
+| `--set <name=value>` | Value of a [parameter](features/parameters.md) |
+
 ## probe curl
 
 `probe curl api` prints the curl command that requests a service, to copy or to run: `probe curl api | sh`.
 
-| Option         | Meaning                                                           |
-| -------------- | ----------------------------------------------------------------- |
-| `--env <name>` | The service of an [environment](features/environments.md) instead |
+| Option               | Meaning                                                           |
+| -------------------- | ----------------------------------------------------------------- |
+| `--env <name>`       | The service of an [environment](features/environments.md) instead |
+| `--set <name=value>` | Value of a [parameter](features/parameters.md)                    |
 
 ## probe var
 
