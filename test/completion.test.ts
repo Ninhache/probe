@@ -127,6 +127,7 @@ describe("completionSpec", () => {
       "--timeout",
       "--method",
       "--header",
+      "--hint",
       "--help",
     ]);
   });

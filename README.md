@@ -66,6 +66,11 @@ A service that is down comes with a hint when the cause is a known one: connecti
 found, unexpected status, certificate rejected after a redirect to https. With `--json` it is the `hint` field,
 next to `error`.
 
+A service can carry its own hint, shown instead when it is down, whatever the cause:
+`probe add api -p 3000 --hint 'start it with: make api'`, or `hint:` in the config. It is one line of text, and
+it is shared with the config: nothing secret goes in it. A config with a `hint` needs `probe` 0.19.0 or later:
+older versions refuse it.
+
 `probe wait` is for scripts: `probe wait && pnpm test`. It checks at once, then again after 0.5 s, 1 s, 2 s, 4 s
 and every 5 s, for 60 s in total. `--timeout` sets the total, `--interval` the first pause, `--max-interval` the
 longest one. Unlike `check --timeout`, which is the time given to each service, `wait --timeout` covers the whole
@@ -257,6 +262,7 @@ services:
 | `method`  | `GET`       | Method of the request, without a body   |
 | `timeout` | 3           | Seconds given to this service to answer |
 | `headers` | none        | Headers sent with the request           |
+| `hint`    | none        | What to do when it is down, one line    |
 
 ### Environments
 
