@@ -11,6 +11,7 @@ import { loadVariables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
 import { DEFAULT_METHOD, METHODS, type Method, urlProblem } from "../config/schema";
 import {
+  containsProblem,
   expectProblem,
   hintProblem,
   methodProblem,
@@ -172,6 +173,11 @@ export default defineCommand({
       description: "Full URL, http or https, instead of --port, --host and --path",
     },
     expect: { type: "string", description: "Expected status, e.g. 200 or 200,204 (default: 2xx)" },
+    contains: {
+      type: "string",
+      valueHint: "text",
+      description: `Text the response body must contain, e.g. --contains '"status":"ok"'`,
+    },
     timeout: {
       type: "string",
       description: `Seconds to wait for this service (default: ${DEFAULT_TIMEOUT_SECONDS})`,
@@ -209,6 +215,11 @@ export default defineCommand({
     }
     const service = addressFrom(args);
     if (args.expect) service.expect = parseExpect(String(args.expect));
+    if (args.contains !== undefined) {
+      const problem = containsProblem(String(args.contains));
+      if (problem) throw new ProbeError("USAGE", `--contains expects ${problem}.`);
+      service.contains = String(args.contains);
+    }
     if (args.timeout !== undefined) {
       secondsToMs("--timeout", String(args.timeout));
       service.timeout = Number(args.timeout);
@@ -219,6 +230,12 @@ export default defineCommand({
       }
       const method = String(args.method).toUpperCase() as Method;
       if (method !== DEFAULT_METHOD) service.method = method;
+    }
+    if (service.method === "HEAD" && service.contains !== undefined) {
+      throw new ProbeError(
+        "USAGE",
+        "--contains cannot go with --method HEAD, whose response has no body.",
+      );
     }
     const headers = headersFrom(headerLines(rawArgs));
     // Never a service saved without a header that was asked for.

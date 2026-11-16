@@ -24,18 +24,19 @@ services:
   db: { port: 5432, timeout: 10 }
 ```
 
-| Key       | Default     | Meaning                                 | Since  |
-| --------- | ----------- | --------------------------------------- | ------ |
-| `port`    | required    | TCP port                                |        |
-| `host`    | `localhost` | Host name or IP                         |        |
-| `path`    | `/`         | Path requested                          |        |
-| `url`     | none        | Full URL, instead of the three above    | 0.12.0 |
-| `expect`  | any 2xx     | Expected status, or a list of statuses  |        |
-| `method`  | `GET`       | Method of the request, without a body   | 0.14.0 |
-| `timeout` | 3           | Seconds given to this service to answer | 0.4.0  |
-| `headers` | none        | Headers sent with the request           | 0.13.0 |
-| `hint`    | none        | What to do when it is down, one line    | 0.19.0 |
-| `tags`    | none        | Groups it belongs to: `tags: [back]`    | 0.20.0 |
+| Key        | Default     | Meaning                                 | Since  |
+| ---------- | ----------- | --------------------------------------- | ------ |
+| `port`     | required    | TCP port                                |        |
+| `host`     | `localhost` | Host name or IP                         |        |
+| `path`     | `/`         | Path requested                          |        |
+| `url`      | none        | Full URL, instead of the three above    | 0.12.0 |
+| `expect`   | any 2xx     | Expected status, or a list of statuses  |        |
+| `method`   | `GET`       | Method of the request, without a body   | 0.14.0 |
+| `timeout`  | 3           | Seconds given to this service to answer | 0.4.0  |
+| `headers`  | none        | Headers sent with the request           | 0.13.0 |
+| `hint`     | none        | What to do when it is down, one line    | 0.19.0 |
+| `tags`     | none        | Groups it belongs to: `tags: [back]`    | 0.20.0 |
+| `contains` | none        | Text the response body must contain     | 0.20.0 |
 
 A `probe` older than the "Since" version refuses a config that uses the key: upgrade it.
 
@@ -48,6 +49,26 @@ to check `https`. It takes no user or password.
 
 Redirects are followed and the final status is judged. If `expect` contains a 3xx, the first response is judged
 as is.
+
+### contains
+
+One line of text the body of the response must contain. The status is judged first, then the body:
+
+```yaml
+services:
+  api: { port: 3000, path: /health, contains: '"status":"ok"' }
+```
+
+```console
+$ probe check
+✗ api  http://localhost:3000/health  body does not contain: "status":"ok"
+  the service answers 200 without this exact text: look at its response, or check `contains` in .probe/config.yml
+```
+
+- The match is exact, case and spaces included: `"status":"ok"` does not match `"status": "ok"`.
+- The first 1 MiB of the body is searched, within the `timeout` of the service.
+- It cannot be set with `method: HEAD`, whose response has no body.
+- It is shared with the config: nothing secret goes in it.
 
 ### method
 

@@ -1,8 +1,10 @@
 import { masked, resolveHeaders, serviceVariables, templateParts } from "../config/headers";
 import { DEFAULT_METHOD, type Service } from "../config/schema";
-import { DEFAULT_TIMEOUT_SECONDS, MAX_REDIRECTS } from "../constants";
+import { CONTAINS_BODY_BYTES, DEFAULT_TIMEOUT_SECONDS, MAX_REDIRECTS } from "../constants";
 import {
+  type BodyGap,
   type Diagnosis,
+  diagnoseBody,
   diagnoseFailure,
   diagnoseForeignRedirect,
   diagnoseStatus,
@@ -117,6 +119,33 @@ const maskedDetail = (detail: ResponseDetail, secrets: readonly string[]): Respo
   ...(detail.body === undefined ? {} : { body: masked(detail.body, secrets) }),
 });
 
+// A read that fails or times out rejects: the check then reports that, not a missing text.
+async function searchBody(
+  body: ReadableStream<Uint8Array> | null,
+  text: string,
+): Promise<BodyGap | "found"> {
+  if (!body) return "empty";
+  const needle = Buffer.from(text);
+  const reader = body.getReader();
+  let tail: Uint8Array = new Uint8Array();
+  let size = 0;
+  try {
+    while (size < CONTAINS_BODY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) return size === 0 ? "empty" : "absent";
+      const read = value.subarray(0, CONTAINS_BODY_BYTES - size);
+      size += value.length;
+      // The end of what was read is kept: the text may sit across two chunks.
+      const window = Buffer.concat([tail, read]);
+      if (window.includes(needle)) return "found";
+      tail = window.subarray(Math.max(0, window.length - needle.length + 1));
+    }
+    return "cut";
+  } finally {
+    void reader.cancel().catch(() => {});
+  }
+}
+
 async function request(
   name: string,
   service: Service,
@@ -167,26 +196,24 @@ async function request(
     const { response } = answer;
     const latencyMs = elapsed();
     const { status } = response;
-    // The latency is taken before the body: reading it changes neither the time nor the verdict.
-    const described = detail
-      ? { response: maskedDetail(await describeResponse(response), secrets) }
-      : {};
-    if (!detail) await response.body?.cancel();
     const leftFor = "leftFor" in answer ? answer.leftFor : undefined;
+    const expected = isExpected(service.expect, status);
+    const { contains } = service;
+    const searched = contains !== undefined && expected && leftFor === undefined;
+    // The latency is taken before the body is read: `contains` does not change it.
+    // A body is read once: the detail gets its own copy when the text is searched too.
+    const shown = detail ? describeResponse(searched ? response.clone() : response) : undefined;
+    const body = searched ? await searchBody(response.body, contains) : "found";
+    const described = shown ? { response: maskedDetail(await shown, secrets) } : {};
+    if (!detail && !searched) await response.body?.cancel();
+    let diagnosis: Diagnosis | undefined;
+    if (leftFor !== undefined) diagnosis = diagnoseForeignRedirect(service, leftFor);
+    else if (!expected) diagnosis = diagnoseStatus(service, status);
+    else if (body !== "found") diagnosis = diagnoseBody(contains ?? "", status, body);
     // The order of the keys is the order `--json` prints them in.
-    const result =
-      isExpected(service.expect, status) && leftFor === undefined
-        ? { ...base, ok: true, status, latencyMs, ...described }
-        : {
-            ...base,
-            ok: false,
-            status,
-            latencyMs,
-            ...(leftFor === undefined
-              ? diagnoseStatus(service, status)
-              : diagnoseForeignRedirect(service, leftFor)),
-            ...described,
-          };
+    const result = diagnosis
+      ? { ...base, ok: false, status, latencyMs, ...diagnosis, ...described }
+      : { ...base, ok: true, status, latencyMs, ...described };
     return { result, unknownIssuer: false };
   } catch (error) {
     const diagnosis = diagnoseFailure(error, service, timeoutMs);

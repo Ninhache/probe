@@ -24,6 +24,9 @@ export const DASHBOARD_INTERVAL_SECONDS = 2;
 export const DASHBOARD_HISTORY_LENGTH = 30;
 export const RESPONSE_BODY_BYTES = 2_048;
 export const RESPONSE_BODY_WAIT_MS = 500;
+// How much of a body is searched for `contains`: a health endpoint answers far less.
+export const CONTAINS_BODY_BYTES = 1_048_576;
+export const CONTAINS_SHOWN_CHARACTERS = 40;
 export const DASHBOARD_INTERVAL_CHOICES_SECONDS = [0.5, 1, 2, 5, 10, 30, 60];
 export const DASHBOARD_TIMEOUT_CHOICES_SECONDS = [1, 2, 3, 5, 10, 30];
 // setTimeout overflows above 2^31 ms and then fires at once.

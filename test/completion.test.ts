@@ -133,6 +133,7 @@ describe("completionSpec", () => {
       "--path",
       "--url",
       "--expect",
+      "--contains",
       "--timeout",
       "--method",
       "--header",

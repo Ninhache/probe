@@ -1,5 +1,11 @@
 import type { z } from "zod";
-import { HINT_EXPECTED, METHODS, SERVICE_NAME_PATTERN, serviceShapeV1 } from "./schema";
+import {
+  CONTAINS_EXPECTED,
+  HINT_EXPECTED,
+  METHODS,
+  SERVICE_NAME_PATTERN,
+  serviceShapeV1,
+} from "./schema";
 
 const INTEGER = /^\d+$/;
 
@@ -38,6 +44,10 @@ export function methodProblem(method: string): string | undefined {
 
 export function hintProblem(hint: string): string | undefined {
   return schemaProblem(serviceShapeV1.hint, hint) && HINT_EXPECTED;
+}
+
+export function containsProblem(text: string): string | undefined {
+  return schemaProblem(serviceShapeV1.contains, text) && CONTAINS_EXPECTED;
 }
 
 export function expectProblem(expect: string): string | undefined {
