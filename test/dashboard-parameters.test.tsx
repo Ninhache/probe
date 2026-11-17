@@ -98,6 +98,25 @@ describe("dashboard parameters", () => {
     expect(onParameterChange).toHaveBeenCalledWith("tenant", "globex");
   });
 
+  it("should keep the selector being changed on screen when the line is too wide", async () => {
+    const { lastFrame, stdin } = open({
+      parameters: () => ({
+        tenant: ["acme-international-holdings"],
+        env: ["local-development-machine"],
+        version: ["v1-long-term-support-release"],
+      }),
+    });
+    await tick();
+
+    stdin.write("pjj");
+
+    await waitFor(() =>
+      expect(lastFrame()?.split("\n")[1]).toBe(
+        "… env ‹ local-development-machine ›   › version ‹ v1-long-term-support-release ›",
+      ),
+    );
+  });
+
   it("should stop at the last value and close on p", async () => {
     const { lastFrame, stdin } = open();
     await tick();

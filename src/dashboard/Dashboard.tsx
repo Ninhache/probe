@@ -766,13 +766,17 @@ export function Dashboard({
   const up = counts.reduce((sum, count) => sum + count.up, all.filter(({ ok }) => ok).length);
   const checked = counts.reduce((sum, count) => sum + count.checked, all.length);
   const choosing = panel?.kind === "parameters" ? panel.row : -1;
-  const selectors = choiceNames
-    .map((name, index) => {
-      const value = effective[name] ?? "";
-      const shown = unicode ? `‹ ${value} ›` : `< ${value} >`;
-      return `${index === choosing ? marker : ""}${name} ${shown}`;
-    })
-    .join("   ");
+  const selectorParts = choiceNames.map((name, index) => {
+    const value = effective[name] ?? "";
+    const shown = unicode ? `‹ ${value} ›` : `< ${value} >`;
+    return `${index === choosing ? marker : ""}${name} ${shown}`;
+  });
+  // The line scrolls so that the selector being changed stays on screen.
+  let firstShown = 0;
+  const fromFirst = (first: number) =>
+    `${first > 0 ? "… " : ""}${selectorParts.slice(first, choosing + 1).join("   ")}`;
+  while (firstShown < choosing && fromFirst(firstShown).length > columns) firstShown += 1;
+  const selectors = `${firstShown > 0 ? "… " : ""}${selectorParts.slice(firstShown).join("   ")}`;
   // Said apart: the selected column does not list the value chosen, it keeps its first one.
   const kept = Object.entries(own)
     .filter(([name, value]) => effective[name] !== value)

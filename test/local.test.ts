@@ -128,6 +128,16 @@ describe("parameter values chosen in the dashboard, in local.yml", () => {
     );
   });
 
+  it("should leave the file as it is when the value is already saved", async () => {
+    const paths = await tempProject(CONFIG);
+    const text = "dashboard:\n  parameters: { tenant: globex } # mine\n";
+    await writeFile(paths.local, text);
+
+    expect(await writeDashboardSelection(paths, "tenant", "globex")).toBe(true);
+
+    expect(await readFile(paths.local, "utf8")).toBe(text);
+  });
+
   it("should read nothing when the file is missing or the key is not a map", async () => {
     const paths = await tempProject(CONFIG);
     expect(await readDashboardSelection(paths)).toEqual({});
