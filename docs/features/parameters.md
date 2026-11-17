@@ -71,7 +71,9 @@ probe check --set env=prod   # api at https://api.example.com/health, db where i
 ## Names and values
 
 - The name of a parameter is made of letters, digits, `_` and `-`.
-- A value is made of letters, digits, `.`, `_` and `-`, and is listed once.
+- A value is any text on one line, without a comma or spaces around it, and is listed once (since 0.21.0;
+  letters, digits, `.`, `_` and `-` before). A query or a path encodes it: `new york` is sent as `new%20york`.
+- A value sent in a header is ASCII only: no accent, and no `${`, which would be read as a variable.
 - The values are written in `config.yml`, which is shared: a header that carries a secret, such as
   `Authorization`, is refused. See [Headers and secrets](headers.md) for those.
 
@@ -85,8 +87,9 @@ probe check --set tenant=globex --set version=v2
 probe curl api --set tenant=globex
 ```
 
-- Without `--set`, a parameter takes its first value. That is what the [dashboard](dashboard.md) and
-  `make check` use.
+- Without `--set`, a parameter takes its first value. That is what `make check` uses.
+- In the [dashboard](dashboard.md#parameters), `p` chooses the values, saved for the next start, and adds,
+  edits or removes the parameters of `config.yml` (since 0.21.0).
 - The other commands refuse `--set`.
 - A parameter or a value the config does not list is refused: exit code `2`, and the known ones are listed.
 - An [environment](environments.md) file has its own `parameters`: `probe check --env prod --set tenant=globex`

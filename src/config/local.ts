@@ -13,6 +13,7 @@ import {
 import type { DashboardSettings } from "../dashboard/settings";
 import type { ProbePaths } from "./discovery";
 import type { VariableLookup } from "./headers";
+import type { Selection } from "./parameters";
 
 export interface DashboardPreferences {
   interval?: number;
@@ -23,6 +24,7 @@ export interface DashboardPreferences {
 const SECTION = "dashboard";
 const KEYS = ["interval", "timeout"] as const;
 const NOTIFY = "notify";
+const PARAMETERS = "parameters";
 const SERVICES = "services";
 const SKIP = "skip";
 
@@ -101,6 +103,41 @@ export async function readDashboardPreferences(paths: ProbePaths): Promise<Dashb
   }
   if (doc.getIn([SECTION, NOTIFY]) === true) preferences.notify = true;
   return preferences;
+}
+
+/** The value of each parameter last chosen in the dashboard; one the config no longer lists is left to it. */
+export async function readDashboardSelection(paths: ProbePaths): Promise<Selection> {
+  const text = await readLocal(paths);
+  if (text === null) return {};
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0) return {};
+  const chosen = doc.getIn([SECTION, PARAMETERS], true);
+  if (!isMap(chosen)) return {};
+  return Object.fromEntries(
+    chosen.items.flatMap(({ key, value }) => {
+      const name = isScalar(key) ? key.value : key;
+      const picked = isScalar(value) ? value.value : value;
+      return typeof name === "string" && ["string", "number"].includes(typeof picked)
+        ? [[name, String(picked)]]
+        : [];
+    }),
+  );
+}
+
+export function writeDashboardSelection(
+  paths: ProbePaths,
+  name: string,
+  value: string,
+): Promise<boolean> {
+  return editLocal(paths, (doc) => {
+    const section = doc.get(SECTION, true);
+    if (section !== undefined && !isMap(section)) return false;
+    const chosen = doc.getIn([SECTION, PARAMETERS], true);
+    if (chosen !== undefined && !isMap(chosen)) return false;
+    if (doc.getIn([SECTION, PARAMETERS, name]) === value) return null;
+    doc.setIn([SECTION, PARAMETERS, name], value);
+    return true;
+  });
 }
 
 export function initialDashboardSettings(

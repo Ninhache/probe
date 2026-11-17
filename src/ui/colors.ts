@@ -4,6 +4,7 @@ export interface Colors {
   yellow(text: string): string;
   dim(text: string): string;
   bold(text: string): string;
+  inverse(text: string): string;
 }
 
 export function createColors(enabled: boolean): Colors {
@@ -15,5 +16,6 @@ export function createColors(enabled: boolean): Colors {
     yellow: wrap(33, 39),
     dim: wrap(2, 22),
     bold: wrap(1, 22),
+    inverse: wrap(7, 27),
   };
 }

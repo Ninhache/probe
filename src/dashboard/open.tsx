@@ -1,12 +1,13 @@
 import { render } from "ink";
 import { runChecks } from "../checkers/run";
+import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import type { ProbePaths } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { loadConfig } from "../config/loader";
 import { loadVariables, readSkippedServices, type Variables } from "../config/local";
-import { applySelection } from "../config/parameters";
+import { applySelection, parameterChoices, type Selection } from "../config/parameters";
 import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
@@ -25,10 +26,15 @@ export interface DashboardState {
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
+  selection?: Selection;
+  onParameterChange?: (name: string, value: string) => Saved | undefined;
   onServiceWrite?: (
     write: ServiceWrite,
     secrets?: Secrets,
   ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
+  onParameterWrite?: (
+    write: ParameterWrite,
+  ) => Promise<{ config?: Config; problem?: ParameterProblem; failure?: string }>;
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentSource[];
@@ -68,21 +74,22 @@ export function environmentColumn(
 ): EnvironmentColumn {
   let known: Config | undefined;
   const { onOpen, onCopy } = serviceActions(
-    () => applySelection(known ?? { schemaVersion: 1, services: {} }),
+    (selection) => applySelection(known ?? { schemaVersion: 1, services: {} }, selection),
     deps,
   );
   return {
     name,
     file,
     onOpen,
-    onCopy: (service) => onCopy(service, known?.services[service]?.timeout),
-    async check(signal, timeoutMs) {
+    onCopy: (service, selection) => onCopy(service, known?.services[service]?.timeout, selection),
+    parameters: () => (known ? parameterChoices(known) : {}),
+    async check(signal, timeoutMs, selection) {
       const { config, variables, skipped } = await load();
       known = config;
       return runChecks(
         config,
         [],
-        { timeoutMs, signal, detail: true, variables, configFile: file },
+        { timeoutMs, signal, detail: true, variables, configFile: file, selection },
         skipped,
       );
     },
@@ -103,6 +110,7 @@ export async function openDashboard(
   terminal: Terminal,
   {
     onServiceWrite,
+    onParameterWrite,
     variables: readVariables,
     variableSources,
     environments = [],
@@ -111,7 +119,13 @@ export async function openDashboard(
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
   let config = initial;
-  const check: DashboardProps["check"] = async (signal, timeoutMs, skipped, timeouts) => {
+  const check: DashboardProps["check"] = async (
+    signal,
+    timeoutMs,
+    skipped,
+    timeouts,
+    selection,
+  ) => {
     const services = Object.fromEntries(
       Object.entries(config.services).map(([name, service]) => [
         name,
@@ -122,7 +136,7 @@ export async function openDashboard(
     return runChecks(
       { ...config, services },
       [],
-      { timeoutMs, signal, detail: true, variables },
+      { timeoutMs, signal, detail: true, variables, selection },
       skipped,
     );
   };
@@ -145,7 +159,8 @@ export async function openDashboard(
       terminal={terminal}
       check={check}
       timeouts={timeouts}
-      {...serviceActions(() => applySelection(config))}
+      {...serviceActions((selection) => applySelection(config, selection))}
+      parameters={() => parameterChoices(config)}
       {...state}
       terminalFocused={focus.focused}
       onClose={focus.stop}
@@ -164,6 +179,26 @@ export async function openDashboard(
           const notes = [outcome.warning, written && (await unsetNote(write.name))];
           const warning = notes.filter(Boolean).join("\n") || undefined;
           return { ...outcome, warning, saved: written !== undefined };
+        })
+      }
+      parameterFields={(name) => config.parameters?.[name]}
+      addresses={() =>
+        Object.fromEntries(
+          Object.entries(config.services).map(([name, service]) => [name, { ...service.urls }]),
+        )
+      }
+      urlParameter={() => {
+        const found = Object.entries(config.parameters ?? {}).find(
+          ([, { strategy }]) => strategy.kind === "url",
+        );
+        return found && { name: found[0], values: found[1].values };
+      }}
+      onParameterWrite={
+        onParameterWrite &&
+        (async (write) => {
+          const { config: written, ...outcome } = await onParameterWrite(write);
+          if (written) config = written;
+          return { ...outcome, saved: written !== undefined };
         })
       }
       variables={tools}

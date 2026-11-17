@@ -14,6 +14,8 @@ const BLOCKS = "▁▂▃▄▅▆▇█";
 const HEADER_LINES = 6;
 const BODY_LINES = 5;
 const HINT_LINES = 3;
+const SENT_LINES = 4;
+const URL_LINES = 3;
 // What every response carries: listed after the headers that tell something about the service.
 const TRANSPORT_HEADERS = new Set([
   "connection",
@@ -86,6 +88,36 @@ export function detailLines(
   if (result.hint) {
     for (const [index, text] of wrap(result.hint, width, HINT_LINES).entries())
       lines.push({ id: `hint ${index}`, text, tone: "dim" });
+  }
+  if (result.method) {
+    lines.push({ id: "request", text: cut("Request:") });
+    // A URL has no space to wrap at: it is cut in pieces, so the end of it (the query) stays seen.
+    const line = `${result.method} ${result.target}`;
+    const piece = Math.max(1, width - 2);
+    const pieces = Array.from({ length: Math.ceil(line.length / piece) }, (_, index) =>
+      line.slice(index * piece, (index + 1) * piece),
+    );
+    for (const [index, text] of pieces.slice(0, URL_LINES).entries()) {
+      const last = index === URL_LINES - 1 && pieces.length > URL_LINES;
+      lines.push({
+        id: `request ${index}`,
+        text: last ? cut(`  ${text}${more}`) : `  ${text}`,
+        tone: "dim",
+      });
+    }
+  }
+  if (result.sent) {
+    const sent = result.sent;
+    const shown = sent.length > SENT_LINES ? SENT_LINES - 1 : sent.length;
+    lines.push({ id: "sent", text: cut("Headers sent:") });
+    for (const [index, header] of sent.slice(0, shown).entries())
+      lines.push({ id: `sent ${index}`, text: cut(`  ${header}`), tone: "dim" });
+    if (shown < sent.length)
+      lines.push({
+        id: "sent more",
+        text: cut(`  ${more} ${sent.length - shown} more`),
+        tone: "dim",
+      });
   }
   const latencies = sparkline(history, unicode, width);
   if (latencies) lines.push({ id: "latencies", text: cut(latencies), tone: "dim" });

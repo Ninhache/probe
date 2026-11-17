@@ -49,6 +49,17 @@ const ROWS: readonly FormRow[] = [
   { key: "method", label: "Method", placeholder: DEFAULT_METHOD },
 ];
 
+/** The `url` parameter of the config: a service can have its own address for each value. */
+export interface UrlParameter {
+  name: string;
+  values: readonly string[];
+}
+
+export const urlLabel = (value: string) => `URL ${value}`;
+
+/** Port, host and path: what an address under `urls:` replaces. */
+export const ADDRESS_FIELDS: ReadonlySet<FieldKey> = new Set(["port", "host", "path"]);
+
 export const HEADER_LABEL = "Header";
 export const HEADER_PLACEHOLDER = "Accept: application/json";
 

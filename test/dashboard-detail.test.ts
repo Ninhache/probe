@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
+import { reference } from "../src/config/headers";
 import { DASHBOARD_HISTORY_LENGTH } from "../src/constants";
 import { detailLines, recordLatencies, sparkline } from "../src/dashboard/detail";
 
@@ -163,5 +164,51 @@ describe("detailLines", () => {
     expect(lines.every((line) => line.length <= 12)).toBe(true);
     expect(lines[0]).toBe("200 OK - 4ms");
     expect(lines.join("\n")).not.toMatch(/[·–▁]/);
+  });
+});
+
+describe("detailLines sent headers", () => {
+  it("should say which headers a service that did not answer sends", () => {
+    const refused: CheckResult = {
+      ...base,
+      ok: false,
+      latencyMs: 1,
+      error: "connection refused",
+      sent: ["X-Tenant: acme", `Authorization: Bearer ${reference("API_TOKEN")}`],
+    };
+
+    expect(texts(refused, [], { width: 80 })).toEqual([
+      "connection refused",
+      "Headers sent:",
+      "  X-Tenant: acme",
+      `  Authorization: Bearer ${reference("API_TOKEN")}`,
+    ]);
+  });
+
+  it("should count the headers sent that do not fit", () => {
+    const sent = ["A: 1", "B: 2", "C: 3", "D: 4", "E: 5"];
+
+    expect(texts({ ...base, ok: false, latencyMs: 1, sent })).toEqual([
+      "down",
+      "Headers sent:",
+      "  A: 1",
+      "  B: 2",
+      "  C: 3",
+      "  … 2 more",
+    ]);
+  });
+});
+
+describe("detailLines request", () => {
+  it("should give the method and the whole URL, in pieces when it is long", () => {
+    const target = "http://localhost:3000/acme/health?region=new%20york";
+    const refused: CheckResult = { ...base, target, ok: false, latencyMs: 1, method: "GET" };
+
+    expect(texts(refused, [], { width: 30 })).toEqual([
+      "down",
+      "Request:",
+      "  GET http://localhost:3000/ac",
+      "  me/health?region=new%20york",
+    ]);
   });
 });

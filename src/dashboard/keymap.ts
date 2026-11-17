@@ -1,6 +1,7 @@
 export type Screen =
   | "list"
   | "panel"
+  | "choose"
   | "readonly"
   | "filter"
   | "palette"
@@ -19,10 +20,17 @@ export type Command =
   | "add"
   | "filter"
   | "options"
+  | "parameters"
   | "help"
   | "quit";
 
-type Section = "List" | "Panels" | "Filter" | "Add and edit" | "Outside a text field";
+type Section =
+  | "List"
+  | "Panels"
+  | "Parameters"
+  | "Filter"
+  | "Add and edit"
+  | "Outside a text field";
 
 interface Binding {
   screens: readonly Screen[];
@@ -37,6 +45,8 @@ interface Binding {
   command?: Command;
   /** Only when several environments are shown. */
   grid?: true;
+  /** In the bar only when the selected config declares parameters. */
+  parameters?: true;
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
@@ -52,7 +62,7 @@ const BINDINGS: readonly Binding[] = [
     ascii: "hl",
     action: "environment",
     help: "Change environment",
-    drop: 6,
+    drop: 7,
     grid: true,
   }),
   list({ keys: "r", action: "check", help: "Check now", barless: true, command: "check" }),
@@ -61,7 +71,7 @@ const BINDINGS: readonly Binding[] = [
     ascii: "enter",
     action: "service",
     help: "Service detail",
-    drop: 5,
+    drop: 6,
     command: "detail",
   }),
   list({ keys: "u", action: "open", help: "Open its URL", barless: true, command: "open" }),
@@ -69,7 +79,15 @@ const BINDINGS: readonly Binding[] = [
   list({ keys: "e", action: "edit", help: "Edit the service", barless: true, command: "edit" }),
   list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
   list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
-  list({ keys: "/", action: "filter", help: "Filter by name", drop: 4, command: "filter" }),
+  list({ keys: "/", action: "filter", help: "Filter by name", drop: 5, command: "filter" }),
+  list({
+    keys: "p",
+    action: "parameters",
+    help: "Parameter values",
+    drop: 4,
+    command: "parameters",
+    parameters: true,
+  }),
   list({ keys: ":", action: "commands", help: "Find a command", drop: 1 }),
   list({ keys: "o", action: "options", help: "Options", barless: true, command: "options" }),
   {
@@ -103,6 +121,58 @@ const BINDINGS: readonly Binding[] = [
     screens: ["panel", "readonly"],
     section: "Panels",
     keys: "esc",
+    action: "close",
+    help: "Close",
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "←→ hl",
+    ascii: "hl",
+    action: "parameter",
+    help: "Change parameter",
+    drop: 1,
+    parameters: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "↑↓ jk",
+    ascii: "jk",
+    action: "value",
+    help: "Choose its value",
+    parameters: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "a",
+    action: "add",
+    help: "Add a parameter",
+    drop: 3,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "e",
+    action: "edit",
+    help: "Edit the parameter",
+    drop: 2,
+    parameters: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "d",
+    action: "remove",
+    help: "Remove it",
+    drop: 2,
+    parameters: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "p esc",
     action: "close",
     help: "Close",
   },
@@ -163,7 +233,7 @@ const BINDINGS: readonly Binding[] = [
   { screens: ["confirm"], keys: "n esc", action: "keep" },
   { screens: ["help"], keys: "? esc", action: "close" },
   {
-    screens: ["list", "panel", "readonly"],
+    screens: ["list", "panel", "readonly", "choose"],
     section: "Outside a text field",
     keys: "?",
     action: "help",
@@ -171,7 +241,7 @@ const BINDINGS: readonly Binding[] = [
     command: "help",
   },
   {
-    screens: ["list", "panel", "readonly", "help"],
+    screens: ["list", "panel", "readonly", "choose", "help"],
     section: "Outside a text field",
     keys: "q",
     action: "quit",
@@ -182,6 +252,7 @@ const BINDINGS: readonly Binding[] = [
 
 const SECTIONS: readonly Section[] = [
   "List",
+  "Parameters",
   "Panels",
   "Filter",
   "Add and edit",
@@ -193,9 +264,16 @@ const written = (binding: Binding, unicode: boolean) =>
 
 const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
 
-export function helpBar(screen: Screen, unicode: boolean, columns: number, grid = false): string {
+export function helpBar(
+  screen: Screen,
+  unicode: boolean,
+  columns: number,
+  grid = false,
+  parameters = false,
+): string {
   const shown = offered(grid).filter(
-    ({ screens, barless }) => screens.includes(screen) && !barless,
+    (binding) =>
+      binding.screens.includes(screen) && !binding.barless && (parameters || !binding.parameters),
   );
   const line = () =>
     shown
@@ -238,6 +316,7 @@ export interface HelpLine {
 }
 
 const HELP_GAP = 3;
+const LEFT_SECTIONS = 2;
 
 function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
   const described = offered(grid).filter(({ help }) => help !== undefined);
@@ -259,10 +338,10 @@ export function helpLines(unicode: boolean, grid = false): HelpLine[] {
 }
 
 export function helpColumns(unicode: boolean, columns: number, grid = false): HelpLine[][] {
-  const [first, ...others] = SECTIONS;
+  // The list and the parameters it opens on the left: both columns then fit 24 lines.
   const sides = [
-    sectionLines([first as Section], unicode, grid),
-    sectionLines(others, unicode, grid),
+    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid),
+    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid),
   ];
   const widths = sides.map((side) => Math.max(...side.map(({ text }) => text.length)));
   const fits = (widths[0] as number) + HELP_GAP + (widths[1] as number) <= columns;

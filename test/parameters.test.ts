@@ -48,8 +48,11 @@ describe("the parameters of a config", () => {
   it.each([
     ["no value", { tenant: { ...TENANT, values: [] } }],
     ["a value twice", { tenant: { ...TENANT, values: ["acme", "acme"] } }],
-    ["a value with a slash", { version: { ...VERSION, values: ["v1/x"] } }],
-    ["a value with a space", { tenant: { ...TENANT, values: ["a b"] } }],
+    ["a value with a comma", { version: { ...VERSION, values: ["v1,v2"] } }],
+    ["a value with a space around it", { version: { ...VERSION, values: [" v1"] } }],
+    ["a value on two lines", { version: { ...VERSION, values: ["v1\nv2"] } }],
+    ["an accent in a header", { tenant: { ...TENANT, values: ["créteil"] } }],
+    ["a variable in a header", { tenant: { ...TENANT, values: [`$\{API_TOKEN}`] } }],
     ["a name with a space", { "my tenant": TENANT }],
     ["an unknown strategy", { tenant: { ...TENANT, strategy: { kind: "script" } } }],
     ["a header without a name", { tenant: { ...TENANT, strategy: { kind: "header" } } }],
@@ -66,6 +69,15 @@ describe("the parameters of a config", () => {
     ["a url with a name", { env: { ...ENV, strategy: { kind: "url", name: "x" } } }],
   ])("refuse %s", (_what, parameters) => {
     expect(refused(parameters)).not.toBe("");
+  });
+
+  it("take any text on one line as a value of a query or a path", () => {
+    const { parameters } = parsed({
+      city: { ...REGION, values: ["new york", "créteil", "a/b"] },
+      tenant: { ...TENANT, values: ["acme & co"] },
+    });
+
+    expect(parameters?.city?.values).toEqual(["new york", "créteil", "a/b"]);
   });
 
   it("refuse a header that carries a secret, without repeating a value", () => {
@@ -180,6 +192,15 @@ describe("applySelection", () => {
     expect(api?.headers).toEqual({ "X-Tenant": "acme" });
     expect(web?.headers).toEqual({ "X-Tenant": "acme" });
     expect(web?.url).toBe("https://example.com/status?full=1");
+  });
+
+  it("encodes in the URL what it cannot carry as it is", () => {
+    const city = { ...REGION, values: ["new york"] };
+    const place = { ...VERSION, values: ["créteil/sud"] };
+
+    const { api } = rewritten({ city, place });
+
+    expect(api?.path).toBe("/cr%C3%A9teil%2Fsud/health?region=new%20york");
   });
 
   it("sends the value asked for", () => {

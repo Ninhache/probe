@@ -1,4 +1,10 @@
-import { masked, resolveHeaders, serviceVariables, templateParts } from "../config/headers";
+import {
+  hiddenHeaderLine,
+  masked,
+  resolveHeaders,
+  serviceVariables,
+  templateParts,
+} from "../config/headers";
 import { DEFAULT_METHOD, type Service } from "../config/schema";
 import { CONTAINS_BODY_BYTES, DEFAULT_TIMEOUT_SECONDS, MAX_REDIRECTS } from "../constants";
 import {
@@ -152,7 +158,14 @@ async function request(
   { timeoutMs, signal, detail, variables }: CheckContext,
 ): Promise<{ result: CheckResult; unknownIssuer: boolean }> {
   const target = targetUrl(service);
-  const base = { name, type: "http", target };
+  const written = Object.entries(service.headers ?? {});
+  // As written, never resolved: a variable stays `${NAME}`, a secret typed in clear is starred.
+  const sent =
+    detail && written.length > 0
+      ? { sent: written.map(([header, value]) => hiddenHeaderLine(`${header}: ${value}`, "*")) }
+      : {};
+  const asked = detail ? { method: service.method ?? "GET" } : {};
+  const base = { name, type: "http", target, ...asked, ...sent };
   const failed = (diagnosis: Diagnosis, latencyMs = 0) => ({
     result: { ...base, ok: false, latencyMs, ...diagnosis },
     unknownIssuer: false,

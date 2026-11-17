@@ -10,9 +10,12 @@ export type ServiceFields = Pick<
   "host" | "port" | "path" | "expect" | "method" | "headers"
 >;
 
+/** The address of a service for each value of the `url` parameter; an empty one is removed. */
+export type ServiceUrls = Readonly<Record<string, string>>;
+
 export type ServiceWrite =
-  | { kind: "add"; name: string; fields: ServiceFields }
-  | { kind: "edit"; name: string; fields: ServiceFields }
+  | { kind: "add"; name: string; fields: ServiceFields; urls?: ServiceUrls }
+  | { kind: "edit"; name: string; fields: ServiceFields; urls?: ServiceUrls }
   | { kind: "remove"; name: string };
 
 export interface ServiceWritten {
@@ -44,6 +47,18 @@ function withFields(service: RawConfig, fields: ServiceFields, current?: Service
   return next;
 }
 
+function withUrls(service: RawConfig, urls: ServiceUrls | undefined): RawConfig {
+  if (!urls) return service;
+  const kept: Record<string, unknown> = { ...(service.urls as RawConfig | undefined) };
+  for (const [value, address] of Object.entries(urls)) {
+    if (address) kept[value] = address;
+    else delete kept[value];
+  }
+  const next: RawConfig = { ...service, urls: kept };
+  if (Object.keys(kept).length === 0) delete next.urls;
+  return next;
+}
+
 // The file is read again first: an edit made since the caller loaded it is kept.
 export async function writeService(
   paths: ProbePaths,
@@ -60,10 +75,9 @@ export async function writeService(
       ? others
       : {
           ...services,
-          [write.name]: withFields(
-            previous ?? {},
-            write.fields,
-            loaded.config.services[write.name],
+          [write.name]: withUrls(
+            withFields(previous ?? {}, write.fields, loaded.config.services[write.name]),
+            write.urls,
           ),
         };
   const { saved, warning } = await writeServices(loaded, next);

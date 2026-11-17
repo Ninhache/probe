@@ -14,8 +14,10 @@ import {
   changedPreferences,
   initialDashboardSettings,
   readDashboardPreferences,
+  readDashboardSelection,
   readSkippedServices,
   writeDashboardPreferences,
+  writeDashboardSelection,
   writeServiceSkip,
 } from "../src/config/local";
 import { tempProject } from "./helpers";
@@ -107,6 +109,50 @@ describe("dashboard preferences in local.yml", () => {
     await writeFile(paths.local, text);
 
     expect(await writeDashboardPreferences(paths, { interval: 5 })).toBe(false);
+    expect(await readFile(paths.local, "utf8")).toBe(text);
+  });
+});
+
+describe("parameter values chosen in the dashboard, in local.yml", () => {
+  it("should read back each value saved, beside the other options", async () => {
+    const paths = await tempProject(CONFIG);
+    await writeFile(paths.local, "dashboard:\n  interval: 5 # slow\n");
+
+    expect(await writeDashboardSelection(paths, "tenant", "globex")).toBe(true);
+    expect(await writeDashboardSelection(paths, "version", "2")).toBe(true);
+
+    expect(await readDashboardSelection(paths)).toEqual({ tenant: "globex", version: "2" });
+    expect(await readDashboardPreferences(paths)).toEqual({ interval: 5 });
+    expect(await readFile(paths.local, "utf8")).toBe(
+      'dashboard:\n  interval: 5 # slow\n  parameters:\n    tenant: globex\n    version: "2"\n',
+    );
+  });
+
+  it("should leave the file as it is when the value is already saved", async () => {
+    const paths = await tempProject(CONFIG);
+    const text = "dashboard:\n  parameters: { tenant: globex } # mine\n";
+    await writeFile(paths.local, text);
+
+    expect(await writeDashboardSelection(paths, "tenant", "globex")).toBe(true);
+
+    expect(await readFile(paths.local, "utf8")).toBe(text);
+  });
+
+  it("should read nothing when the file is missing or the key is not a map", async () => {
+    const paths = await tempProject(CONFIG);
+    expect(await readDashboardSelection(paths)).toEqual({});
+
+    await writeFile(paths.local, "dashboard:\n  parameters: globex\n");
+
+    expect(await readDashboardSelection(paths)).toEqual({});
+  });
+
+  it("should not write over a key that is not a map", async () => {
+    const paths = await tempProject(CONFIG);
+    const text = "dashboard:\n  parameters: [globex]\n";
+    await writeFile(paths.local, text);
+
+    expect(await writeDashboardSelection(paths, "tenant", "globex")).toBe(false);
     expect(await readFile(paths.local, "utf8")).toBe(text);
   });
 });

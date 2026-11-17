@@ -156,7 +156,7 @@ describe("dashboard with environments", () => {
     await waitFor(() => expect(lastFrame()).toContain("Opened prod api"));
     stdin.write("c");
     await waitFor(() => expect(lastFrame()).toContain("Copied prod api"));
-    expect(prod1.onOpen).toHaveBeenCalledWith("api");
+    expect(prod1.onOpen).toHaveBeenCalledWith("api", {});
     expect(onOpen).not.toHaveBeenCalled();
     expect(onCopy).not.toHaveBeenCalled();
   });
@@ -382,7 +382,7 @@ describe("the column of an environment", () => {
       join(dir, ".probe", "envs", "dev.yml"),
       `schemaVersion: 1\nservices:\n  api:\n    port: ${port}\n    host: 127.0.0.1\n    headers: { Authorization: 'Bearer \${DEV_TOKEN}' }\n`,
     );
-    return { paths: requireProbeDir(dir), seen };
+    return { paths: requireProbeDir(dir), seen, port };
   };
 
   const deps = (copied: string[]): ActionDeps => ({
@@ -402,6 +402,23 @@ describe("the column of an environment", () => {
     const results = await column.check(new AbortController().signal, 3_000);
     expect(results).toMatchObject([{ name: "api", ok: false, error: "DEV_TOKEN is not set" }]);
     expect(seen).toEqual([]);
+  });
+
+  it("should check the address of the value chosen among the parameters of its file", async () => {
+    const { paths, port } = await project();
+    await writeFile(
+      join(paths.dir, "envs", "prod.yml"),
+      `schemaVersion: 1\nparameters:\n  tenant: { values: [acme, globex], strategy: { kind: path } }\nservices:\n  api: { port: ${port}, host: 127.0.0.1, path: /health }\n`,
+    );
+    const column = environmentColumn(environmentSource(paths, "prod", {}), deps([]));
+    const signal = new AbortController().signal;
+
+    const first = await column.check(signal, 3_000);
+    const chosen = await column.check(signal, 3_000, { tenant: "globex" });
+
+    expect(column.parameters?.()).toEqual({ tenant: ["acme", "globex"] });
+    expect(first).toMatchObject([{ target: `http://127.0.0.1:${port}/acme/health` }]);
+    expect(chosen).toMatchObject([{ target: `http://127.0.0.1:${port}/globex/health` }]);
   });
 
   it("sends the exported value and copies its name, not the value", async () => {

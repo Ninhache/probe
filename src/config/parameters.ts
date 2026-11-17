@@ -37,6 +37,40 @@ export function selectionFrom(config: Config, pairs: readonly string[]): Selecti
   return selection;
 }
 
+export type ParameterChoices = Readonly<Record<string, readonly string[]>>;
+
+export function parameterChoices(config: Config): ParameterChoices {
+  return Object.fromEntries(
+    Object.entries(config.parameters ?? {}).map(([name, { values }]) => [name, values]),
+  );
+}
+
+/** Every parameter one of the configs declares, with every value one of them lists. */
+export function mergedChoices(all: readonly ParameterChoices[]): ParameterChoices {
+  const merged: Record<string, string[]> = {};
+  for (const choices of all) {
+    for (const [name, values] of Object.entries(choices)) {
+      const known = Object.hasOwn(merged, name) ? (merged[name] as string[]) : [];
+      merged[name] = [...known, ...values.filter((value) => !known.includes(value))];
+    }
+  }
+  return merged;
+}
+
+/** The value each parameter takes: the one asked for when it is listed, else the first. */
+export function effectiveSelection(
+  choices: ParameterChoices,
+  selection: Selection = {},
+): Selection {
+  return Object.fromEntries(
+    Object.entries(choices).flatMap(([name, values]) => {
+      const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
+      const value = asked !== undefined && values.includes(asked) ? asked : values[0];
+      return value === undefined ? [] : [[name, value]];
+    }),
+  );
+}
+
 function chosenValue(name: string, parameter: Parameter, selection: Selection): string {
   const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
   return asked !== undefined && parameter.values.includes(asked)
@@ -72,12 +106,13 @@ function rewritten(service: Service, chosen: readonly [Parameter, string][]): Se
 
   const url = new URL(target);
   if (segments.length > 0) {
-    url.pathname = `/${segments.join("/")}${url.pathname === "/" ? "" : url.pathname}`;
+    const encoded = segments.map(encodeURIComponent).join("/");
+    url.pathname = `/${encoded}${url.pathname === "/" ? "" : url.pathname}`;
   }
   for (const [name, value] of queries) {
     if (url.searchParams.has(name)) continue;
     // Appended as text: `searchParams.append` would rewrite the query the service declares.
-    url.search = `${url.search === "" ? "?" : `${url.search}&`}${name}=${value}`;
+    url.search = `${url.search === "" ? "?" : `${url.search}&`}${name}=${encodeURIComponent(value)}`;
   }
   next.path = url.pathname + url.search;
   if (next.url !== undefined) next.url = url.href;
