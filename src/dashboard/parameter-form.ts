@@ -17,8 +17,13 @@ const ROWS: readonly ParameterFormRow[] = [
   { key: "name", label: "Name", placeholder: "tenant" },
   { key: "values", label: "Values", placeholder: "acme, globex" },
   { key: "strategy", label: "Sent by", placeholder: "" },
-  { key: "strategyName", label: "As", placeholder: "the query or header name" },
 ];
+
+// Only a query and a header have a name: path and url have nothing to ask.
+const NAME_ROWS: Readonly<Partial<Record<Kind, ParameterFormRow>>> = {
+  query: { key: "strategyName", label: "Query", placeholder: "the parameter name by default" },
+  header: { key: "strategyName", label: "Header", placeholder: "X-Tenant" },
+};
 
 export const EMPTY_PARAMETER_FORM: ParameterFormValues = {
   name: "",
@@ -36,8 +41,10 @@ export function nextKind(current: string, step: 1 | -1 | string): string {
 
 export const KIND_HINT = `←→ or a letter: ${KINDS.join(", ")}`;
 
-export function parameterFormRows(adding: boolean): readonly ParameterFormRow[] {
-  return adding ? ROWS : ROWS.filter(({ key }) => key !== "name");
+export function parameterFormRows(adding: boolean, strategy: string): readonly ParameterFormRow[] {
+  const named = NAME_ROWS[kindOf(strategy) ?? "query"];
+  const rows = named ? [...ROWS, named] : ROWS;
+  return adding ? rows : rows.filter(({ key }) => key !== "name");
 }
 
 export function parameterFormValues({ values, strategy }: Parameter): ParameterFormValues {
@@ -68,7 +75,6 @@ function valuesProblem(values: string): string | undefined {
 
 function strategyNameProblem(kind: Kind, name: string): string | undefined {
   if (kind === "header" && !name) return "The header to send, e.g. X-Tenant";
-  if ((kind === "path" || kind === "url") && name) return `${kind} takes no name: empty it`;
   return undefined;
 }
 

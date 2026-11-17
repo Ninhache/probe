@@ -104,7 +104,7 @@ tenant ‹ globex ›   version ‹ v1 ›
   - the name;
   - the values, separated by commas: `acme, globex`;
   - how it is sent, chosen with `←` `→` or its first letter: `query` (the default), `path`, `header` or `url`;
-  - the name of the query or the header. A query left without one takes the name of the parameter.
+  - for a query or a header only, its name. A query left without one takes the name of the parameter.
 
   Under the fields, a line says what the chosen way does, with an example on the first value:
 

@@ -268,6 +268,19 @@ describe("dashboard parameter editing", () => {
     });
   });
 
+  it("should ask for no name when the value goes in the path", async () => {
+    const { lastFrame, stdin } = open({ onParameterWrite: saved() });
+    await tick();
+    stdin.write("pa");
+    await waitFor(() => expect(lastFrame()).toContain("› Name"));
+    expect(lastFrame()).toContain("Query");
+
+    stdin.write(`team${DOWN}a${DOWN}p`);
+
+    await waitFor(() => expect(lastFrame()).toContain("‹ path ›"));
+    expect(lastFrame()).not.toMatch(/Query|Header/);
+  });
+
   it("should point at the field to fix before writing anything", async () => {
     const onParameterWrite = saved();
     const { lastFrame, stdin } = open({ onParameterWrite });
@@ -295,7 +308,7 @@ describe("dashboard parameter editing", () => {
     stdin.write(`team${DOWN}a${DOWN}${DOWN}t\r`);
 
     await waitFor(() => expect(lastFrame()).toContain("Sets the same query as tenant"));
-    expect(lastFrame()).toContain("› As");
+    expect(lastFrame()).toContain("› Query");
   });
 
   it("should edit a parameter from its values", async () => {

@@ -621,7 +621,7 @@ export function Dashboard({
   };
 
   const submitParameter = (form: ParameterForm) => {
-    const rows = parameterFormRows(form.editing === undefined);
+    const rows = parameterFormRows(form.editing === undefined, form.values.strategy);
     const taken = Object.keys(parameters?.() ?? NO_CHOICES);
     const problem = parameterFormProblem(rows, form.values, taken);
     if (problem) return setDialog({ ...form, row: problem.row, problem: problem.message });
@@ -647,7 +647,7 @@ export function Dashboard({
   const typeInParameterForm = (form: ParameterForm, keystroke: Keystroke) => {
     if (looking.current) return;
     const { key } = keystroke;
-    const rows = parameterFormRows(form.editing === undefined);
+    const rows = parameterFormRows(form.editing === undefined, form.values.strategy);
     const field = rows[form.row]?.key;
     const typed = typedCharacter(keystroke);
     const value = field ? form.values[field] : "";
@@ -1099,7 +1099,7 @@ export function Dashboard({
     dialog?.kind === "form"
       ? formRows(dialog.editing === undefined)
       : dialog?.kind === "parameter-form"
-        ? parameterFormRows(dialog.editing === undefined)
+        ? parameterFormRows(dialog.editing === undefined, dialog.values.strategy)
         : [];
   const formLabelWidth = Math.max(
     HEADER_LABEL.length,
@@ -1253,7 +1253,7 @@ export function Dashboard({
               ),
             )}
           </Text>
-          {parameterFormRows(dialog.editing === undefined).map(
+          {parameterFormRows(dialog.editing === undefined, dialog.values.strategy).map(
             ({ key, label, placeholder }, index) => (
               <Text key={key}>
                 {key === "strategy"
@@ -1272,7 +1272,8 @@ export function Dashboard({
               <Text key={line}>{colors.dim(truncate(line, formRoom))}</Text>
             ),
           )}
-          {parameterFormRows(dialog.editing === undefined)[dialog.row]?.key === "strategy" &&
+          {parameterFormRows(dialog.editing === undefined, dialog.values.strategy)[dialog.row]
+            ?.key === "strategy" &&
             dialog.problem === undefined && (
               <Text>{colors.dim(truncate(KIND_HINT, formRoom))}</Text>
             )}
