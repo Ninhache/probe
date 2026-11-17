@@ -66,7 +66,8 @@ hand.
 - With a parameter sent by `url`, the form starts with one line per value, `URL dev`, `URL prod`, written under
   `urls:`. A URL replaces the address for its value: the form says it,
   `Overridden by the parameter env for prod`, then `not used` when every value has one. A line left empty uses
-  the address. `localhost:3001` is written `http://localhost:3001`.
+  the address. `localhost:3001` is written `http://localhost:3001`. With every URL filled, the address may be
+  left empty: the service then has no `port` or `url` of its own, and an edit leaves it so.
 
   ```
   │ › URL local  localhost:3001_                 │

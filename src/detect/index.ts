@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { RawConfig } from "../config/migrations";
 import { SERVICE_NAME_PATTERN, serviceSchemaV1 } from "../config/schema";
 import { SOURCES } from "./registry";
-import { address, isHttpPort } from "./shared";
+import { address, isHttpPort, knownAddresses } from "./shared";
 import { answersHttp, detectPorts } from "./sources/ports";
 import type { Candidate, Machine, Source } from "./types";
 
@@ -20,7 +20,7 @@ export async function detectServices(
   { read, sources, ports, answers }: DetectDeps,
 ): Promise<Candidate[]> {
   const names = new Set(Object.keys(existing));
-  const addresses = new Set(Object.values(existing).map(address));
+  const addresses = new Set(Object.values(existing).flatMap(knownAddresses));
   const kept: Candidate[] = [];
   const context = {
     ports,

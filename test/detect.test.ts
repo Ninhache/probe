@@ -301,6 +301,12 @@ describe("detectServices against the config", () => {
     expect(await detectIn({ ".env": "PORT=4000\n" }, existing)).toEqual([]);
   });
 
+  it("should leave out a service declared only by its address under urls", async () => {
+    const existing = { web: { urls: { local: "http://localhost:4000/health" } } };
+
+    expect(await detectIn({ ".env": "PORT=4000\n" }, existing)).toEqual([]);
+  });
+
   it("should give a free name when the name is taken", async () => {
     const existing = { app: { port: 9000 } };
 

@@ -65,6 +65,15 @@ probe check --set env=prod   # api at https://api.example.com/health, db where i
 ```
 
 - A value without an address in `urls` keeps the `port` or the `url` of the service.
+- A service with an address in `urls` for every value needs no `port` or `url` of its own (since 0.23.0).
+  A value left without one, in `config.yml` or in an environment, is refused by name:
+  `local has no address, and api has no port or url of its own`.
+
+  ```yaml
+  services:
+    api:
+      urls: { local: http://localhost:3000/health, prod: https://api.example.com/health }
+  ```
 - A config has one `url` parameter at most, and `urls` only names its values.
 - The other parameters apply to the address that is chosen.
 

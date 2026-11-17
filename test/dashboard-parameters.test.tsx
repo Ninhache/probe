@@ -625,6 +625,39 @@ describe("the service form with a url parameter", () => {
     expect(onServiceWrite).not.toHaveBeenCalled();
   });
 
+  it("should send no address of its own when every URL is filled and the address is emptied", async () => {
+    const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => ({
+      saved: true,
+    }));
+    const { lastFrame, stdin } = openApi(onServiceWrite);
+    await tick();
+    stdin.write("e");
+    await waitFor(() => expect(lastFrame()).toContain("URL dev"));
+
+    stdin.write(`localhost:3001${DOWN}${DOWN}\u0015\r`);
+
+    await waitFor(() => expect(onServiceWrite).toHaveBeenCalled());
+    const fields = (onServiceWrite.mock.lastCall?.[0] as { fields?: object } | undefined)?.fields;
+    expect(fields).toBeDefined();
+    expect(fields).not.toHaveProperty("port");
+    expect(fields).not.toHaveProperty("url");
+  });
+
+  it("should still ask for an address when a URL is left empty", async () => {
+    const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => ({
+      saved: true,
+    }));
+    const { lastFrame, stdin } = openApi(onServiceWrite);
+    await tick();
+    stdin.write("e");
+    await waitFor(() => expect(lastFrame()).toContain("URL dev"));
+
+    stdin.write(`${DOWN}${DOWN}\u0015\r`);
+
+    await waitFor(() => expect(lastFrame()).toContain("An address, e.g. localhost:3000"));
+    expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
   it("should keep the fields after the URLs: the port is still edited", async () => {
     const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => ({
       saved: true,

@@ -500,7 +500,18 @@ export function Dashboard({
   const submit = (form: Form) => {
     const rows = formRows(form.editing === undefined, form.spec);
     const taken = (latest ?? []).map(({ name }) => name);
-    const problem = formProblem(rows, form.values, taken, form.spec);
+    // With an address on every URL line, the service needs none of its own.
+    const replaced = form.url && overridden(form).length === form.url.values.length;
+    const spec: ServiceForm = replaced
+      ? {
+          ...form.spec,
+          problem: (key, value) =>
+            form.spec.replacedByUrl?.has(key) && value.trim() === ""
+              ? undefined
+              : form.spec.problem(key, value),
+        }
+      : form.spec;
+    const problem = formProblem(rows, form.values, taken, spec);
     if (problem)
       return setDialog({ ...form, row: shownRow(form, problem.row), problem: problem.message });
     const values = form.url?.values ?? [];

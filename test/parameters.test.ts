@@ -132,6 +132,62 @@ describe("the urls of a service", () => {
     expect(message).toContain("a URL without a user or a password");
     expect(message).not.toContain("hunter2");
   });
+
+  describe("of a service with no port or url of its own", () => {
+    const declared = (urls: unknown, parameters: unknown = { env: ENV }) =>
+      configSchemaV1.safeParse({ schemaVersion: 1, parameters, services: { api: { urls } } });
+    const both = {
+      local: "http://localhost:3000/health",
+      prod: "https://api.example.com/health",
+    };
+
+    it("should be enough when every value of the parameter has one", () => {
+      const result = declared(both);
+
+      expect(result.success).toBe(true);
+      expect(result.data?.services.api).toMatchObject({ host: "localhost", port: 3000 });
+    });
+
+    it("should check each value at its own address", () => {
+      const config = parsed({ env: ENV }, { api: { urls: both } });
+
+      const prod = applySelection(config, { env: "prod" }).services.api as Service;
+
+      expect(targetUrl(prod)).toBe("https://api.example.com/health");
+    });
+
+    it("should name the value left without an address", () => {
+      const result = declared({ prod: "https://api.example.com/health" });
+
+      expect(result.error?.issues.map(({ message, path }) => [path, message])).toEqual([
+        [
+          ["services", "api", "urls", "local"],
+          "local has no address, and api has no port or url of its own",
+        ],
+      ]);
+    });
+
+    it("should not repeat an address in what it says", () => {
+      const result = declared({ prod: "https://me:hunter2@api.example.com/health" });
+
+      expect(JSON.stringify(result.error?.issues)).not.toContain("hunter2");
+    });
+
+    it("should still need a port with a host or a path", () => {
+      const result = configSchemaV1.safeParse({
+        schemaVersion: 1,
+        parameters: { env: ENV },
+        services: { api: { host: "localhost", urls: both } },
+      });
+
+      expect(result.error?.issues.map(({ path }) => path)).toEqual([["services", "api", "port"]]);
+    });
+
+    it("should still need a url parameter", () => {
+      expect(declared(both, { tenant: TENANT }).success).toBe(false);
+      expect(declared(both, {}).success).toBe(false);
+    });
+  });
 });
 
 describe("selectionFrom", () => {
@@ -563,6 +619,30 @@ describe("the other commands with parameters", () => {
     expect(parse(await readFile(configFile(root), "utf8")).services.api.urls).toEqual({
       up: `http://127.0.0.1:${port}/live`,
     });
+  });
+
+  it("check looks at the address of each value of a service with no port of its own", async () => {
+    const root = await tempDir();
+    await mkdir(join(root, ".probe", "envs"), { recursive: true });
+    const live = `http://127.0.0.1:${port}/live`;
+    await writeFile(
+      configFile(root),
+      `schemaVersion: 1\nparameters:\n  env: { values: [local, up], strategy: { kind: url } }\nservices:\n  api:\n    urls: { local: "http://127.0.0.1:1/", up: "${live}" }\n`,
+    );
+    await writeFile(
+      join(root, ".probe", "envs", "ci.yml"),
+      `schemaVersion: 1\nparameters:\n  env: { values: [up, staging], strategy: { kind: url } }\nservices:\n  api:\n    urls: { up: "${live}" }\n`,
+    );
+
+    const down = await probe(root, ["check"]);
+    const up = await probe(root, ["check", "--set", "env=up"]);
+    const ci = await probe(root, ["check", "--env", "ci"]);
+
+    expect(down.code).toBe(1);
+    expect(up.code).toBe(0);
+    expect(ci.code).toBe(2);
+    expect(ci.stderr).toContain("staging has no address, and api has no port or url of its own");
+    expect(ci.stderr).not.toContain("127.0.0.1");
   });
 
   it("add and rm leave the parameters and their comment in the config", async () => {
