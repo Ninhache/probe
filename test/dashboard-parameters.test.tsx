@@ -2,7 +2,7 @@ import { render } from "ink-testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { applySelection, type Selection } from "../src/config/parameters";
-import type { Config } from "../src/config/schema";
+import type { Config, Parameter } from "../src/config/schema";
 import { serviceActions } from "../src/dashboard/actions";
 import { Dashboard, type DashboardProps, type EnvironmentColumn } from "../src/dashboard/Dashboard";
 import type { Terminal } from "../src/ui/terminal";
@@ -128,7 +128,9 @@ describe("dashboard parameters", () => {
     await waitFor(() => expect(lastFrame()).toContain("│  tenant  [version]"));
     expect(lastFrame()).toContain("│ › v1");
     expect(lastFrame()).toContain("│   v2");
-    expect(lastFrame()).toContain("←→ hl parameter · ↑↓ jk value · p esc close");
+    expect(lastFrame()).toContain(
+      "←→ hl parameter · ↑↓ jk value · a add · e edit · d remove · p esc close",
+    );
   });
 
   it("should stop at the last value and close on p", async () => {
@@ -208,6 +210,158 @@ describe("dashboard parameters", () => {
     stdin.write("\r");
 
     await waitFor(() => expect(lastFrame()).toContain("│ ▁ 4ms"));
+  });
+});
+
+describe("dashboard parameter editing", () => {
+  const DOWN = "\u001B[B";
+  const TENANT: Parameter = { values: ["acme", "globex"], strategy: { kind: "query", name: "t" } };
+  const saved = () =>
+    vi.fn<NonNullable<DashboardProps["onParameterWrite"]>>(async () => ({ saved: true }));
+
+  it("should open the panel to add the first parameter when none is declared", async () => {
+    const { lastFrame, stdin } = open({ parameters: undefined, onParameterWrite: saved() });
+    await tick();
+
+    stdin.write("p");
+
+    await waitFor(() => expect(lastFrame()).toContain("None yet: a adds one"));
+    expect(lastFrame()).toContain("a add · p esc close");
+  });
+
+  it("should add a parameter typed in the form", async () => {
+    const onParameterWrite = saved();
+    const { lastFrame, stdin } = open({ onParameterWrite });
+    await tick();
+    stdin.write("pa");
+    await waitFor(() => expect(lastFrame()).toContain("Add a parameter"));
+
+    stdin.write("version");
+    stdin.write(DOWN);
+    stdin.write("v1, v2");
+    stdin.write("\r");
+
+    await waitFor(() => expect(lastFrame()).toContain("Added version"));
+    expect(onParameterWrite).toHaveBeenCalledWith({
+      kind: "add",
+      name: "version",
+      parameter: { values: ["v1", "v2"], strategy: { kind: "query", name: "version" } },
+    });
+  });
+
+  it("should choose how the parameter is sent with the arrows or its first letter", async () => {
+    const onParameterWrite = saved();
+    const { lastFrame, stdin } = open({ onParameterWrite });
+    await tick();
+    stdin.write("pa");
+    await waitFor(() => expect(lastFrame()).toContain("Add a parameter"));
+    stdin.write(`team${DOWN}a${DOWN}`);
+    await waitFor(() => expect(lastFrame()).toContain("› Sent by  ‹ query ›"));
+
+    stdin.write("\u001B[C");
+    await waitFor(() => expect(lastFrame()).toContain("‹ path ›"));
+    stdin.write(`h${DOWN}X-Team\r`);
+
+    await waitFor(() => expect(lastFrame()).toContain("Added team"));
+    expect(onParameterWrite.mock.lastCall?.[0]).toMatchObject({
+      parameter: { values: ["a"], strategy: { kind: "header", name: "X-Team" } },
+    });
+  });
+
+  it("should point at the field to fix before writing anything", async () => {
+    const onParameterWrite = saved();
+    const { lastFrame, stdin } = open({ onParameterWrite });
+    await tick();
+    stdin.write("pa");
+    await waitFor(() => expect(lastFrame()).toContain("Add a parameter"));
+
+    stdin.write("version\r");
+
+    await waitFor(() => expect(lastFrame()).toContain("One value or more, e.g. acme, globex"));
+    expect(lastFrame()).toContain("› Values");
+    expect(onParameterWrite).not.toHaveBeenCalled();
+  });
+
+  it("should keep the form open on what the config refuses", async () => {
+    const onParameterWrite = vi.fn<NonNullable<DashboardProps["onParameterWrite"]>>(async () => ({
+      saved: false,
+      problem: { field: "strategyName", message: "Sets the same query as tenant" },
+    }));
+    const { lastFrame, stdin } = open({ onParameterWrite });
+    await tick();
+    stdin.write("pa");
+    await waitFor(() => expect(lastFrame()).toContain("Add a parameter"));
+
+    stdin.write(`team${DOWN}a${DOWN}${DOWN}t\r`);
+
+    await waitFor(() => expect(lastFrame()).toContain("Sets the same query as tenant"));
+    expect(lastFrame()).toContain("› As");
+  });
+
+  it("should edit a parameter from its values", async () => {
+    const onParameterWrite = saved();
+    const { lastFrame, stdin } = open({ onParameterWrite, parameterFields: () => TENANT });
+    await tick();
+    stdin.write("pe");
+    await waitFor(() => expect(lastFrame()).toContain("Edit tenant"));
+    expect(lastFrame()).toContain("acme, globex");
+
+    stdin.write(", initech\r");
+
+    await waitFor(() => expect(lastFrame()).toContain("Saved tenant"));
+    expect(onParameterWrite).toHaveBeenCalledWith({
+      kind: "edit",
+      name: "tenant",
+      parameter: { values: ["acme", "globex", "initech"], strategy: { kind: "query", name: "t" } },
+    });
+  });
+
+  it("should remove a parameter on y only, and no service", async () => {
+    const onParameterWrite = saved();
+    const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>();
+    const { lastFrame, stdin } = open({
+      onParameterWrite,
+      onServiceWrite,
+      parameterFields: () => TENANT,
+    });
+    await tick();
+    stdin.write("pd");
+    await waitFor(() =>
+      expect(lastFrame()).toContain("Remove the parameter tenant from the config?"),
+    );
+    stdin.write("n");
+    await tick();
+    expect(onParameterWrite).not.toHaveBeenCalled();
+
+    stdin.write("dy");
+
+    await waitFor(() => expect(lastFrame()).toContain("Removed tenant"));
+    expect(onParameterWrite).toHaveBeenCalledWith({ kind: "remove", name: "tenant" });
+    expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
+  it("should say which file declares a parameter of another environment", async () => {
+    const column: EnvironmentColumn = {
+      name: "prod",
+      file: ".probe/envs/prod.yml",
+      check: async (_s, _t, selection) => answer(selection, "example.com"),
+      parameters: () => ({ region: ["eu"] }),
+    };
+    const { lastFrame, stdin } = open({
+      parameters: undefined,
+      environments: [column],
+      onParameterWrite: saved(),
+      parameterFields: () => undefined,
+    });
+    await tick();
+
+    stdin.write("pe");
+
+    await waitFor(() =>
+      expect(lastFrame()).toContain(
+        "region is not in .probe/config.yml: change it in .probe/envs/prod.yml",
+      ),
+    );
   });
 });
 

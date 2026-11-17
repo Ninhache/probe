@@ -649,6 +649,13 @@ describe("dashboard", () => {
       "  p       Parameter values",
       "  :       Find a command",
       "  o       Options",
+      "Parameters",
+      "  ←→ hl   Change parameter",
+      "  ↑↓ jk   Choose its value",
+      "  a       Add a parameter",
+      "  e       Edit the parameter",
+      "  d       Remove it",
+      "  p esc   Close",
     ];
     const right = [
       "Panels",
@@ -656,10 +663,6 @@ describe("dashboard", () => {
       "  ←→ hl   Change the value",
       "  ↵       Set the variable",
       "  esc     Close",
-      "Parameters",
-      "  ←→ hl   Change parameter",
-      "  ↑↓ jk   Choose its value",
-      "  p esc   Close",
       "Filter",
       "  ↑↓      Move",
       "  ↵       Keep the filter",
@@ -677,7 +680,9 @@ describe("dashboard", () => {
     expect(lastFrame()).toBe(
       [
         "probe · keys",
-        ...right.map((line, index) => `${(left[index] ?? "").padEnd(gutter)}${line}`),
+        ...left.map((line, index) =>
+          right[index] === undefined ? line : `${line.padEnd(gutter)}${right[index]}`,
+        ),
         "? esc close · q quit",
       ].join("\n"),
     );

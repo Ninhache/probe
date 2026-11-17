@@ -19,7 +19,7 @@ Off a terminal, in CI or in a pipe, use `probe check`.
 | `u`             | Open its URL in the browser                    |
 | `c`             | Copy its curl command                          |
 | `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
-| `p`             | Choose the value of a [parameter](#parameters) |
+| `p`             | Choose, add or edit [parameters](#parameters)  |
 | `a`             | Add a service                                  |
 | `e`             | Edit the selected service                      |
 | `d`             | Remove the selected service, after a question  |
@@ -96,6 +96,26 @@ tenant ‹ globex ›   version ‹ v1 ›
   ```
 
   In color, the selected tab, the chosen value and its selector on the line are drawn in reverse video.
+- In the panel, `a` adds a parameter, `e` edits the selected one and `d` removes it, after a question. With no
+  parameter yet, `p` opens the panel to add the first one. The form asks for:
+  - the name;
+  - the values, separated by commas: `acme, globex`;
+  - how it is sent, chosen with `←` `→` or its first letter: `query` (the default), `path`, `header` or `url`;
+  - the name of the query or the header. A query left without one takes the name of the parameter.
+
+  Under the fields, a line says what the chosen way does, with an example on the first value:
+
+  | Sent by  | With `tenant` = `acme`                                  |
+  | -------- | ------------------------------------------------------- |
+  | `query`  | `localhost:3000/health?tenant=acme`                     |
+  | `path`   | `localhost:3000/acme/health`                            |
+  | `header` | the header `X-Tenant: acme`                             |
+  | `url`    | the address each service lists under `urls:` for `acme` |
+
+  It writes `.probe/config.yml` and keeps your comments. What the config would refuse is shown in the form and
+  nothing is written: two parameters on the same query, a header that can carry a secret, or a value that a
+  service still lists under `urls`. A parameter that only an [environment](#several-environments) declares is
+  changed in its file.
 - The next check, `u`, `c` and the detail use the chosen values.
 - The parameters do not depend on each other: each one is chosen on its own, whatever its name.
 - The choice is saved in `.probe/local.yml` and comes back at the next start. A value the config no longer

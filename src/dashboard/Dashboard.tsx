@@ -1,6 +1,7 @@
 import { Box, Text, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "../checkers/types";
+import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { hiddenHeaderLine, serviceVariables, variableValueProblem } from "../config/headers";
 import {
@@ -9,6 +10,7 @@ import {
   type ParameterChoices,
   type Selection,
 } from "../config/parameters";
+import type { Parameter } from "../config/schema";
 import {
   CONFIG_FILE,
   LOCAL_ENVIRONMENT,
@@ -48,6 +50,18 @@ import {
   type Screen,
 } from "./keymap";
 import { type Keystroke, splitKeys, typedCharacter } from "./keys";
+import {
+  EMPTY_PARAMETER_FORM,
+  formParameter,
+  KIND_HINT,
+  nextKind,
+  type ParameterFormValues,
+  parameterExample,
+  parameterFormProblem,
+  parameterFormRow,
+  parameterFormRows,
+  parameterFormValues,
+} from "./parameter-form";
 import type { Saved } from "./saves";
 import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
 import type { VariableRow, VariableTools } from "./variables";
@@ -82,6 +96,9 @@ export interface DashboardProps {
   onClose?: () => void;
   serviceFields?: (name: string) => ServiceFields | string | undefined;
   onServiceWrite?: (write: ServiceWrite, secrets?: Secrets) => Promise<ServiceWriteOutcome>;
+  /** A parameter of the local config, to edit; undefined when only another environment declares it. */
+  parameterFields?: (name: string) => Parameter | undefined;
+  onParameterWrite?: (write: ParameterWrite) => Promise<ParameterWriteOutcome>;
   variables?: VariableTools;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentColumn[];
@@ -111,6 +128,12 @@ export interface ServiceWriteOutcome {
   warning?: string;
 }
 
+export interface ParameterWriteOutcome {
+  saved: boolean;
+  problem?: ParameterProblem;
+  failure?: string;
+}
+
 export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
 
 type Panel =
@@ -129,8 +152,18 @@ interface Form {
 
 type SecretStep = FormSecret & { kind: "secret"; form: Form; variable?: string; problem?: string };
 
+interface ParameterForm {
+  kind: "parameter-form";
+  editing?: string;
+  row: number;
+  values: ParameterFormValues;
+  problem?: string;
+}
+
 type Dialog =
   | { kind: "confirm"; name: string }
+  | { kind: "parameter-confirm"; name: string }
+  | ParameterForm
   | Form
   | SecretStep
   | { kind: "variable"; name: string; value: string; problem?: string };
@@ -212,6 +245,8 @@ export function Dashboard({
   onClose,
   serviceFields,
   onServiceWrite,
+  parameterFields,
+  onParameterWrite,
   variables,
   onVariableWrite,
   environments = NO_ENVIRONMENTS,
@@ -370,10 +405,12 @@ export function Dashboard({
     ({ name }) => name === selectedName,
   );
   const place = environment?.name ?? LOCAL_ENVIRONMENT;
-  const choices = mergedChoices([
-    parameters?.() ?? NO_CHOICES,
-    ...environments.map((each) => each.parameters?.() ?? NO_CHOICES),
-  ]);
+  const allChoices = () =>
+    mergedChoices([
+      parameters?.() ?? NO_CHOICES,
+      ...environments.map((each) => each.parameters?.() ?? NO_CHOICES),
+    ]);
+  const choices = allChoices();
   const choiceNames = Object.keys(choices);
   const effective = effectiveSelection(choices, selection);
   const own = effectiveSelection(
@@ -556,7 +593,11 @@ export function Dashboard({
     if (value === undefined || value === effective[name]) return;
     setSelection({ ...selection, [name]: value });
     track(onParameterChange?.(name, value));
-    // Another value is another target: the latencies and the states start again.
+    restart();
+  };
+
+  // Another value is another target: the latencies and the states start again.
+  const restart = () => {
     known.current = new Map();
     remoteKnown.current.clear();
     setHistory({});
@@ -565,6 +606,103 @@ export function Dashboard({
         Object.entries(before).map(([each, state]) => [each, { ...state, history: {} }]),
       ),
     );
+  };
+
+  const parameterWritten = (name: string, done: string) => {
+    setNotice(done);
+    restart();
+    setWrites((count) => count + 1);
+    const names = Object.keys(allChoices());
+    const at = names.indexOf(name);
+    setPanel({
+      kind: "parameters",
+      row: Math.max(0, at >= 0 ? at : Math.min(panel?.row ?? 0, names.length - 1)),
+    });
+  };
+
+  const submitParameter = (form: ParameterForm) => {
+    const rows = parameterFormRows(form.editing === undefined);
+    const taken = Object.keys(parameters?.() ?? NO_CHOICES);
+    const problem = parameterFormProblem(rows, form.values, taken);
+    if (problem) return setDialog({ ...form, row: problem.row, problem: problem.message });
+    const name = form.editing ?? form.values.name;
+    const parameter = formParameter(form.values, name);
+    looking.current = true;
+    void onParameterWrite?.(
+      form.editing === undefined
+        ? { kind: "add", name, parameter }
+        : { kind: "edit", name, parameter },
+    ).then((outcome) => {
+      looking.current = false;
+      if (outcome.problem) {
+        const row = parameterFormRow(rows, outcome.problem.field);
+        return setDialog({ ...form, row, problem: outcome.problem.message });
+      }
+      setDialog(null);
+      setUnsaved(outcome.failure);
+      if (outcome.saved) parameterWritten(name, `${form.editing ? "Saved" : "Added"} ${name}`);
+    });
+  };
+
+  const typeInParameterForm = (form: ParameterForm, keystroke: Keystroke) => {
+    if (looking.current) return;
+    const { key } = keystroke;
+    const rows = parameterFormRows(form.editing === undefined);
+    const field = rows[form.row]?.key;
+    const typed = typedCharacter(keystroke);
+    const value = field ? form.values[field] : "";
+    const edit = (next: string) =>
+      field &&
+      setDialog({ ...form, values: { ...form.values, [field]: next }, problem: undefined });
+    const lastRow = rows.length - 1;
+    // The way of sending is chosen, not typed: four words, and a typo would only be refused.
+    const choosing = field === "strategy";
+    if (choosing && (key === "left" || key === "right" || typed))
+      edit(nextKind(value, typed ?? (key === "right" ? 1 : -1)));
+    else if (key === "escape") setDialog(null);
+    else if (key === "up") setDialog({ ...form, row: Math.max(0, form.row - 1) });
+    else if (key === "down") setDialog({ ...form, row: Math.min(lastRow, form.row + 1) });
+    else if (key === "tab") setDialog({ ...form, row: (form.row + 1) % rows.length });
+    else if (choosing && key !== "return") return;
+    else if (key === "backspace") edit(value.slice(0, -1));
+    else if (key === "clear") edit("");
+    else if (typed) edit(value + typed);
+    else if (key === "return") submitParameter(form);
+  };
+
+  const removeParameter = (name: string) => {
+    looking.current = true;
+    void onParameterWrite?.({ kind: "remove", name }).then((outcome) => {
+      looking.current = false;
+      setUnsaved(outcome.failure);
+      if (outcome.problem) return setNotice(outcome.problem.message);
+      if (outcome.saved) parameterWritten(name, `Removed ${name}`);
+    });
+  };
+
+  // Only the parameters of config.yml are written here: one an environment declares says its file.
+  const declaredElsewhere = (name: string) => {
+    const files = environments
+      .filter((each) => Object.hasOwn(each.parameters?.() ?? NO_CHOICES, name))
+      .map(({ file }) => file);
+    return `${name} is not in ${PROBE_DIR}/${CONFIG_FILE}: change it in ${files.join(", ")}`;
+  };
+
+  const editParameters = (input: string, name: string | undefined) => {
+    if (!onParameterWrite) return;
+    if (input === "a")
+      return setDialog({ kind: "parameter-form", row: 0, values: EMPTY_PARAMETER_FORM });
+    if (name === undefined) return;
+    const parameter = parameterFields?.(name);
+    if (!parameter) return setNotice(declaredElsewhere(name));
+    if (input === "e")
+      setDialog({
+        kind: "parameter-form",
+        editing: name,
+        row: 0,
+        values: parameterFormValues(parameter),
+      });
+    else setDialog({ kind: "parameter-confirm", name });
   };
 
   const changeTimeout = (name: string, direction: 1 | -1) => {
@@ -588,7 +726,9 @@ export function Dashboard({
       case "options":
         return setPanel({ kind: "options", row: 0 });
       case "parameters":
-        if (choiceNames.length > 0) return setPanel({ kind: "parameters", row: 0 });
+        // With nothing declared, the panel opens to add the first one.
+        if (choiceNames.length > 0 || onParameterWrite)
+          return setPanel({ kind: "parameters", row: 0 });
         return setNotice(
           grid ? "No parameter declared" : `${PROBE_DIR}/${CONFIG_FILE} declares no parameter`,
         );
@@ -663,7 +803,11 @@ export function Dashboard({
         ? variableRows[panel.row - SERVICE_ROWS.length]
         : undefined;
     if (dialog?.kind === "form") typeInForm(dialog, keystroke);
-    else if (dialog?.kind === "secret") typeSecret(dialog, keystroke);
+    else if (dialog?.kind === "parameter-form") typeInParameterForm(dialog, keystroke);
+    else if (dialog?.kind === "parameter-confirm") {
+      setDialog(null);
+      if (input === "y") removeParameter(dialog.name);
+    } else if (dialog?.kind === "secret") typeSecret(dialog, keystroke);
     else if (dialog?.kind === "variable") typeVariable(dialog, keystroke);
     else if (dialog) {
       setDialog(null);
@@ -695,6 +839,8 @@ export function Dashboard({
         const row = Math.max(0, Math.min(choiceNames.length - 1, panel.row + (right ? 1 : -1)));
         setPanel({ ...panel, row });
       } else if (up || down) changeParameter(panel.row, down ? 1 : -1);
+      else if (input === "a" || input === "e" || input === "d")
+        editParameters(input, choiceNames[panel.row]);
     } else if (panel.kind === "service" && panel.environment !== undefined) {
       // The rows of this panel write for the local services: for another environment, `probe var --env` or local.yml by hand.
     } else if (up || down) {
@@ -921,7 +1067,7 @@ export function Dashboard({
   );
   const bullet = unicode ? "•" : "*";
   const screen: Screen =
-    dialog?.kind === "form"
+    dialog?.kind === "form" || dialog?.kind === "parameter-form"
       ? "form"
       : dialog?.kind === "secret" || dialog?.kind === "variable"
         ? "input"
@@ -949,7 +1095,12 @@ export function Dashboard({
   );
   const firstCommand = Math.max(0, (palette?.row ?? 0) - paletteRoom + 1);
   const formWidth = Math.min(FORM_WIDTH, columns);
-  const formLabels = dialog?.kind === "form" ? formRows(dialog.editing === undefined) : [];
+  const formLabels =
+    dialog?.kind === "form"
+      ? formRows(dialog.editing === undefined)
+      : dialog?.kind === "parameter-form"
+        ? parameterFormRows(dialog.editing === undefined)
+        : [];
   const formLabelWidth = Math.max(
     HEADER_LABEL.length,
     ...formLabels.map(({ label }) => label.length),
@@ -1008,7 +1159,11 @@ export function Dashboard({
           paddingX={1}
         >
           <Text>{colors.bold("Parameters")}</Text>
-          <Text>{highlighted(tabs, tabParts[panel.row])}</Text>
+          {choiceNames.length > 0 ? (
+            <Text>{highlighted(tabs, tabParts[panel.row])}</Text>
+          ) : (
+            <Text>{colors.dim(truncate("None yet: a adds one", choiceRoom))}</Text>
+          )}
           {shownValues.map((value) => (
             <Text key={value}>
               {value === chosenValue
@@ -1080,6 +1235,50 @@ export function Dashboard({
       {dialog?.kind === "confirm" && (
         <Text>{colors.bold(cut(`Remove ${dialog.name} from the config?`))}</Text>
       )}
+      {dialog?.kind === "parameter-confirm" && (
+        <Text>{colors.bold(cut(`Remove the parameter ${dialog.name} from the config?`))}</Text>
+      )}
+      {dialog?.kind === "parameter-form" && (
+        <Box
+          flexDirection="column"
+          width={formWidth}
+          borderStyle={unicode ? "single" : "classic"}
+          paddingX={1}
+        >
+          <Text>
+            {colors.bold(
+              truncate(
+                dialog.editing === undefined ? "Add a parameter" : `Edit ${dialog.editing}`,
+                formRoom,
+              ),
+            )}
+          </Text>
+          {parameterFormRows(dialog.editing === undefined).map(
+            ({ key, label, placeholder }, index) => (
+              <Text key={key}>
+                {key === "strategy"
+                  ? truncate(
+                      `${index === dialog.row ? marker : "  "}${label.padEnd(formLabelWidth)}  ${
+                        unicode ? `‹ ${dialog.values[key]} ›` : `< ${dialog.values[key]} >`
+                      }`,
+                      formRoom,
+                    )
+                  : formLine(index === dialog.row, label, dialog.values[key], placeholder)}
+              </Text>
+            ),
+          )}
+          {parameterExample(dialog.values, dialog.editing ?? dialog.values.name.trim()).map(
+            (line) => (
+              <Text key={line}>{colors.dim(truncate(line, formRoom))}</Text>
+            ),
+          )}
+          {parameterFormRows(dialog.editing === undefined)[dialog.row]?.key === "strategy" &&
+            dialog.problem === undefined && (
+              <Text>{colors.dim(truncate(KIND_HINT, formRoom))}</Text>
+            )}
+          {dialog.problem !== undefined && <Text>{colors.yellow(dialog.problem)}</Text>}
+        </Box>
+      )}
       {dialog?.kind === "form" && (
         <Box
           flexDirection="column"
@@ -1095,7 +1294,7 @@ export function Dashboard({
               ),
             )}
           </Text>
-          {formLabels.map(({ key, label, placeholder }, index) => (
+          {formRows(dialog.editing === undefined).map(({ key, label, placeholder }, index) => (
             <Text key={key}>
               {formLine(index === dialog.row, label, dialog.values[key], placeholder)}
             </Text>

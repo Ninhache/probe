@@ -132,6 +132,7 @@ const BINDINGS: readonly Binding[] = [
     action: "parameter",
     help: "Change parameter",
     drop: 1,
+    parameters: true,
   },
   {
     screens: ["choose"],
@@ -140,6 +141,33 @@ const BINDINGS: readonly Binding[] = [
     ascii: "jk",
     action: "value",
     help: "Choose its value",
+    parameters: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "a",
+    action: "add",
+    help: "Add a parameter",
+    drop: 3,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "e",
+    action: "edit",
+    help: "Edit the parameter",
+    drop: 2,
+    parameters: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "d",
+    action: "remove",
+    help: "Remove it",
+    drop: 2,
+    parameters: true,
   },
   {
     screens: ["choose"],
@@ -224,8 +252,8 @@ const BINDINGS: readonly Binding[] = [
 
 const SECTIONS: readonly Section[] = [
   "List",
-  "Panels",
   "Parameters",
+  "Panels",
   "Filter",
   "Add and edit",
   "Outside a text field",
@@ -288,6 +316,7 @@ export interface HelpLine {
 }
 
 const HELP_GAP = 3;
+const LEFT_SECTIONS = 2;
 
 function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
   const described = offered(grid).filter(({ help }) => help !== undefined);
@@ -309,10 +338,10 @@ export function helpLines(unicode: boolean, grid = false): HelpLine[] {
 }
 
 export function helpColumns(unicode: boolean, columns: number, grid = false): HelpLine[][] {
-  const [first, ...others] = SECTIONS;
+  // The list and the parameters it opens on the left: both columns then fit 24 lines.
   const sides = [
-    sectionLines([first as Section], unicode, grid),
-    sectionLines(others, unicode, grid),
+    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid),
+    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid),
   ];
   const widths = sides.map((side) => Math.max(...side.map(({ text }) => text.length)));
   const fits = (widths[0] as number) + HELP_GAP + (widths[1] as number) <= columns;

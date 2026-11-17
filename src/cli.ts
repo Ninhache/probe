@@ -17,6 +17,7 @@ import init, { ignoreLocalFiles, initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import open from "./commands/open";
+import { type ParameterWritten, writeParameter } from "./commands/parameter-writes";
 import rm from "./commands/rm";
 import { type ServiceWritten, writeService } from "./commands/service-writes";
 import { secondsToMs, stdoutTerminal } from "./commands/shared";
@@ -221,6 +222,20 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
       for (const [name, value] of written ? Object.entries(secrets) : [])
         failure = (await saveLocal(() => keepVariable(name, value))) ?? failure;
       return { failure, ...(written as ServiceWritten | null) };
+    },
+    onParameterWrite: async (write) => {
+      let written: ParameterWritten | null = null;
+      const failure = await saves.save(
+        `${PROBE_DIR}/${CONFIG_FILE}`,
+        async () => {
+          written = await writeParameter(paths, write);
+          return written !== null;
+        },
+        write.kind === "add"
+          ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
+          : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+      );
+      return { failure, ...(written as ParameterWritten | null) };
     },
   });
   await saves.idle();

@@ -92,8 +92,8 @@ describe("helpLines", () => {
 
     expect(headings.map(({ text }) => text)).toEqual([
       "List",
-      "Panels",
       "Parameters",
+      "Panels",
       "Filter",
       "Add and edit",
       "Outside a text field",
@@ -111,7 +111,11 @@ describe("helpLines", () => {
 describe("paletteEntries", () => {
   it("should offer every key of the list the help names, but moving and itself", () => {
     const offered = paletteEntries(true).map(({ keys, label }) => `  ${keys.padEnd(7)} ${label}`);
-    const [list = []] = helpColumns(true, 80);
+    const lines = helpLines(true);
+    const list = lines.slice(
+      0,
+      lines.findIndex(({ text }, index) => index > 0 && text === "Parameters"),
+    );
     const named = list
       .filter(({ heading, text }) => !heading && !/Move|Find a command/.test(text))
       .map(({ text }) => text);
@@ -160,7 +164,7 @@ describe("the key of the parameters", () => {
 });
 
 describe("helpColumns", () => {
-  it("should put the keys of the list on the left on 80 columns, in unicode and in ASCII", () => {
+  it("should put the keys of the list and the parameters on the left on 80 columns, in unicode and in ASCII", () => {
     for (const unicode of [true, false]) {
       const [left = [], right = []] = helpColumns(unicode, 80);
 

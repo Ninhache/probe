@@ -1,5 +1,6 @@
 import { render } from "ink";
 import { runChecks } from "../checkers/run";
+import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import type { ProbePaths } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
@@ -31,6 +32,9 @@ export interface DashboardState {
     write: ServiceWrite,
     secrets?: Secrets,
   ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
+  onParameterWrite?: (
+    write: ParameterWrite,
+  ) => Promise<{ config?: Config; problem?: ParameterProblem; failure?: string }>;
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentSource[];
@@ -106,6 +110,7 @@ export async function openDashboard(
   terminal: Terminal,
   {
     onServiceWrite,
+    onParameterWrite,
     variables: readVariables,
     variableSources,
     environments = [],
@@ -174,6 +179,15 @@ export async function openDashboard(
           const notes = [outcome.warning, written && (await unsetNote(write.name))];
           const warning = notes.filter(Boolean).join("\n") || undefined;
           return { ...outcome, warning, saved: written !== undefined };
+        })
+      }
+      parameterFields={(name) => config.parameters?.[name]}
+      onParameterWrite={
+        onParameterWrite &&
+        (async (write) => {
+          const { config: written, ...outcome } = await onParameterWrite(write);
+          if (written) config = written;
+          return { ...outcome, saved: written !== undefined };
         })
       }
       variables={tools}

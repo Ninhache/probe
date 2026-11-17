@@ -86,7 +86,8 @@ probe curl api --set tenant=globex
 ```
 
 - Without `--set`, a parameter takes its first value. That is what `make check` uses.
-- In the [dashboard](dashboard.md#parameters), `p` chooses the values, saved for the next start (since 0.21.0).
+- In the [dashboard](dashboard.md#parameters), `p` chooses the values, saved for the next start, and adds,
+  edits or removes the parameters of `config.yml` (since 0.21.0).
 - The other commands refuse `--set`.
 - A parameter or a value the config does not list is refused: exit code `2`, and the known ones are listed.
 - An [environment](environments.md) file has its own `parameters`: `probe check --env prod --set tenant=globex`
