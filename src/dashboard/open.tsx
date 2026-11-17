@@ -169,7 +169,8 @@ export async function openDashboard(
       variables={tools}
       environments={environments.map((source) => environmentColumn(source))}
     />,
-    { alternateScreen: true },
+    // Rewrites only the lines that changed: a key press sends ~0.5 kB instead of the whole screen.
+    { alternateScreen: true, incrementalRendering: true },
   );
   try {
     await app.waitUntilExit();
