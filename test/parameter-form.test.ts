@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_PARAMETER_FORM, nextKind, parameterExample } from "../src/dashboard/parameter-form";
+import {
+  addressChanges,
+  addressRows,
+  EMPTY_PARAMETER_FORM,
+  nextKind,
+  parameterExample,
+  withScheme,
+} from "../src/dashboard/parameter-form";
 
 describe("parameterExample", () => {
   const form = { ...EMPTY_PARAMETER_FORM, values: "globex, acme" };
@@ -34,7 +41,7 @@ describe("parameterExample", () => {
 
   it("should show the address a service lists for a value", () => {
     expect(parameterExample({ ...form, strategy: "url" }, "env")[1]).toBe(
-      "e.g. urls: { globex: globex.example.com }",
+      "e.g. urls: { globex: https://globex.example.com }",
     );
   });
 });
@@ -48,5 +55,38 @@ describe("nextKind", () => {
   it("should take the way a letter starts, and keep the current one for another letter", () => {
     expect(nextKind("query", "h")).toBe("header");
     expect(nextKind("query", "z")).toBe("query");
+  });
+});
+
+describe("withScheme", () => {
+  it.each([
+    ["localhost:3000", "http://localhost:3000"],
+    ["127.0.0.1:3000/health", "http://127.0.0.1:3000/health"],
+    ["https://example.com", "https://example.com"],
+    ["  ", ""],
+  ])("should make %j %j", (typed, written) => {
+    expect(withScheme(typed)).toBe(written);
+  });
+});
+
+describe("address lines", () => {
+  const URL_FORM = { name: "env", values: "dev, prod", strategy: "url", strategyName: "" };
+
+  it("should give a line per service and value only for a url parameter", () => {
+    expect(addressRows(URL_FORM, ["api", "db"])).toHaveLength(4);
+    expect(addressRows({ ...URL_FORM, strategy: "query" }, ["api"])).toEqual([]);
+  });
+
+  it("should send only the lines changed, with their scheme", () => {
+    const rows = addressRows(URL_FORM, ["api"]);
+    const initial = { api: { prod: "https://example.com" } };
+
+    const changes = addressChanges(
+      rows,
+      { api: { dev: "localhost:3001", prod: "https://example.com" } },
+      initial,
+    );
+
+    expect(changes).toEqual({ api: { dev: "http://localhost:3001" } });
   });
 });

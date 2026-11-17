@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { writeParameter } from "../src/commands/parameter-writes";
+import { type ParameterWrite, writeParameter } from "../src/commands/parameter-writes";
 import { loadConfig } from "../src/config/loader";
 import { tempProject } from "./helpers";
 
@@ -133,5 +133,69 @@ describe("writeParameter", () => {
     });
 
     expect(written).toBeNull();
+  });
+
+  describe("addresses", () => {
+    const ENV_CONFIG = [
+      "schemaVersion: 1",
+      "parameters:",
+      "  env: { values: [local, prod], strategy: { kind: url } }",
+      "services:",
+      "  # the backend",
+      "  api: { port: 3000, urls: { prod: 'https://example.com/health' } }",
+      "  db: { port: 5432 }",
+      "",
+    ].join("\n");
+    const ENV = { values: ["local", "prod"], strategy: { kind: "url" as const } };
+
+    it("should write the addresses with the parameter and keep the comments", async () => {
+      const paths = await tempProject(ENV_CONFIG);
+
+      const written = await writeParameter(paths, {
+        kind: "edit",
+        name: "env",
+        parameter: ENV,
+        addresses: { db: { prod: "https://db.example.com" }, api: { prod: "" } },
+      });
+
+      expect(written?.config?.services.db?.urls).toEqual({ prod: "https://db.example.com" });
+      expect(written?.config?.services.api?.urls).toBeUndefined();
+      expect(await readFile(paths.config, "utf8")).toContain("# the backend");
+    });
+
+    it("should write nothing and list the addresses of a removed value until confirmed", async () => {
+      const paths = await tempProject(ENV_CONFIG);
+      const change: ParameterWrite = {
+        kind: "edit",
+        name: "env",
+        parameter: { ...ENV, values: ["local"] },
+        addresses: {},
+      };
+
+      const asked = await writeParameter(paths, change);
+      expect(asked?.drops).toEqual(["api prod"]);
+      expect(await readFile(paths.config, "utf8")).toBe(ENV_CONFIG);
+
+      const written = await writeParameter(paths, { ...change, confirmed: true } as ParameterWrite);
+      expect(written?.config?.services.api?.urls).toBeUndefined();
+    });
+
+    it("should point at an address the schema refuses without repeating it", async () => {
+      const paths = await tempProject(ENV_CONFIG);
+
+      const written = await writeParameter(paths, {
+        kind: "edit",
+        name: "env",
+        parameter: ENV,
+        addresses: { db: { local: "https://user:hunter2@db.local" } },
+      });
+
+      expect(written?.problem).toMatchObject({
+        field: "address",
+        address: { service: "db", value: "local" },
+      });
+      expect(written?.problem?.message).not.toContain("hunter2");
+      expect(await readFile(paths.config, "utf8")).toBe(ENV_CONFIG);
+    });
   });
 });

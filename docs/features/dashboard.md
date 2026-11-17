@@ -112,7 +112,16 @@ tenant ‹ globex ›   version ‹ v1 ›
   - the name;
   - the values, separated by commas: `acme, globex`;
   - how it is sent, chosen with `←` `→` or its first letter: `query` (the default), `path`, `header` or `url`;
-  - for a query or a header only, its name. A query left without one takes the name of the parameter.
+  - for a query or a header only, its name. A query left without one takes the name of the parameter;
+  - for `url` only, the address of each service for each value, under `Addresses`. A line left empty keeps the
+    address of the service. `localhost:3001` is written `http://localhost:3001`.
+
+    ```
+    Addresses (empty: the service address)
+      api   local
+            prod   https://example.com/health
+    › db    local  localhost:3001_
+    ```
 
   Under the fields, a line says what the chosen way does, with an example on the first value:
 
@@ -124,9 +133,13 @@ tenant ‹ globex ›   version ‹ v1 ›
   | `url`    | the address each service lists under `urls:` for `acme` |
 
   It writes `.probe/config.yml` and keeps your comments. What the config would refuse is shown in the form and
-  nothing is written: two parameters on the same query, a header that can carry a secret, or a value that a
-  service still lists under `urls`. A parameter that only an [environment](#several-environments) declares is
+  nothing is written: two parameters on the same query, a header that can carry a secret, an address that is
+  not an `http://` or `https://` URL. A parameter that only an [environment](#several-environments) declares is
   changed in its file.
+
+  A value removed from a `url` parameter takes its addresses with it: `Enter` first asks
+  `Remove 2 addresses: api prod, db prod?`. `y` writes, `n` or `Esc` goes back to the form. Changing how a
+  parameter is sent, or removing it with `d`, is refused while services list addresses for it.
 - The next check, `u`, `c` and the detail use the chosen values.
 - The parameters do not depend on each other: each one is chosen on its own, whatever its name.
 - The choice is saved in `.probe/local.yml` and comes back at the next start. A value the config no longer

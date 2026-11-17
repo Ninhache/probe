@@ -10,7 +10,7 @@ import {
   type ParameterChoices,
   type Selection,
 } from "../config/parameters";
-import type { Parameter } from "../config/schema";
+import { type Parameter, urlProblem } from "../config/schema";
 import {
   CONFIG_FILE,
   LOCAL_ENVIRONMENT,
@@ -51,6 +51,11 @@ import {
 } from "./keymap";
 import { type Keystroke, splitKeys, typedCharacter } from "./keys";
 import {
+  type Addresses,
+  type AddressRow,
+  addressChanges,
+  addressOf,
+  addressRows,
   EMPTY_PARAMETER_FORM,
   formParameter,
   KIND_HINT,
@@ -61,6 +66,8 @@ import {
   parameterFormRow,
   parameterFormRows,
   parameterFormValues,
+  withAddress,
+  withScheme,
 } from "./parameter-form";
 import type { Saved } from "./saves";
 import { type DashboardSettings, SETTING_ROWS, stepChoice, stepServiceTimeout } from "./settings";
@@ -99,6 +106,8 @@ export interface DashboardProps {
   /** A parameter of the local config, to edit; undefined when only another environment declares it. */
   parameterFields?: (name: string) => Parameter | undefined;
   onParameterWrite?: (write: ParameterWrite) => Promise<ParameterWriteOutcome>;
+  /** The services of the local config and their address for each value of the `url` parameter. */
+  addresses?: () => Addresses;
   variables?: VariableTools;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentColumn[];
@@ -132,6 +141,7 @@ export interface ParameterWriteOutcome {
   saved: boolean;
   problem?: ParameterProblem;
   failure?: string;
+  drops?: string[];
 }
 
 export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
@@ -157,12 +167,16 @@ interface ParameterForm {
   editing?: string;
   row: number;
   values: ParameterFormValues;
+  /** Kept while the way of sending or the values change: going back to `url` gives them again. */
+  addresses: Addresses;
+  initial: Addresses;
   problem?: string;
 }
 
 type Dialog =
   | { kind: "confirm"; name: string }
   | { kind: "parameter-confirm"; name: string }
+  | { kind: "address-drops"; form: ParameterForm; drops: string[] }
   | ParameterForm
   | Form
   | SecretStep
@@ -203,6 +217,9 @@ const DETAIL_WIDTH = 60;
 // What the screen keeps around the detail when a terminal does not tell its height.
 const DEFAULT_ROWS = 24;
 const FORM_WIDTH = 48;
+// The dashboard lines, the frame and the fields of the form around the address lines.
+const ADDRESS_ROOM_TAKEN = 14;
+const ADDRESS_ROOM_MIN = 3;
 const CURSOR = "_";
 const PANEL_FRAME_WIDTH = 4;
 
@@ -246,6 +263,7 @@ export function Dashboard({
   serviceFields,
   onServiceWrite,
   parameterFields,
+  addresses,
   onParameterWrite,
   variables,
   onVariableWrite,
@@ -620,22 +638,48 @@ export function Dashboard({
     });
   };
 
-  const submitParameter = (form: ParameterForm) => {
+  const services = () => Object.keys(addresses?.() ?? {});
+
+  const submitParameter = (form: ParameterForm, confirmed = false) => {
     const rows = parameterFormRows(form.editing === undefined, form.values.strategy);
+    const lines = addressRows(form.values, services());
     const taken = Object.keys(parameters?.() ?? NO_CHOICES);
     const problem = parameterFormProblem(rows, form.values, taken);
     if (problem) return setDialog({ ...form, row: problem.row, problem: problem.message });
+    const wrong = lines.findIndex((line) => {
+      const address = withScheme(addressOf(form.addresses, line));
+      return address !== "" && urlProblem(address) !== undefined;
+    });
+    if (wrong >= 0) {
+      const line = lines[wrong] as AddressRow;
+      const message = `${line.service} ${line.value}: expects ${urlProblem(withScheme(addressOf(form.addresses, line)))}`;
+      return setDialog({ ...form, row: rows.length + wrong, problem: message });
+    }
     const name = form.editing ?? form.values.name;
     const parameter = formParameter(form.values, name);
+    const change = {
+      name,
+      parameter,
+      ...(confirmed ? { confirmed } : {}),
+      ...(parameter.strategy.kind === "url"
+        ? { addresses: addressChanges(lines, form.addresses, form.initial) }
+        : {}),
+    };
     looking.current = true;
     void onParameterWrite?.(
-      form.editing === undefined
-        ? { kind: "add", name, parameter }
-        : { kind: "edit", name, parameter },
+      form.editing === undefined ? { kind: "add", ...change } : { kind: "edit", ...change },
     ).then((outcome) => {
       looking.current = false;
+      if (outcome.drops) return setDialog({ kind: "address-drops", form, drops: outcome.drops });
       if (outcome.problem) {
-        const row = parameterFormRow(rows, outcome.problem.field);
+        const { field, address } = outcome.problem;
+        const at = lines.findIndex(
+          ({ service, value }) => service === address?.service && value === address?.value,
+        );
+        const row =
+          field === "address" && at >= 0
+            ? rows.length + at
+            : parameterFormRow(rows, field === "address" ? "values" : field);
         return setDialog({ ...form, row, problem: outcome.problem.message });
       }
       setDialog(null);
@@ -648,13 +692,28 @@ export function Dashboard({
     if (looking.current) return;
     const { key } = keystroke;
     const rows = parameterFormRows(form.editing === undefined, form.values.strategy);
+    const lines = addressRows(form.values, services());
     const field = rows[form.row]?.key;
+    const line = lines[form.row - rows.length];
     const typed = typedCharacter(keystroke);
-    const value = field ? form.values[field] : "";
-    const edit = (next: string) =>
-      field &&
-      setDialog({ ...form, values: { ...form.values, [field]: next }, problem: undefined });
-    const lastRow = rows.length - 1;
+    const value = field ? form.values[field] : line ? addressOf(form.addresses, line) : "";
+    const edit = (next: string) => {
+      if (field) {
+        const values = { ...form.values, [field]: next };
+        // Fewer lines once a value goes: the selected row stays on the form.
+        const count = rows.length + addressRows(values, services()).length;
+        const changedRows = parameterFormRows(form.editing === undefined, values.strategy).length;
+        const row = Math.min(form.row, Math.max(changedRows, count) - 1);
+        setDialog({ ...form, values, row, problem: undefined });
+      } else if (line)
+        setDialog({
+          ...form,
+          addresses: withAddress(form.addresses, line, next),
+          problem: undefined,
+        });
+    };
+    const total = rows.length + lines.length;
+    const lastRow = total - 1;
     // The way of sending is chosen, not typed: four words, and a typo would only be refused.
     const choosing = field === "strategy";
     if (choosing && (key === "left" || key === "right" || typed))
@@ -662,7 +721,7 @@ export function Dashboard({
     else if (key === "escape") setDialog(null);
     else if (key === "up") setDialog({ ...form, row: Math.max(0, form.row - 1) });
     else if (key === "down") setDialog({ ...form, row: Math.min(lastRow, form.row + 1) });
-    else if (key === "tab") setDialog({ ...form, row: (form.row + 1) % rows.length });
+    else if (key === "tab") setDialog({ ...form, row: (form.row + 1) % total });
     else if (choosing && key !== "return") return;
     else if (key === "backspace") edit(value.slice(0, -1));
     else if (key === "clear") edit("");
@@ -690,8 +749,15 @@ export function Dashboard({
 
   const editParameters = (input: string, name: string | undefined) => {
     if (!onParameterWrite) return;
+    const known = addresses?.() ?? {};
     if (input === "a")
-      return setDialog({ kind: "parameter-form", row: 0, values: EMPTY_PARAMETER_FORM });
+      return setDialog({
+        kind: "parameter-form",
+        row: 0,
+        values: EMPTY_PARAMETER_FORM,
+        addresses: known,
+        initial: known,
+      });
     if (name === undefined) return;
     const parameter = parameterFields?.(name);
     if (!parameter) return setNotice(declaredElsewhere(name));
@@ -701,6 +767,8 @@ export function Dashboard({
         editing: name,
         row: 0,
         values: parameterFormValues(parameter),
+        addresses: known,
+        initial: known,
       });
     else setDialog({ kind: "parameter-confirm", name });
   };
@@ -804,7 +872,10 @@ export function Dashboard({
         : undefined;
     if (dialog?.kind === "form") typeInForm(dialog, keystroke);
     else if (dialog?.kind === "parameter-form") typeInParameterForm(dialog, keystroke);
-    else if (dialog?.kind === "parameter-confirm") {
+    else if (dialog?.kind === "address-drops") {
+      if (input === "y") submitParameter(dialog.form, true);
+      else if (input === "n" || keystroke.key === "escape") setDialog(dialog.form);
+    } else if (dialog?.kind === "parameter-confirm") {
       setDialog(null);
       if (input === "y") removeParameter(dialog.name);
     } else if (dialog?.kind === "secret") typeSecret(dialog, keystroke);
@@ -885,7 +956,50 @@ export function Dashboard({
   const { unicode } = terminal;
   const dot = unicode ? "·" : "-";
   const marker = unicode ? "› " : "> ";
+  const more = unicode ? "…" : "...";
   const cut = (text: string) => truncate(text, Math.max(1, columns));
+
+  // A line per service and value: only the lines around the selected one fit the window.
+  const addressSection = (form: ParameterForm) => {
+    const rows = parameterFormRows(form.editing === undefined, form.values.strategy);
+    const lines = addressRows(form.values, services());
+    if (lines.length === 0) return null;
+    const room = Math.max(
+      ADDRESS_ROOM_MIN,
+      (windowRows || DEFAULT_ROWS) - ADDRESS_ROOM_TAKEN - rows.length,
+    );
+    const selected = form.row - rows.length;
+    const first = Math.max(0, Math.min(selected - room + 1, lines.length - room));
+    const shown = lines.slice(Math.max(0, first), Math.max(0, first) + room);
+    const serviceWidth = Math.max(...lines.map(({ service }) => service.length));
+    const valueWidth = Math.max(...lines.map(({ value }) => value.length));
+    const width = serviceWidth + 1 + valueWidth;
+    const above = Math.max(0, first);
+    const below = lines.length - above - shown.length;
+    return (
+      <>
+        <Text>{truncate("Addresses (empty: the service address)", formRoom)}</Text>
+        {above > 0 && <Text>{colors.dim(`  ${more} ${above} above`)}</Text>}
+        {shown.map((line, index) => {
+          const at = above + index;
+          const repeated = at > 0 && lines[at - 1]?.service === line.service;
+          const label = `${(repeated ? "" : line.service).padEnd(serviceWidth)} ${line.value.padEnd(valueWidth)}`;
+          return (
+            <Text key={`${line.service} ${line.value}`}>
+              {formLine(
+                form.row === rows.length + at,
+                label,
+                addressOf(form.addresses, line),
+                "",
+                width,
+              )}
+            </Text>
+          );
+        })}
+        {below > 0 && <Text>{colors.dim(`  ${more} ${below} more`)}</Text>}
+      </>
+    );
+  };
 
   if (help) {
     const [left = [], right = []] = helpColumns(unicode, columns, grid);
@@ -1106,8 +1220,14 @@ export function Dashboard({
     ...formLabels.map(({ label }) => label.length),
   );
   const formRoom = Math.max(1, formWidth - PANEL_FRAME_WIDTH);
-  const formLine = (active: boolean, label: string, value: string, placeholder: string) => {
-    const prefix = `${active ? marker : "  "}${label.padEnd(formLabelWidth)}  `;
+  const formLine = (
+    active: boolean,
+    label: string,
+    value: string,
+    placeholder: string,
+    labelWidth = formLabelWidth,
+  ) => {
+    const prefix = `${active ? marker : "  "}${label.padEnd(labelWidth)}  `;
     const typed = active
       ? `${prefix}${ending(value, Math.max(1, formRoom - prefix.length - CURSOR.length))}${CURSOR}`
       : truncate(`${prefix}${value}`, formRoom);
@@ -1238,6 +1358,20 @@ export function Dashboard({
       {dialog?.kind === "parameter-confirm" && (
         <Text>{colors.bold(cut(`Remove the parameter ${dialog.name} from the config?`))}</Text>
       )}
+      {dialog?.kind === "address-drops" && (
+        <>
+          <Text>
+            {colors.bold(
+              cut(
+                `Remove ${dialog.drops.length} ${dialog.drops.length === 1 ? "address" : "addresses"}: ${dialog.drops.join(", ")}?`,
+              ),
+            )}
+          </Text>
+          <Text>
+            {colors.dim(cut("Their values are no longer listed. n goes back to the form."))}
+          </Text>
+        </>
+      )}
       {dialog?.kind === "parameter-form" && (
         <Box
           flexDirection="column"
@@ -1267,6 +1401,7 @@ export function Dashboard({
               </Text>
             ),
           )}
+          {addressSection(dialog)}
           {parameterExample(dialog.values, dialog.editing ?? dialog.values.name.trim()).map(
             (line) => (
               <Text key={line}>{colors.dim(truncate(line, formRoom))}</Text>

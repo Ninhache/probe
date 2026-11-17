@@ -1,11 +1,14 @@
-import type { ParameterField } from "../commands/parameter-writes";
+import type { AddressChanges, ParameterField } from "../commands/parameter-writes";
 import { PARAMETER_VALUE_PATTERN, type Parameter, VALUE_EXPECTED } from "../config/schema";
 import { nameProblem } from "../config/service-input";
 
-export type ParameterFormValues = Readonly<Record<ParameterField, string>>;
+// An address has its own lines, under the fields.
+type FormField = Exclude<ParameterField, "address">;
+
+export type ParameterFormValues = Readonly<Record<FormField, string>>;
 
 export interface ParameterFormRow {
-  key: ParameterField;
+  key: FormField;
   label: string;
   placeholder: string;
 }
@@ -86,7 +89,7 @@ export function parameterFormProblem(
 ): { row: number; message: string } | undefined {
   const kind = kindOf(values.strategy);
   const name = values.strategyName.trim();
-  const problems: Record<ParameterField, () => string | undefined> = {
+  const problems: Record<FormField, () => string | undefined> = {
     name: () => nameProblem(values.name, taken),
     values: () => valuesProblem(values.values),
     strategy: () => (kind ? undefined : `One of ${KINDS.join(", ")}`),
@@ -130,14 +133,68 @@ export function parameterExample(values: ParameterFormValues, parameter: string)
     query: `${EXAMPLE_URL}?${name || parameter || "tenant"}=${encodeURIComponent(value)}`,
     path: EXAMPLE_URL.replace("/health", `/${encodeURIComponent(value)}/health`),
     header: `${name || "X-Tenant"}: ${value}`,
-    url: `urls: { ${value}: ${value}.example.com }`,
+    url: `urls: { ${value}: https://${value}.example.com }`,
   }[kind];
   return [SAYS[kind], `e.g. ${example}`];
 }
 
-export function parameterFormRow(rows: readonly ParameterFormRow[], field: ParameterField): number {
+export function parameterFormRow(rows: readonly ParameterFormRow[], field: FormField): number {
   return Math.max(
     0,
     rows.findIndex(({ key }) => key === field),
   );
+}
+
+/** Per service, its address for each value: `{ api: { dev: "https://dev.example.com" } }`. */
+export type Addresses = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+export interface AddressRow {
+  service: string;
+  value: string;
+}
+
+/** One line per service and value, only when the parameter is sent by `url`. */
+export function addressRows(
+  values: ParameterFormValues,
+  services: readonly string[],
+): AddressRow[] {
+  if (kindOf(values.strategy) !== "url") return [];
+  const listed = [...new Set(valuesOf(values))];
+  return services.flatMap((service) => listed.map((value) => ({ service, value })));
+}
+
+const valuesOf = (values: ParameterFormValues) => listed(values.values);
+
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/** `localhost:3000` is read as a scheme by `new URL`: the text decides, not the parser. */
+export const withScheme = (address: string) => {
+  const trimmed = address.trim();
+  return trimmed === "" || SCHEME.test(trimmed) ? trimmed : `http://${trimmed}`;
+};
+
+export const addressOf = (addresses: Addresses, { service, value }: AddressRow) =>
+  addresses[service]?.[value] ?? "";
+
+/** What the form changed on the lines it shows; the rest of the file is left to the write. */
+export function addressChanges(
+  rows: readonly AddressRow[],
+  typed: Addresses,
+  initial: Addresses,
+): AddressChanges {
+  const changes: Record<string, Record<string, string>> = {};
+  for (const row of rows) {
+    const address = withScheme(addressOf(typed, row));
+    if (address === addressOf(initial, row)) continue;
+    changes[row.service] = { ...changes[row.service], [row.value]: address };
+  }
+  return changes;
+}
+
+export function withAddress(
+  addresses: Addresses,
+  { service, value }: AddressRow,
+  address: string,
+): Addresses {
+  return { ...addresses, [service]: { ...addresses[service], [value]: address } };
 }

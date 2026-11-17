@@ -182,6 +182,11 @@ export async function openDashboard(
         })
       }
       parameterFields={(name) => config.parameters?.[name]}
+      addresses={() =>
+        Object.fromEntries(
+          Object.entries(config.services).map(([name, service]) => [name, { ...service.urls }]),
+        )
+      }
       onParameterWrite={
         onParameterWrite &&
         (async (write) => {

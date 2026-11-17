@@ -456,3 +456,105 @@ describe("the actions of a service with parameters", () => {
     expect(opened).toEqual(["https://example.com/health", "http://localhost:3000/health"]);
   });
 });
+
+describe("dashboard parameter addresses", () => {
+  const DOWN = "\u001B[B";
+  const ENV: Parameter = { values: ["dev", "prod"], strategy: { kind: "url" } };
+  const ADDRESSES = { api: { prod: "https://example.com/health" }, db: {} };
+
+  function openEnv(onParameterWrite: NonNullable<DashboardProps["onParameterWrite"]>) {
+    return open({
+      parameters: () => ({ env: ["dev", "prod"] }),
+      parameterFields: () => ENV,
+      addresses: () => ADDRESSES,
+      onParameterWrite,
+    });
+  }
+
+  it("should list a line per service and value when the parameter is sent by url", async () => {
+    const { lastFrame, stdin } = openEnv(vi.fn(async () => ({ saved: true })));
+    await tick();
+
+    stdin.write("pe");
+
+    await waitFor(() => expect(lastFrame()).toContain("Addresses (empty: the service address)"));
+    expect(lastFrame()).toContain("api dev");
+    expect(lastFrame()).toContain("    prod  https://example.com/health");
+    expect(lastFrame()).toContain("db  dev");
+  });
+
+  it("should send the addresses typed, with http:// when none is given", async () => {
+    const onParameterWrite = vi.fn<NonNullable<DashboardProps["onParameterWrite"]>>(async () => ({
+      saved: true,
+    }));
+    const { lastFrame, stdin } = openEnv(onParameterWrite);
+    await tick();
+    stdin.write("pe");
+    await waitFor(() => expect(lastFrame()).toContain("Addresses"));
+
+    stdin.write(`${DOWN}${DOWN}localhost:3001\r`);
+
+    await waitFor(() => expect(lastFrame()).toContain("Saved env"));
+    expect(onParameterWrite.mock.lastCall?.[0]).toMatchObject({
+      kind: "edit",
+      addresses: { api: { dev: "http://localhost:3001" } },
+    });
+  });
+
+  it("should point at an address the config would refuse", async () => {
+    const onParameterWrite = vi.fn<NonNullable<DashboardProps["onParameterWrite"]>>(async () => ({
+      saved: true,
+    }));
+    const { lastFrame, stdin } = openEnv(onParameterWrite);
+    await tick();
+    stdin.write("pe");
+    await waitFor(() => expect(lastFrame()).toContain("Addresses"));
+
+    stdin.write(`${DOWN}${DOWN}ftp://example.com\r`);
+
+    await waitFor(() =>
+      expect(lastFrame()).toContain("api dev: expects an http:// or https:// URL"),
+    );
+    expect(onParameterWrite).not.toHaveBeenCalled();
+  });
+
+  it("should write the addresses of a removed value only once confirmed", async () => {
+    const onParameterWrite = vi.fn<NonNullable<DashboardProps["onParameterWrite"]>>(
+      async (write) =>
+        write.kind !== "remove" && !write.confirmed
+          ? { saved: false, drops: ["api prod"] }
+          : { saved: true },
+    );
+    const { lastFrame, stdin } = openEnv(onParameterWrite);
+    await tick();
+    stdin.write("pe");
+    await waitFor(() => expect(lastFrame()).toContain("Addresses"));
+
+    stdin.write("\u0015dev\r");
+    await waitFor(() => expect(lastFrame()).toContain("Remove 1 address: api prod?"));
+    stdin.write("n");
+    await waitFor(() => expect(lastFrame()).toContain("Edit env"));
+    expect(lastFrame()).toContain("› Values   dev");
+    stdin.write("\r");
+    await waitFor(() => expect(lastFrame()).toContain("Remove 1 address"));
+    stdin.write("y");
+
+    await waitFor(() => expect(lastFrame()).toContain("Saved env"));
+    expect(onParameterWrite.mock.lastCall?.[0]).toMatchObject({ confirmed: true });
+  });
+
+  it("should keep the addresses typed when the way of sending changes and comes back", async () => {
+    const { lastFrame, stdin } = openEnv(vi.fn(async () => ({ saved: true })));
+    await tick();
+    stdin.write("pe");
+    await waitFor(() => expect(lastFrame()).toContain("Addresses"));
+    stdin.write(`${DOWN}${DOWN}dev.example.com`);
+    await waitFor(() => expect(lastFrame()).toContain("dev.example.com"));
+
+    stdin.write("\u001B[Aq");
+    await waitFor(() => expect(lastFrame()).not.toContain("Addresses"));
+    stdin.write("u");
+
+    await waitFor(() => expect(lastFrame()).toContain("dev.example.com"));
+  });
+});
