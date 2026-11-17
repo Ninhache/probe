@@ -32,3 +32,22 @@ export interface Checker {
   type: string;
   check(name: string, service: Service, context: CheckContext): Promise<CheckResult>;
 }
+
+export interface CopiedCommand {
+  command: string;
+  /** What the command needs from the shell that runs it. */
+  note?: string;
+}
+
+/** A kind of service: how it is checked, and what the lists, `u` and `c` make of it. */
+export interface ServiceType extends Checker {
+  /** The address lists and reports show. */
+  target(service: Service): string;
+  /** What `u` and `probe open` open: a type without one has nothing to open. */
+  open?(service: Service): string;
+  /** What `c` and `probe curl` give: a type without one has no command. */
+  copy?(service: Service, env: NodeJS.ProcessEnv): CopiedCommand;
+}
+
+/** The type of each service: the registry by default, another one in tests. */
+export type ServiceTypes = (service: Service) => ServiceType;

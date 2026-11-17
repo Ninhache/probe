@@ -1,14 +1,24 @@
+import type { Service } from "../config/schema";
+import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { ProbeError } from "../errors";
 import { httpChecker } from "./http";
-import type { Checker } from "./types";
+import type { ServiceType, ServiceTypes } from "./types";
 
-const checkers = new Map<string, Checker>([httpChecker].map((checker) => [checker.type, checker]));
+const types = new Map<string, ServiceType>([httpChecker].map((type) => [type.type, type]));
 
-export function getChecker(type: string): Checker {
-  const checker = checkers.get(type);
-  if (!checker) {
-    const known = [...checkers.keys()].join(", ");
+export function getServiceType(type: string): ServiceType {
+  const found = types.get(type);
+  if (!found) {
+    const known = [...types.keys()].join(", ");
     throw new ProbeError("CHECKER_UNKNOWN", `unknown service type "${type}". Known: ${known}.`);
   }
-  return checker;
+  return found;
 }
+
+// Schema v1 has no `type` field; a later schema adds it.
+export const typeName = (service: Service): string =>
+  (service as { type?: string }).type ?? DEFAULT_CHECKER_TYPE;
+
+export const serviceType: ServiceTypes = (service) => getServiceType(typeName(service));
+
+export const targetOf = (service: Service): string => serviceType(service).target(service);

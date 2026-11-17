@@ -1,4 +1,4 @@
-import { targetUrl } from "../checkers/http";
+import { targetOf } from "../checkers/registry";
 import type { LoadedConfig } from "../config/loader";
 import { serviceSchemaV1 } from "../config/schema";
 import { detectServices, systemDeps } from "../detect";
@@ -9,7 +9,7 @@ export async function offerDetected(loaded: LoadedConfig): Promise<string[] | nu
   const services = rawServices(loaded);
   const candidates = await detectServices(loaded.paths.root, services, systemDeps(process.env));
   if (candidates.length === 0) return [];
-  const urls = candidates.map(({ service }) => targetUrl(serviceSchemaV1.parse(service)));
+  const urls = candidates.map(({ service }) => targetOf(serviceSchemaV1.parse(service)));
   const nameWidth = Math.max(...candidates.map(({ name }) => name.length));
   const urlWidth = Math.max(...urls.map((url) => url.length));
   // The source is part of the label: a hint shows on the line under the cursor only.

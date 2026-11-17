@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
-import { curlCommand, curlNote } from "../checkers/http";
+import { serviceType } from "../checkers/registry";
 import { applySelection } from "../config/parameters";
+import { ProbeError } from "../errors";
 import { ENVIRONMENT_ARG, namedService, openProject, SET_ARG, selectionFrom } from "./shared";
 
 export default defineCommand({
@@ -14,9 +15,11 @@ export default defineCommand({
     const { config } = await openProject(args.env);
     const selected = applySelection(config, selectionFrom(config, rawArgs));
     const service = namedService(selected, args.name);
-    console.log(curlCommand(service));
+    const { copy } = serviceType(service);
+    if (!copy) throw new ProbeError("USAGE", `${args.name} is not requested with curl.`);
+    const { command, note } = copy(service, process.env);
+    console.log(command);
     // On stderr: `probe curl api | sh` must still run the command alone.
-    const note = curlNote(service, process.env);
     if (note) console.error(`probe: ${note}`);
   },
 });

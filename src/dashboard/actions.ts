@@ -1,4 +1,5 @@
-import { curlCommand, curlNote, targetUrl } from "../checkers/http";
+import { serviceType } from "../checkers/registry";
+import type { ServiceTypes } from "../checkers/types";
 import { clipboardTools, copyText } from "../clipboard";
 import type { Selection } from "../config/parameters";
 import type { Config } from "../config/schema";
@@ -14,6 +15,7 @@ export interface ActionDeps {
   openUrl: (url: string) => Promise<boolean>;
   copyText: (text: string) => Promise<boolean>;
   notify: (title: string, text: string) => Promise<boolean>;
+  types?: ServiceTypes;
 }
 
 const system = (): ActionDeps => ({
@@ -34,16 +36,19 @@ export function serviceActions(
     async onOpen(name, selection) {
       const found = service(name, selection);
       if (!found) return gone(name);
-      const url = targetUrl(found);
+      const { open } = (deps.types ?? serviceType)(found);
+      if (!open) return `${name} has no address to open`;
+      const url = open(found);
       if (await deps.openUrl(url)) return `Opened ${url}`;
       return `${openerCommand(deps.platform)} not found. The URL:\n${url}`;
     },
     async onCopy(name, timeout, selection) {
       const found = service(name, selection);
       if (!found) return gone(name);
-      const command = curlCommand({ ...found, timeout });
+      const { copy } = (deps.types ?? serviceType)(found);
+      if (!copy) return `${name} has no command to copy`;
+      const { command, note } = copy({ ...found, timeout }, deps.env);
       if (await deps.copyText(command)) {
-        const note = curlNote(found, deps.env);
         return note ? `Copied: ${command}\n${note}` : `Copied: ${command}`;
       }
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);

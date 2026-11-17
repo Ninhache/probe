@@ -23,7 +23,7 @@ import {
 } from "./diagnosis";
 import { describeResponse, type ResponseDetail } from "./response";
 import { type SystemTrust, systemTrust } from "./system-ca";
-import type { CheckContext, Checker, CheckResult } from "./types";
+import type { CheckContext, CheckResult, ServiceType } from "./types";
 
 export function targetUrl(service: Service): string {
   if (service.url !== undefined) return service.url;
@@ -237,9 +237,12 @@ async function request(
   }
 }
 
-export function createHttpChecker(trust: SystemTrust = systemTrust): Checker {
+export function createHttpChecker(trust: SystemTrust = systemTrust): ServiceType {
   return {
     type: "http",
+    target: targetUrl,
+    open: targetUrl,
+    copy: (service, env) => ({ command: curlCommand(service), note: curlNote(service, env) }),
     async check(name, service, context) {
       const firstTry = !trust.tried;
       const first = await request(name, service, context);

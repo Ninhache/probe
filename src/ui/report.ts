@@ -1,4 +1,4 @@
-import { targetUrl } from "../checkers/http";
+import { targetOf } from "../checkers/registry";
 import type { CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
 import { CONTAINS_SHOWN_CHARACTERS } from "../constants";
@@ -70,7 +70,7 @@ export function formatServices(
   const colors = createColors(terminal.color);
   const rows = Object.entries(config.services).map(([name, service]) => ({
     name,
-    url: targetUrl(service),
+    url: targetOf(service),
     notes:
       (service.method === undefined ? "" : `${GAP}${service.method}`) +
       (service.expect === undefined ? "" : `${GAP}expect ${service.expect}`) +
