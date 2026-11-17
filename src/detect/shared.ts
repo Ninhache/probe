@@ -11,12 +11,23 @@ const NOT_HTTP_PORTS = [
 
 export const isHttpPort = (port: number) => !NOT_HTTP_PORTS.includes(port);
 
+const urlAddress = (url: string) => {
+  const { hostname, port, protocol } = new URL(url);
+  return `${hostname}:${port || (protocol === "https:" ? 443 : 80)}`;
+};
+
 export function address(service: RawConfig): string {
-  if (typeof service.url === "string" && URL.canParse(service.url)) {
-    const { hostname, port, protocol } = new URL(service.url);
-    return `${hostname}:${port || (protocol === "https:" ? 443 : 80)}`;
-  }
+  if (typeof service.url === "string" && URL.canParse(service.url)) return urlAddress(service.url);
   return `${service.host ?? DEFAULT_HOST}:${service.port}`;
+}
+
+/** Every address a service in the file is checked at: its own, then one per value under `urls:`. */
+export function knownAddresses(service: RawConfig): string[] {
+  const urls = Object.values((service.urls ?? {}) as Record<string, unknown>).filter(
+    (url): url is string => typeof url === "string" && URL.canParse(url),
+  );
+  const own = service.url !== undefined || service.port !== undefined ? [address(service)] : [];
+  return [...own, ...urls.map(urlAddress)];
 }
 
 export function serviceName(text: string): string {

@@ -121,6 +121,18 @@ export const serviceShapeV1 = serviceObjectV1.shape;
 
 const ADDRESS_KEYS = ["host", "port", "path"] as const;
 
+// Services that take their address only from `urls:`: their host, port and path are read from it,
+// and the config checks that every value of the parameter has one.
+const addressless = new WeakSet<Service>();
+
+/** Whether the file gives the service an address of its own, `url` or `port`, beyond `urls:`. */
+export const declaresAddress = (service: Service) => !addressless.has(service);
+
+const firstAddress = (urls: Record<string, string> | undefined) =>
+  Object.values(urls ?? {})
+    .map(parsedUrl)
+    .find((parsed) => parsed !== undefined);
+
 export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service => {
   const { url, host, port, path, ...rest } = service;
   if (service.method === "HEAD" && service.contains !== undefined) {
@@ -133,6 +145,18 @@ export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service
     return z.NEVER;
   }
   if (url === undefined) {
+    const fromUrls = port === undefined && host === undefined && path === undefined;
+    const first = fromUrls ? firstAddress(service.urls) : undefined;
+    if (first) {
+      const resolved: Service = {
+        host: first.hostname,
+        port: Number(first.port) || DEFAULT_PORTS[first.protocol as keyof typeof DEFAULT_PORTS],
+        path: first.pathname + first.search,
+        ...rest,
+      };
+      addressless.add(resolved);
+      return resolved;
+    }
     if (port === undefined) {
       ctx.issues.push({
         code: "custom",
@@ -252,7 +276,19 @@ export const configSchemaV1 = z
     const values = Object.values(config.parameters ?? {}).find(
       ({ strategy }) => strategy.kind === "url",
     )?.values;
-    for (const [name, { urls }] of Object.entries(config.services)) {
+    for (const [name, service] of Object.entries(config.services)) {
+      const { urls } = service;
+      if (!declaresAddress(service)) {
+        for (const value of values ?? []) {
+          if (urls?.[value] !== undefined) continue;
+          ctx.issues.push({
+            code: "custom",
+            message: `${value} has no address, and ${name} has no port or url of its own`,
+            input: undefined,
+            path: ["services", name, "urls", value],
+          });
+        }
+      }
       for (const value of Object.keys(urls ?? {})) {
         if (values?.includes(value)) continue;
         ctx.issues.push({

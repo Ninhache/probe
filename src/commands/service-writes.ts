@@ -2,13 +2,12 @@ import { isDeepStrictEqual } from "node:util";
 import type { ProbePaths } from "../config/discovery";
 import { loadConfig } from "../config/loader";
 import type { RawConfig } from "../config/migrations";
-import { type Config, DEFAULT_METHOD, type Service } from "../config/schema";
+import { type Config, DEFAULT_METHOD, declaresAddress, type Service } from "../config/schema";
 import { rawServices, writeServices } from "./shared";
 
-export type ServiceFields = Pick<
-  Service,
-  "url" | "host" | "port" | "path" | "expect" | "method" | "headers"
->;
+/** No address at all: the service takes it from `urls:`, one per value of the `url` parameter. */
+export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers"> &
+  Partial<Pick<Service, "host" | "port" | "path">>;
 
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */
 export type ServiceUrls = Readonly<Record<string, string>>;
@@ -37,7 +36,7 @@ const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].
 
 const ADDRESS_KEYS: readonly string[] = ["host", "port", "path"];
 
-function withFields(service: RawConfig, fields: ServiceFields, current?: ServiceFields): RawConfig {
+function withFields(service: RawConfig, fields: ServiceFields, current?: Service): RawConfig {
   const next = { ...service };
   // `url` says what host, port and path say: the config refuses both, one goes when the other comes.
   if (fields.url !== undefined) {
@@ -49,8 +48,9 @@ function withFields(service: RawConfig, fields: ServiceFields, current?: Service
       delete next[key];
       continue;
     }
-    // Read from a `url`, they are not in the file: there is nothing to leave alone.
-    const was = address && service.url !== undefined ? undefined : current;
+    // Read from a `url` or from `urls:`, they are not in the file: there is nothing to leave alone.
+    const own = service.url === undefined && current !== undefined && declaresAddress(current);
+    const was = address && !own ? undefined : current;
     // An edit leaves alone what it did not change, even a default written out by hand.
     const value = fields[key] ?? DEFAULTS[key];
     if (was && sameValue(value, was[key] ?? DEFAULTS[key])) continue;

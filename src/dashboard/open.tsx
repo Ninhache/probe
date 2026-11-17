@@ -9,7 +9,7 @@ import { serviceVariables } from "../config/headers";
 import { loadConfig } from "../config/loader";
 import { loadVariables, readSkippedServices, type Variables } from "../config/local";
 import { applySelection, parameterChoices, type Selection } from "../config/parameters";
-import type { Config, Service } from "../config/schema";
+import { type Config, declaresAddress, type Service } from "../config/schema";
 import { ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { type ActionDeps, serviceActions } from "./actions";
@@ -101,23 +101,12 @@ export function environmentColumn(
   };
 }
 
-const pickFields = ({
-  url,
-  host,
-  port,
-  path,
-  expect,
-  method,
-  headers,
-}: Service): ServiceFields => ({
-  url,
-  host,
-  port,
-  path,
-  expect,
-  method,
-  headers,
-});
+const pickFields = (service: Service): ServiceFields => {
+  const { url, host, port, path, expect, method, headers } = service;
+  // Read from `urls:`, the address is not the service's: the form shows none, and writes none back.
+  const address = declaresAddress(service) ? { url, host, port, path } : {};
+  return { ...address, expect, method, headers };
+};
 
 export async function openDashboard(
   initial: Config,

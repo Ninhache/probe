@@ -24,13 +24,16 @@ export const httpForm: ServiceForm = {
   headers: true,
   replacedByUrl: new Set(["address"]),
   read: ({ url, host, port, path, expect, method }) => ({
-    address: addressText({ url, host, port, path }),
+    address:
+      url !== undefined || (host !== undefined && port !== undefined)
+        ? addressText({ url, host: host ?? "", port: port ?? 0, path: path ?? "/" })
+        : "",
     expect: [expect ?? []].flat().join(","),
     method: method ?? "",
   }),
   problem: (key, value) => problems[key]?.(value),
   written: (values) => ({
-    ...addressFields(values.address ?? ""),
+    ...(values.address?.trim() ? addressFields(values.address) : {}),
     expect: values.expect ? parseExpectList(values.expect) : undefined,
     method: values.method ? (values.method.toUpperCase() as Method) : undefined,
   }),
