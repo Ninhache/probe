@@ -39,14 +39,14 @@ hand.
 `a` and `e` open a form: name, port, host, path, expected status, method, then one line per
 [header](headers.md) as `Name: value`, with an empty one at the end to add another.
 
-| Key in the form  | What it does                                                        |
-| ---------------- | ------------------------------------------------------------------- |
-| `↑` `↓` or `Tab` | Change field                                                        |
-| `←` `→`          | Choose the method, `GET` first                                      |
+| Key in the form  | What it does                                                         |
+| ---------------- | -------------------------------------------------------------------- |
+| `↑` `↓` or `Tab` | Change field                                                         |
+| `←` `→`          | Choose the method, `GET` first                                       |
 | A letter         | On the method, the first one it starts: `p` again for `PUT`, `PATCH` |
-| `Enter`          | Save                                                                |
-| `Esc`            | Cancel                                                              |
-| `Ctrl+U`         | Empty the field |
+| `Enter`          | Save                                                                 |
+| `Esc`            | Cancel                                                               |
+| `Ctrl+U`         | Empty the field                                                      |
 
 - A field left empty takes its default. A header left empty is removed.
 - `d` asks first: only `y` removes.
