@@ -1,5 +1,6 @@
+import type { ServiceFields } from "../commands/service-writes";
 import type { Variables } from "../config/local";
-import type { Service } from "../config/schema";
+import type { Parameter, Service } from "../config/schema";
 import type { ResponseDetail } from "./response";
 
 export interface CheckContext {
@@ -28,7 +29,58 @@ export interface CheckResult {
   sent?: string[];
 }
 
+/** What an up service answered: its status, or `up` for a type that has none. */
+export const answer = ({ status }: CheckResult): string =>
+  status === undefined ? "up" : String(status);
+
 export interface Checker {
   type: string;
   check(name: string, service: Service, context: CheckContext): Promise<CheckResult>;
 }
+
+export interface CopiedCommand {
+  command: string;
+  /** What the command needs from the shell that runs it. */
+  note?: string;
+}
+
+/** A kind of service: how it is checked, and what the lists, `u` and `c` make of it. */
+export type ParameterKind = Parameter["strategy"]["kind"];
+
+export interface ServiceType extends Checker {
+  /** The address lists and reports show. */
+  target(service: Service): string;
+  /** What `u` and `probe open` open: a type without one has nothing to open. */
+  open?(service: Service): string;
+  /** What `c` and `probe curl` give: a type without one has no command. */
+  copy?(service: Service, env: NodeJS.ProcessEnv): CopiedCommand;
+  form: ServiceForm;
+  /** The ways of sending a parameter this type understands; the others leave its services as they are. */
+  parameterKinds?: readonly ParameterKind[];
+  /** The service as requested with one value of each parameter of a kind it understands. */
+  withParameters?(service: Service, chosen: readonly (readonly [Parameter, string])[]): Service;
+}
+
+export interface FormField {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export type FieldValues = Readonly<Record<string, string>>;
+
+/** The fields the dashboard asks for a service of a type, after its name. */
+export interface ServiceForm {
+  fields: readonly FormField[];
+  /** One line per header, `Name: value`, a secret kept in local.yml. */
+  headers?: boolean;
+  /** What an address of the `url` parameter replaces: its lines come before the first of them. */
+  replacedByUrl?: ReadonlySet<string>;
+  read(fields: ServiceFields): FieldValues;
+  /** What the config would refuse in a field, said without the value. */
+  problem(key: string, value: string): string | undefined;
+  written(values: FieldValues): Omit<ServiceFields, "headers">;
+}
+
+/** The type of each service: the registry by default, another one in tests. */
+export type ServiceTypes = (service: Service) => ServiceType;

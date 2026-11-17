@@ -1,7 +1,8 @@
 import { defineCommand } from "citty";
-import { targetUrl } from "../checkers/http";
+import { serviceType } from "../checkers/registry";
 import { applySelection } from "../config/parameters";
 import { EXIT_DOWN } from "../constants";
+import { ProbeError } from "../errors";
 import { openerCommand, openUrl } from "../open-url";
 import { namedService, openProject, SET_ARG, selectionFrom } from "./shared";
 
@@ -13,9 +14,10 @@ export default defineCommand({
   },
   async run({ args, rawArgs }) {
     const { config } = await openProject();
-    const url = targetUrl(
-      namedService(applySelection(config, selectionFrom(config, rawArgs)), args.name),
-    );
+    const service = namedService(applySelection(config, selectionFrom(config, rawArgs)), args.name);
+    const { open } = serviceType(service);
+    if (!open) throw new ProbeError("USAGE", `${args.name} has no address to open.`);
+    const url = open(service);
     if (await openUrl(url)) {
       console.log(`Opened ${url}`);
       return;

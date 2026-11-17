@@ -1,3 +1,5 @@
+import { PARAMETER_KINDS } from "../checkers/registry";
+import type { ParameterKind } from "../checkers/types";
 import type { AddressChanges, ParameterField } from "../commands/parameter-writes";
 import { PARAMETER_VALUE_PATTERN, type Parameter, VALUE_EXPECTED } from "../config/schema";
 import { nameProblem } from "../config/service-input";
@@ -13,8 +15,8 @@ export interface ParameterFormRow {
   placeholder: string;
 }
 
-const KINDS = ["query", "path", "header", "url"] as const;
-type Kind = (typeof KINDS)[number];
+const KINDS = PARAMETER_KINDS;
+type Kind = ParameterKind;
 
 const ROWS: readonly ParameterFormRow[] = [
   { key: "name", label: "Name", placeholder: "tenant" },

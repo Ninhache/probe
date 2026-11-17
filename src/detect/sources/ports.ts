@@ -1,4 +1,4 @@
-import { targetUrl } from "../../checkers/http";
+import { targetOf } from "../../checkers/registry";
 import { serviceSchemaV1 } from "../../config/schema";
 import { DETECT_PORTS, DETECT_PORTS_ENV, DETECT_TIMEOUT_MS } from "../../constants";
 import { DEFAULT_HOST } from "../shared";
@@ -15,7 +15,7 @@ export function detectPorts(env: NodeJS.ProcessEnv): number[] {
 
 // The first response is the answer: following a redirect could send a request outside the machine.
 export async function answersHttp(port: number): Promise<boolean> {
-  const url = targetUrl(serviceSchemaV1.parse({ port }));
+  const url = targetOf(serviceSchemaV1.parse({ port }));
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(DETECT_TIMEOUT_MS),
