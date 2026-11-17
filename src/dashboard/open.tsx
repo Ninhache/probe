@@ -36,6 +36,8 @@ export interface DashboardState {
   onParameterWrite?: (
     write: ParameterWrite,
   ) => Promise<{ config?: Config; problem?: ParameterProblem; failure?: string }>;
+  /** Puts back the config as it was before the last write: `config` once it is done. */
+  onUndo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentSource[];
@@ -124,6 +126,7 @@ export async function openDashboard(
     variables: readVariables,
     variableSources,
     environments = [],
+    onUndo,
     ...state
   }: DashboardState,
 ): Promise<void> {
@@ -150,11 +153,13 @@ export async function openDashboard(
       skipped,
     );
   };
-  const timeouts = Object.fromEntries(
-    Object.entries(config.services).flatMap(([name, { timeout }]) =>
-      timeout === undefined ? [] : [[name, timeout]],
-    ),
-  );
+  const timeoutsOf = ({ services }: Config) =>
+    Object.fromEntries(
+      Object.entries(services).flatMap(([name, { timeout }]) =>
+        timeout === undefined ? [] : [[name, timeout]],
+      ),
+    );
+  const timeouts = timeoutsOf(config);
   const tools = variableSources && variableTools(() => config, variableSources);
   const unsetNote = async (name: string) => {
     const sent = serviceVariables(config.services[name]?.headers);
@@ -190,6 +195,14 @@ export async function openDashboard(
           const notes = [outcome.warning, written && (await unsetNote(write.name))];
           const warning = notes.filter(Boolean).join("\n") || undefined;
           return { ...outcome, warning, saved: written !== undefined };
+        })
+      }
+      onUndo={
+        onUndo &&
+        (async () => {
+          const { config: restored, ...outcome } = await onUndo();
+          if (restored) config = restored;
+          return { ...outcome, timeouts: restored && timeoutsOf(restored) };
         })
       }
       parameterFields={(name) => config.parameters?.[name]}

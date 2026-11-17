@@ -83,6 +83,7 @@ function open(options: {
   onServiceWrite?: DashboardProps["onServiceWrite"];
   variables?: DashboardProps["variables"];
   onVariableWrite?: DashboardProps["onVariableWrite"];
+  onUndo?: DashboardProps["onUndo"];
 }) {
   app = render(
     <Dashboard
@@ -108,6 +109,7 @@ function open(options: {
       onServiceWrite={options.onServiceWrite}
       variables={options.variables}
       onVariableWrite={options.onVariableWrite}
+      onUndo={options.onUndo}
     />,
   );
   return app;
@@ -646,6 +648,7 @@ describe("dashboard", () => {
       "  e       Edit the service",
       "  d       Remove it",
       "  a       Add a service",
+      "  z       Undo last change",
       "  /       Filter by name",
       "  p       Parameter values",
       "  :       Find a command",
@@ -977,6 +980,7 @@ describe("dashboard command palette", () => {
         "  Edit the service   e",
         "  Remove it          d",
         "  Add a service      a",
+        "  Undo last change   z",
         "  Filter by name     /",
         "  Parameter values   p",
         "  Options            o",
@@ -1110,7 +1114,7 @@ describe("dashboard command palette", () => {
     const { lastFrame, stdin } = open({ check: async () => services });
     await tick();
 
-    stdin.write(`:${`${ESCAPE}[B`.repeat(11)}`);
+    stdin.write(`:${`${ESCAPE}[B`.repeat(12)}`);
 
     await shows(lastFrame, "› Quit");
     expect((lastFrame() ?? "").split("\n").length).toBeLessThan(24);
@@ -1427,6 +1431,51 @@ describe("dashboard service changes", () => {
     const problem = (lastFrame() ?? "").split("\n").filter((line) => line.includes("Expected"));
     expect(problem.join("")).not.toContain("hunter2");
     expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
+  it("should undo the last write on z and say what was undone", async () => {
+    const onUndo = vi.fn(async () => ({ undone: "Undone: add web", timeouts: {} }));
+    const { lastFrame, stdin } = open({ ...project(), onUndo });
+    await tick();
+
+    stdin.write("z");
+
+    await shows(lastFrame, "Undone: add web");
+    expect(onUndo).toHaveBeenCalledOnce();
+  });
+
+  it("should say why nothing was undone", async () => {
+    const onUndo = async () => ({ failure: ".probe/config.yml changed since: nothing undone" });
+    const { lastFrame, stdin } = open({ ...project(), onUndo });
+    await tick();
+
+    stdin.write("z");
+
+    await shows(lastFrame, ".probe/config.yml changed since: nothing undone");
+  });
+
+  it("should check again with the timeouts of the config put back", async () => {
+    const { check: services, ...props } = project();
+    const check = vi.fn<DashboardProps["check"]>(services);
+    const onUndo = async () => ({ undone: "Undone: timeout of api", timeouts: { api: 7 } });
+    const { lastFrame, stdin } = open({ ...props, check, timeouts: { api: 3 }, onUndo });
+    await tick();
+
+    stdin.write("z");
+
+    await shows(lastFrame, "Undone: timeout of api");
+    await waitFor(() => expect(check.mock.calls.at(-1)?.[3]).toEqual({ api: 7 }));
+  });
+
+  it("should take z as a letter in the form", async () => {
+    const onUndo = vi.fn(async () => ({ undone: "Undone: add web" }));
+    const { lastFrame, stdin } = open({ ...project(), onUndo });
+    await tick();
+
+    stdin.write("az");
+
+    await shows(lastFrame, "› Name     z_");
+    expect(onUndo).not.toHaveBeenCalled();
   });
 
   it("saves what the form changed on a service", async () => {

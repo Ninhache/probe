@@ -111,6 +111,8 @@ export interface DashboardProps {
   /** A parameter of the local config, to edit; undefined when only another environment declares it. */
   parameterFields?: (name: string) => Parameter | undefined;
   onParameterWrite?: (write: ParameterWrite) => Promise<ParameterWriteOutcome>;
+  /** Puts back the local config as it was before the last write; `timeouts` once it is done. */
+  onUndo?: () => Promise<{ undone?: string; failure?: string; timeouts?: ServiceTimeouts }>;
   /** The services of the local config and their address for each value of the `url` parameter. */
   addresses?: () => Addresses;
   /** The `url` parameter of the local config, whose values give a service its own address. */
@@ -281,6 +283,7 @@ export function Dashboard({
   urlParameter,
   serviceForm,
   onParameterWrite,
+  onUndo,
   variables,
   onVariableWrite,
   environments = NO_ENVIRONMENTS,
@@ -904,6 +907,14 @@ export function Dashboard({
       case "remove":
         if (elsewhere) return setNotice(elsewhere);
         return onServiceWrite && name ? setDialog({ kind: "confirm", name }) : undefined;
+      case "undo":
+        if (elsewhere) return setNotice(elsewhere);
+        return void onUndo?.().then(({ undone, failure, timeouts: restored }) => {
+          setNotice(undone ?? failure);
+          if (!restored) return;
+          setTimeouts(restored);
+          setWrites((count) => count + 1);
+        });
       case "help":
         return setHelp(true);
       case "quit":
