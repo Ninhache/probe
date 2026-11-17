@@ -71,7 +71,9 @@ probe check --set env=prod   # api at https://api.example.com/health, db where i
 ## Names and values
 
 - The name of a parameter is made of letters, digits, `_` and `-`.
-- A value is made of letters, digits, `.`, `_` and `-`, and is listed once.
+- A value is any text on one line, without a comma or spaces around it, and is listed once (since 0.21.0;
+  letters, digits, `.`, `_` and `-` before). A query or a path encodes it: `new york` is sent as `new%20york`.
+- A value sent in a header is ASCII only: no accent, and no `${`, which would be read as a variable.
 - The values are written in `config.yml`, which is shared: a header that carries a secret, such as
   `Authorization`, is refused. See [Headers and secrets](headers.md) for those.
 

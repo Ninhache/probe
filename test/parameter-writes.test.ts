@@ -111,6 +111,18 @@ describe("writeParameter", () => {
     expect(await readFile(paths.config, "utf8")).toBe(config);
   });
 
+  it("should point at the values a header cannot carry", async () => {
+    const paths = await tempProject(CONFIG);
+
+    const written = await writeParameter(paths, {
+      kind: "add",
+      name: "city",
+      parameter: { values: ["créteil"], strategy: { kind: "header", name: "X-City" } },
+    });
+
+    expect(written?.problem?.field).toBe("values");
+  });
+
   it("should write nothing when the parameter to add already exists", async () => {
     const paths = await tempProject(CONFIG);
 

@@ -106,12 +106,13 @@ function rewritten(service: Service, chosen: readonly [Parameter, string][]): Se
 
   const url = new URL(target);
   if (segments.length > 0) {
-    url.pathname = `/${segments.join("/")}${url.pathname === "/" ? "" : url.pathname}`;
+    const encoded = segments.map(encodeURIComponent).join("/");
+    url.pathname = `/${encoded}${url.pathname === "/" ? "" : url.pathname}`;
   }
   for (const [name, value] of queries) {
     if (url.searchParams.has(name)) continue;
     // Appended as text: `searchParams.append` would rewrite the query the service declares.
-    url.search = `${url.search === "" ? "?" : `${url.search}&`}${name}=${value}`;
+    url.search = `${url.search === "" ? "?" : `${url.search}&`}${name}=${encodeURIComponent(value)}`;
   }
   next.path = url.pathname + url.search;
   if (next.url !== undefined) next.url = url.href;

@@ -127,8 +127,8 @@ export function parameterExample(values: ParameterFormValues, parameter: string)
   const value = listed(values.values)[0] ?? "acme";
   const name = values.strategyName.trim();
   const example = {
-    query: `${EXAMPLE_URL}?${name || parameter || "tenant"}=${value}`,
-    path: EXAMPLE_URL.replace("/health", `/${value}/health`),
+    query: `${EXAMPLE_URL}?${name || parameter || "tenant"}=${encodeURIComponent(value)}`,
+    path: EXAMPLE_URL.replace("/health", `/${encodeURIComponent(value)}/health`),
     header: `${name || "X-Tenant"}: ${value}`,
     url: `urls: { ${value}: ${value}.example.com }`,
   }[kind];

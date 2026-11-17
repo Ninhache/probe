@@ -11,6 +11,15 @@ describe("parameterExample", () => {
     ]);
   });
 
+  it("should encode in the example what a URL cannot carry", () => {
+    const spaced = { ...form, values: "new york" };
+
+    expect(parameterExample(spaced, "city")[1]).toBe("e.g. localhost:3000/health?city=new%20york");
+    expect(parameterExample({ ...spaced, strategy: "path" }, "city")[1]).toBe(
+      "e.g. localhost:3000/new%20york/health",
+    );
+  });
+
   it("should show the value in front of the path", () => {
     expect(parameterExample({ ...form, strategy: "path" }, "tenant")[1]).toBe(
       "e.g. localhost:3000/globex/health",

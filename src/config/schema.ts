@@ -83,8 +83,13 @@ const oneLine = (expected: string) =>
   });
 
 export const NAME_EXPECTED = "letters, digits, _ and - only";
-export const PARAMETER_VALUE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
-export const VALUE_EXPECTED = "letters, digits, ., _ and - only";
+// Any text on one line: query and path encode it. A comma would split it in the dashboard form.
+export const PARAMETER_VALUE_PATTERN = /^(?![\s,])[^,\p{Cc}\p{Zl}\p{Zp}]*(?<![\s,])$/u;
+export const VALUE_EXPECTED = "text on one line, without commas or spaces around it";
+const QUERY_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+// `fetch` sends Latin-1 and curl the bytes of the shell: only ASCII reaches a server the same way.
+// No `${`: the value would be read as a variable, and a secret sent in a header shown in clear.
+const HEADER_VALUE_PATTERN = /^(?!.*\$\{)[\x20-\x7e]+$/;
 
 const parameterWord = z.string().regex(PARAMETER_VALUE_PATTERN, VALUE_EXPECTED);
 
@@ -173,21 +178,37 @@ const strategySchemaV1 = z.discriminatedUnion("kind", [
       error: (issue) => `expected ${strategyHeaderProblem(String(issue.input))}`,
     }),
   }),
-  z.strictObject({ kind: z.literal("query"), name: parameterWord }),
+  z.strictObject({
+    kind: z.literal("query"),
+    name: z.string().regex(QUERY_NAME_PATTERN, "letters, digits, ., _ and - only"),
+  }),
   z.strictObject({ kind: z.literal("path") }),
   z.strictObject({ kind: z.literal("url") }),
 ]);
 
-const parameterSchemaV1 = z.strictObject({
-  values: z
-    // `values: [1, 2]` is read as numbers.
-    .array(z.union([z.string(), z.number()]).transform(String).pipe(parameterWord))
-    .min(1)
-    .refine((values) => new Set(values).size === values.length, {
-      error: "expected each value once",
-    }),
-  strategy: strategySchemaV1,
-});
+const parameterSchemaV1 = z
+  .strictObject({
+    values: z
+      // `values: [1, 2]` is read as numbers.
+      .array(z.union([z.string(), z.number()]).transform(String).pipe(parameterWord))
+      .min(1)
+      .refine((values) => new Set(values).size === values.length, {
+        error: "expected each value once",
+      }),
+    strategy: strategySchemaV1,
+  })
+  .superRefine(({ values, strategy }, ctx) => {
+    if (strategy.kind !== "header") return;
+    for (const [index, value] of values.entries()) {
+      if (HEADER_VALUE_PATTERN.test(value)) continue;
+      ctx.issues.push({
+        code: "custom",
+        message: `${value}: a header takes ASCII only, no accent and no \${`,
+        input: value,
+        path: ["values", index],
+      });
+    }
+  });
 
 export type Parameter = z.infer<typeof parameterSchemaV1>;
 
