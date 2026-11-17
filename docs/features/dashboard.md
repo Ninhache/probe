@@ -83,7 +83,19 @@ tenant ‹ globex ›   version ‹ v1 ›
 › ✓ api  http://localhost:3000/globex/health  200  4ms
 ```
 
-- `p` goes to the selectors: `↑` `↓` choose a parameter, `←` `→` its value. `p` or `Esc` goes back to the list.
+- `p` opens the parameters panel: one tab per parameter, the values of the selected one below it.
+  `←` `→` (`h` `l`) change parameter, `↑` `↓` (`j` `k`) choose its value. `p` or `Esc` closes it.
+
+  ```
+  ┌────────────────────────────┐
+  │ Parameters                 │
+  │  tenant  [version]         │
+  │   v1                       │
+  │ › v2                       │
+  └────────────────────────────┘
+  ```
+
+  In color, the selected tab, the chosen value and its selector on the line are drawn in reverse video.
 - The next check, `u`, `c` and the detail use the chosen values.
 - The parameters do not depend on each other: each one is chosen on its own, whatever its name.
 - The choice is saved in `.probe/local.yml` and comes back at the next start. A value the config no longer

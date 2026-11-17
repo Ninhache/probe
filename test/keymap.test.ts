@@ -93,6 +93,7 @@ describe("helpLines", () => {
     expect(headings.map(({ text }) => text)).toEqual([
       "List",
       "Panels",
+      "Parameters",
       "Filter",
       "Add and edit",
       "Outside a text field",

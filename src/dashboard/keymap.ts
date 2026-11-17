@@ -1,6 +1,7 @@
 export type Screen =
   | "list"
   | "panel"
+  | "choose"
   | "readonly"
   | "filter"
   | "palette"
@@ -23,7 +24,13 @@ export type Command =
   | "help"
   | "quit";
 
-type Section = "List" | "Panels" | "Filter" | "Add and edit" | "Outside a text field";
+type Section =
+  | "List"
+  | "Panels"
+  | "Parameters"
+  | "Filter"
+  | "Add and edit"
+  | "Outside a text field";
 
 interface Binding {
   screens: readonly Screen[];
@@ -118,6 +125,30 @@ const BINDINGS: readonly Binding[] = [
     help: "Close",
   },
   {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "←→ hl",
+    ascii: "hl",
+    action: "parameter",
+    help: "Change parameter",
+    drop: 1,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "↑↓ jk",
+    ascii: "jk",
+    action: "value",
+    help: "Choose its value",
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "p esc",
+    action: "close",
+    help: "Close",
+  },
+  {
     screens: ["filter"],
     section: "Filter",
     keys: "↑↓",
@@ -174,7 +205,7 @@ const BINDINGS: readonly Binding[] = [
   { screens: ["confirm"], keys: "n esc", action: "keep" },
   { screens: ["help"], keys: "? esc", action: "close" },
   {
-    screens: ["list", "panel", "readonly"],
+    screens: ["list", "panel", "readonly", "choose"],
     section: "Outside a text field",
     keys: "?",
     action: "help",
@@ -182,7 +213,7 @@ const BINDINGS: readonly Binding[] = [
     command: "help",
   },
   {
-    screens: ["list", "panel", "readonly", "help"],
+    screens: ["list", "panel", "readonly", "choose", "help"],
     section: "Outside a text field",
     keys: "q",
     action: "quit",
@@ -194,6 +225,7 @@ const BINDINGS: readonly Binding[] = [
 const SECTIONS: readonly Section[] = [
   "List",
   "Panels",
+  "Parameters",
   "Filter",
   "Add and edit",
   "Outside a text field",

@@ -156,6 +156,16 @@ const SOURCES = { environment: "set in the environment", local: `set in ${LOCAL_
 
 const MARKER_WIDTH = 2;
 const PANEL_WIDTH = 30;
+const TAB_GAP = " ";
+
+/** The parts joined by `gap`, starting late enough for the part at `focus` to fit in `width`. */
+function scrolled(parts: readonly string[], focus: number, width: number, gap: string): string {
+  const from = (first: number, last = focus) =>
+    `${first > 0 ? "… " : ""}${parts.slice(first, last + 1).join(gap)}`;
+  let first = 0;
+  while (first < focus && from(first).length > width) first += 1;
+  return from(first, parts.length - 1);
+}
 const DETAIL_WIDTH = 60;
 // What the screen keeps around the detail when a terminal does not tell its height.
 const DEFAULT_ROWS = 24;
@@ -680,19 +690,19 @@ export function Dashboard({
       (panel.kind === "service" ? enter : input === CLOSING_KEYS[panel.kind])
     )
       setPanel(null);
-    else if (panel.kind === "service" && panel.environment !== undefined) {
+    else if (panel.kind === "parameters") {
+      if (left || right) {
+        const row = Math.max(0, Math.min(choiceNames.length - 1, panel.row + (right ? 1 : -1)));
+        setPanel({ ...panel, row });
+      } else if (up || down) changeParameter(panel.row, down ? 1 : -1);
+    } else if (panel.kind === "service" && panel.environment !== undefined) {
       // The rows of this panel write for the local services: for another environment, `probe var --env` or local.yml by hand.
     } else if (up || down) {
       const lastRow =
-        panel.kind === "options"
-          ? NOTIFY_ROW
-          : panel.kind === "parameters"
-            ? choiceNames.length - 1
-            : SERVICE_ROWS.length + variableRows.length - 1;
+        panel.kind === "options" ? NOTIFY_ROW : SERVICE_ROWS.length + variableRows.length - 1;
       setPanel({ ...panel, row: Math.max(0, Math.min(lastRow, panel.row + (down ? 1 : -1))) });
     } else if (left || right) {
       if (panel.kind === "options") change(panel.row, right ? 1 : -1);
-      else if (panel.kind === "parameters") changeParameter(panel.row, right ? 1 : -1);
       else if (panel.row === TIMEOUT_ROW) changeTimeout(panel.name, right ? 1 : -1);
       else if (panel.row === SKIP_ROW) toggleSkip(panel.name);
     }
@@ -766,17 +776,14 @@ export function Dashboard({
   const up = counts.reduce((sum, count) => sum + count.up, all.filter(({ ok }) => ok).length);
   const checked = counts.reduce((sum, count) => sum + count.checked, all.length);
   const choosing = panel?.kind === "parameters" ? panel.row : -1;
+  // Without color, the marker shows which one is being changed: with color, it is drawn in reverse.
+  const pointer = terminal.color ? "" : marker;
   const selectorParts = choiceNames.map((name, index) => {
     const value = effective[name] ?? "";
-    const shown = unicode ? `‹ ${value} ›` : `< ${value} >`;
-    return `${index === choosing ? marker : ""}${name} ${shown}`;
+    const shown = `${name} ${unicode ? `‹ ${value} ›` : `< ${value} >`}`;
+    return index === choosing ? `${pointer}${shown}` : shown;
   });
-  // The line scrolls so that the selector being changed stays on screen.
-  let firstShown = 0;
-  const fromFirst = (first: number) =>
-    `${first > 0 ? "… " : ""}${selectorParts.slice(first, choosing + 1).join("   ")}`;
-  while (firstShown < choosing && fromFirst(firstShown).length > columns) firstShown += 1;
-  const selectors = `${firstShown > 0 ? "… " : ""}${selectorParts.slice(firstShown).join("   ")}`;
+  const selectors = scrolled(selectorParts, Math.max(0, choosing), columns, "   ");
   // Said apart: the selected column does not list the value chosen, it keeps its first one.
   const kept = Object.entries(own)
     .filter(([name, value]) => effective[name] !== value)
@@ -827,6 +834,38 @@ export function Dashboard({
       : undefined;
   const panelWidth = Math.min(panel?.kind === "service" ? DETAIL_WIDTH : PANEL_WIDTH, columns);
   const panelRoom = Math.max(1, panelWidth - PANEL_FRAME_WIDTH);
+  // Reverse video on the part being changed; without color, the marker already shows it.
+  const highlighted = (text: string, part: string | undefined) => {
+    const at = part && terminal.color ? text.indexOf(part) : -1;
+    if (!part || at < 0) return text;
+    return `${text.slice(0, at)}${colors.inverse(part)}${text.slice(at + part.length)}`;
+  };
+  const choosingName = choiceNames[Math.max(0, choosing)] ?? "";
+  const tabParts = choiceNames.map((name, index) =>
+    index !== choosing ? ` ${name} ` : terminal.color ? ` ${name} ` : `[${name}]`,
+  );
+  const choiceValues = choices[choosingName] ?? [];
+  const choiceWidth = Math.min(
+    Math.max(PANEL_WIDTH, tabParts.join(TAB_GAP).length + PANEL_FRAME_WIDTH),
+    columns,
+  );
+  const choiceRoom = Math.max(1, choiceWidth - PANEL_FRAME_WIDTH);
+  const tabs = truncate(scrolled(tabParts, Math.max(0, choosing), choiceRoom, TAB_GAP), choiceRoom);
+  const chosenValue = effective[choosingName];
+  // Around the values: summary, selectors, list, target, border, title, tabs, the bar, one free line.
+  const valueRoom = Math.max(
+    1,
+    (windowRows || DEFAULT_ROWS) -
+      (1 + selectorLines + Math.max(1, (grid ? 1 : 0) + names.length) + 1 + 2 + 1 + 1 + 1 + 1),
+  );
+  const firstValue = Math.max(
+    0,
+    Math.min(
+      choiceValues.indexOf(chosenValue ?? "") - Math.floor(valueRoom / 2),
+      choiceValues.length - valueRoom,
+    ),
+  );
+  const shownValues = choiceValues.slice(firstValue, firstValue + valueRoom);
   const detailedIn = panel?.kind === "service" ? panel.environment : undefined;
   const detailed =
     panel?.kind === "service"
@@ -892,11 +931,13 @@ export function Dashboard({
             ? "palette"
             : filtering
               ? "filter"
-              : panel
-                ? panel.kind === "service" && panel.environment
-                  ? "readonly"
-                  : "panel"
-                : "list";
+              : panel?.kind === "parameters"
+                ? "choose"
+                : panel
+                  ? panel.kind === "service" && panel.environment
+                    ? "readonly"
+                    : "panel"
+                  : "list";
   const hint = helpBar(screen, unicode, columns, grid, choiceNames.length > 0);
   const commands = palette ? paletteEntries(unicode, palette.query) : [];
   const commandWidth = Math.max(0, ...commands.map(({ label }) => label.length));
@@ -933,7 +974,7 @@ export function Dashboard({
       <Text>{colors.bold(cut(summary))}</Text>
       {selectorLines > 0 && (
         <Text>
-          {selectorLine.slice(0, selectors.length)}
+          {highlighted(selectorLine.slice(0, selectors.length), selectorParts[choosing])}
           {colors.dim(selectorLine.slice(selectors.length))}
         </Text>
       )}
@@ -959,6 +1000,24 @@ export function Dashboard({
       )}
       {problem !== undefined && <Text>{colors.yellow(cut(`${placed}${problem}`))}</Text>}
       {focused?.hint && panel?.kind !== "service" && <Text>{colors.dim(cut(focused.hint))}</Text>}
+      {panel?.kind === "parameters" && (
+        <Box
+          flexDirection="column"
+          width={choiceWidth}
+          borderStyle={unicode ? "single" : "classic"}
+          paddingX={1}
+        >
+          <Text>{colors.bold("Parameters")}</Text>
+          <Text>{highlighted(tabs, tabParts[panel.row])}</Text>
+          {shownValues.map((value) => (
+            <Text key={value}>
+              {value === chosenValue
+                ? colors.inverse(truncate(`${marker}${value}`, choiceRoom).padEnd(choiceRoom))
+                : truncate(`  ${value}`, choiceRoom)}
+            </Text>
+          ))}
+        </Box>
+      )}
       {panel !== null && panel.kind !== "parameters" && (
         <Box
           flexDirection="column"

@@ -67,7 +67,7 @@ describe("dashboard parameters", () => {
 
     stdin.write("p");
     await waitFor(() => expect(lastFrame()).toContain("› tenant ‹ acme ›"));
-    stdin.write("l");
+    stdin.write("j");
 
     await waitFor(() => expect(lastFrame()).toContain("http://localhost:3000/globex/health"));
     expect(lastFrame()).toContain("› tenant ‹ globex ›");
@@ -92,7 +92,7 @@ describe("dashboard parameters", () => {
     const { lastFrame, stdin } = open({ onParameterChange });
     await tick();
 
-    stdin.write("pl");
+    stdin.write("pj");
 
     await waitFor(() => expect(lastFrame()).toContain("‹ globex ›"));
     expect(onParameterChange).toHaveBeenCalledWith("tenant", "globex");
@@ -108,7 +108,7 @@ describe("dashboard parameters", () => {
     });
     await tick();
 
-    stdin.write("pjj");
+    stdin.write("pll");
 
     await waitFor(() =>
       expect(lastFrame()?.split("\n")[1]).toBe(
@@ -117,11 +117,25 @@ describe("dashboard parameters", () => {
     );
   });
 
+  it("should show the parameters as tabs and the values as a list", async () => {
+    const { lastFrame, stdin } = open({
+      parameters: () => ({ ...TENANTS, version: ["v1", "v2"] }),
+    });
+    await tick();
+
+    stdin.write("pl");
+
+    await waitFor(() => expect(lastFrame()).toContain("│  tenant  [version]"));
+    expect(lastFrame()).toContain("│ › v1");
+    expect(lastFrame()).toContain("│   v2");
+    expect(lastFrame()).toContain("←→ hl parameter · ↑↓ jk value · p esc close");
+  });
+
   it("should stop at the last value and close on p", async () => {
     const { lastFrame, stdin } = open();
     await tick();
 
-    stdin.write("pll");
+    stdin.write("pjj");
     await waitFor(() => expect(lastFrame()).toContain("› tenant ‹ globex ›"));
     stdin.write("p");
 
@@ -134,7 +148,7 @@ describe("dashboard parameters", () => {
     const onCopy = vi.fn(async () => "Copied");
     const { lastFrame, stdin } = open({ onOpen, onCopy });
     await tick();
-    stdin.write("pl");
+    stdin.write("pj");
     await waitFor(() => expect(lastFrame()).toContain("‹ globex ›"));
     stdin.write("p");
     await waitFor(() => expect(lastFrame()).toContain("p parameters"));
@@ -174,7 +188,7 @@ describe("dashboard parameters", () => {
     });
     await waitFor(() => expect(lastFrame()).toContain("0/1 up"));
 
-    stdin.write("pl");
+    stdin.write("pj");
     await waitFor(() => expect(lastFrame()).toContain("1/1 up"));
     await tick();
 
@@ -186,7 +200,7 @@ describe("dashboard parameters", () => {
     await tick();
     stdin.write("r");
     await tick();
-    stdin.write("pl");
+    stdin.write("pj");
     await waitFor(() => expect(lastFrame()).toContain("/globex/health"));
     stdin.write("p");
     await waitFor(() => expect(lastFrame()).toContain("p parameters"));
@@ -216,7 +230,7 @@ describe("dashboard parameters with environments", () => {
     const { lastFrame, stdin, check } = open({ environments: [column] });
     await tick();
 
-    stdin.write("pl");
+    stdin.write("pj");
 
     await waitFor(() => expect(checkProd.mock.lastCall?.[2]).toEqual({ tenant: "globex" }));
     expect(check.mock.lastCall?.[4]).toEqual({ tenant: "globex" });
@@ -235,7 +249,7 @@ describe("dashboard parameters with environments", () => {
     const { column } = prod({ tenant: ["acme"] });
     const { lastFrame, stdin } = open({ environments: [column] });
     await tick();
-    stdin.write("pl");
+    stdin.write("pj");
     await waitFor(() => expect(lastFrame()).toContain("tenant ‹ globex ›"));
     stdin.write("p");
 
