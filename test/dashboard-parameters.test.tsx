@@ -558,3 +558,85 @@ describe("dashboard parameter addresses", () => {
     await waitFor(() => expect(lastFrame()).toContain("dev.example.com"));
   });
 });
+
+describe("the service form with a url parameter", () => {
+  const DOWN = "\u001B[B";
+  const ENV = { name: "env", values: ["dev", "prod"] };
+  const FIELDS = { host: "localhost", port: 3000, path: "/health" };
+
+  function openApi(onServiceWrite: NonNullable<DashboardProps["onServiceWrite"]>) {
+    return open({
+      parameters: () => ({ env: ENV.values }),
+      serviceFields: () => FIELDS,
+      addresses: () => ({ api: { prod: "https://example.com/health" } }),
+      urlParameter: () => ENV,
+      onServiceWrite,
+    });
+  }
+
+  it("should give a URL line per value and name the parameter that overrides the address", async () => {
+    const { lastFrame, stdin } = openApi(vi.fn(async () => ({ saved: true })));
+    await tick();
+
+    stdin.write("e");
+
+    await waitFor(() => expect(lastFrame()).toContain("URL prod  https://example.com/health"));
+    expect(lastFrame()).toContain("Overridden by the parameter env for prod");
+    const frame = lastFrame() ?? "";
+    expect(frame.indexOf("URL dev")).toBeLessThan(frame.indexOf("Port"));
+
+    stdin.write("localhost:3001");
+    await waitFor(() => expect(lastFrame()).toContain("Overridden by the parameter env: not used"));
+  });
+
+  it("should send every URL, with http:// when none is given", async () => {
+    const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => ({
+      saved: true,
+    }));
+    const { lastFrame, stdin } = openApi(onServiceWrite);
+    await tick();
+    stdin.write("e");
+    await waitFor(() => expect(lastFrame()).toContain("URL dev"));
+
+    stdin.write("localhost:3001\r");
+
+    await waitFor(() => expect(onServiceWrite).toHaveBeenCalled());
+    expect(onServiceWrite.mock.lastCall?.[0]).toMatchObject({
+      kind: "edit",
+      urls: { dev: "http://localhost:3001", prod: "https://example.com/health" },
+      fields: { port: 3000 },
+    });
+  });
+
+  it("should point at a URL the config would refuse", async () => {
+    const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => ({
+      saved: true,
+    }));
+    const { lastFrame, stdin } = openApi(onServiceWrite);
+    await tick();
+    stdin.write("e");
+    await waitFor(() => expect(lastFrame()).toContain("URL dev"));
+
+    stdin.write(`${DOWN}\u0015ftp://example.com\r`);
+
+    await waitFor(() =>
+      expect(lastFrame()).toContain("URL prod expects an http:// or https:// URL"),
+    );
+    expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
+  it("should keep the fields after the URLs: the port is still edited", async () => {
+    const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => ({
+      saved: true,
+    }));
+    const { lastFrame, stdin } = openApi(onServiceWrite);
+    await tick();
+    stdin.write("e");
+    await waitFor(() => expect(lastFrame()).toContain("URL dev"));
+
+    stdin.write(`${DOWN}${DOWN}\u00154000\r`);
+
+    await waitFor(() => expect(onServiceWrite).toHaveBeenCalled());
+    expect(onServiceWrite.mock.lastCall?.[0]).toMatchObject({ fields: { port: 4000 } });
+  });
+});

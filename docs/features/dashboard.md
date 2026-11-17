@@ -51,6 +51,17 @@ hand.
 - All three write `.probe/config.yml` as `probe add` and `probe rm` do: your comments are kept, and the
   [Makefile](makefile.md) block stays up to date.
 - A service declared by `url` is not edited here: change it in `config.yml`.
+- With a parameter sent by `url`, the form starts with one line per value, `URL dev`, `URL prod`, written under
+  `urls:`. A URL replaces port, host and path for its value: the form says it,
+  `Overridden by the parameter env for prod`, then `not used` when every value has one. A line left empty uses
+  port, host and path. `localhost:3001` is written `http://localhost:3001`.
+
+  ```
+  │ › URL local  localhost:3001_                 │
+  │   URL prod   https://example.com/health      │
+  │ Overridden by the parameter env: not used    │
+  │   Port       3000                            │
+  ```
 
 A secret typed in a header (`Authorization: Bearer abc123`) is drawn as dots and never reaches `config.yml`.
 On `Enter` the form asks under which variable to keep it and proposes a name (`API_TOKEN`). It writes

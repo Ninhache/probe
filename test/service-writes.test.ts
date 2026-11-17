@@ -266,4 +266,34 @@ describe("writeService", () => {
     expect(printed).not.toHaveBeenCalled();
     expect(await readFile(makefilePath(paths), "utf8")).toContain("check-mine");
   });
+
+  it("should write the address of each value under urls and remove the ones emptied", async () => {
+    const paths = await tempProject(
+      [
+        "schemaVersion: 1",
+        "parameters:",
+        "  env: { values: [dev, prod], strategy: { kind: url } }",
+        "services:",
+        "  # the backend",
+        "  api: { port: 3000, urls: { prod: 'https://example.com/health' } }",
+        "",
+      ].join("\n"),
+    );
+    const edit = (urls: Record<string, string>) =>
+      writeService(paths, { kind: "edit", name: "api", fields: fields({ path: "/" }), urls });
+
+    const written = await edit({
+      dev: "http://localhost:3001",
+      prod: "https://example.com/health",
+    });
+    expect(written?.config.services.api?.urls).toEqual({
+      dev: "http://localhost:3001",
+      prod: "https://example.com/health",
+    });
+    expect(await readFile(paths.config, "utf8")).toContain("# the backend");
+
+    const emptied = await edit({ dev: "", prod: "" });
+    expect(emptied?.config.services.api?.urls).toBeUndefined();
+    expect(await readFile(paths.config, "utf8")).not.toContain("urls");
+  });
 });

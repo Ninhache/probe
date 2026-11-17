@@ -187,6 +187,12 @@ export async function openDashboard(
           Object.entries(config.services).map(([name, service]) => [name, { ...service.urls }]),
         )
       }
+      urlParameter={() => {
+        const found = Object.entries(config.parameters ?? {}).find(
+          ([, { strategy }]) => strategy.kind === "url",
+        );
+        return found && { name: found[0], values: found[1].values };
+      }}
       onParameterWrite={
         onParameterWrite &&
         (async (write) => {
