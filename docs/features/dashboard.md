@@ -24,6 +24,7 @@ Off a terminal, in CI or in a pipe, use `probe check`.
 | `e`             | Edit the selected service                      |
 | `d`             | Remove the selected service, after a question  |
 | `z`             | Undo the last change to `config.yml`           |
+| `Z`             | Redo what `z` undid                            |
 | `:`             | Find a command by what it does; `Enter` runs   |
 | `o`             | Options: interval, timeout and notifications   |
 | `?`             | Every key; `?` or `Esc` closes                 |
@@ -55,6 +56,7 @@ hand.
   before. It puts back `config.yml`, `lock.yml` and the Makefile as they were, and does nothing if one of them
   changed since. Kept in memory only, until you quit. `local.yml` is never undone: options, skips, the chosen
   values and a variable kept for a header stay as they are.
+- `Z` (Shift+Z) writes again what `z` undid, last undone first, with the same check. A new change forgets it.
 - All three write `.probe/config.yml` as `probe add` and `probe rm` do: your comments are kept, and the
   [Makefile](makefile.md) block stays up to date.
 - The address takes `3000`, `localhost:3000/health`, `api.example.com` or `https://api.example.com:8443/health`.

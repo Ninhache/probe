@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import type { ProbePaths } from "../config/discovery";
 import { CONFIG_FILE, DEFAULT_MAKEFILE, LOCK_FILE, PROBE_DIR } from "../constants";
 import { makefilePath } from "../makefile/sync";
@@ -19,6 +19,8 @@ export interface UndoJournal {
   record(label: string, write: () => Promise<boolean>): Promise<boolean>;
   /** Puts back the files as they were before the last write recorded, if nothing changed them since. */
   undo(): Promise<UndoOutcome>;
+  /** Writes again what the last undo took back, if nothing changed the files since; a new write forgets it. */
+  redo(): Promise<UndoOutcome>;
 }
 
 /** What a dashboard write changes. local.yml is left out: it holds secret values, and the journal copies what it keeps. */
@@ -35,6 +37,9 @@ interface Step {
   label: string;
   files: { file: JournalFile; before: string; after: string | null }[];
 }
+
+const put = (path: string, text: string | null) =>
+  text === null ? rm(path, { force: true }) : writeFile(path, text);
 
 const contents = async (path: string): Promise<string | null> => {
   try {
@@ -54,6 +59,20 @@ export function createUndoJournal(
   limit: number = UNDO_LIMIT,
 ): UndoJournal {
   const steps: Step[] = [];
+  const undone: Step[] = [];
+  // All or nothing: a file changed elsewhere since leaves every file of the step as it is.
+  const move = async (from: Step[], to: Step[], back: boolean): Promise<UndoOutcome> => {
+    const step = from.at(-1);
+    if (!step) return { kind: "empty" };
+    for (const { file, before, after } of step.files) {
+      if ((await contents(file.path)) !== (back ? after : before))
+        return { kind: "changed", file: file.label };
+    }
+    for (const { file, before, after } of step.files) await put(file.path, back ? before : after);
+    from.pop();
+    to.push(step);
+    return { kind: "undone", label: step.label };
+  };
   const read = () => Promise.all(files.map(({ path }) => contents(path)));
   return {
     async record(label, write) {
@@ -68,20 +87,14 @@ export function createUndoJournal(
           ? []
           : [{ file, before: was, after: now }];
       });
-      if (changed.length > 0) steps.push({ label, files: changed });
+      if (changed.length > 0) {
+        steps.push({ label, files: changed });
+        undone.length = 0;
+      }
       if (steps.length > limit) steps.shift();
       return written;
     },
-    async undo() {
-      const step = steps.at(-1);
-      if (!step) return { kind: "empty" };
-      // All or nothing: a file changed elsewhere since leaves every file of the step as it is.
-      for (const { file, after } of step.files) {
-        if ((await contents(file.path)) !== after) return { kind: "changed", file: file.label };
-      }
-      for (const { file, before } of step.files) await writeFile(file.path, before);
-      steps.pop();
-      return { kind: "undone", label: step.label };
-    },
+    undo: () => move(steps, undone, true),
+    redo: () => move(undone, steps, false),
   };
 }

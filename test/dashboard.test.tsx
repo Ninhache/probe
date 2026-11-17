@@ -84,6 +84,7 @@ function open(options: {
   variables?: DashboardProps["variables"];
   onVariableWrite?: DashboardProps["onVariableWrite"];
   onUndo?: DashboardProps["onUndo"];
+  onRedo?: DashboardProps["onRedo"];
 }) {
   app = render(
     <Dashboard
@@ -110,6 +111,7 @@ function open(options: {
       variables={options.variables}
       onVariableWrite={options.onVariableWrite}
       onUndo={options.onUndo}
+      onRedo={options.onRedo}
     />,
   );
   return app;
@@ -649,6 +651,7 @@ describe("dashboard", () => {
       "  d       Remove it",
       "  a       Add a service",
       "  z       Undo last change",
+      "  Z       Redo what z undid",
       "  /       Filter by name",
       "  p       Parameter values",
       "  :       Find a command",
@@ -981,6 +984,7 @@ describe("dashboard command palette", () => {
         "  Remove it          d",
         "  Add a service      a",
         "  Undo last change   z",
+        "  Redo what z undid  Z",
         "  Filter by name     /",
         "  Parameter values   p",
         "  Options            o",
@@ -1114,7 +1118,7 @@ describe("dashboard command palette", () => {
     const { lastFrame, stdin } = open({ check: async () => services });
     await tick();
 
-    stdin.write(`:${`${ESCAPE}[B`.repeat(12)}`);
+    stdin.write(`:${`${ESCAPE}[B`.repeat(13)}`);
 
     await shows(lastFrame, "› Quit");
     expect((lastFrame() ?? "").split("\n").length).toBeLessThan(24);
@@ -1465,6 +1469,17 @@ describe("dashboard service changes", () => {
 
     await shows(lastFrame, "Undone: timeout of api");
     await waitFor(() => expect(check.mock.calls.at(-1)?.[3]).toEqual({ api: 7 }));
+  });
+
+  it("should redo on Z what z undid", async () => {
+    const onRedo = vi.fn(async () => ({ undone: "Redone: add web", timeouts: {} }));
+    const { lastFrame, stdin } = open({ ...project(), onRedo });
+    await tick();
+
+    stdin.write("Z");
+
+    await shows(lastFrame, "Redone: add web");
+    expect(onRedo).toHaveBeenCalledOnce();
   });
 
   it("should take z as a letter in the form", async () => {

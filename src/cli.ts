@@ -177,6 +177,25 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     saves.save(local, write, `${local} cannot be edited safely: fix or delete it`);
   const configFile = `${PROBE_DIR}/${CONFIG_FILE}`;
   const journal = createUndoJournal(journalFiles(paths));
+  const revert = async (way: "undo" | "redo") => {
+    const word = way === "undo" ? "undone" : "redone";
+    let outcome = { kind: "empty" } as UndoOutcome;
+    const failure = await saves.save(
+      configFile,
+      async () => {
+        outcome = await journal[way]();
+        return true;
+      },
+      "",
+    );
+    if (failure) return { failure };
+    if (outcome.kind === "empty") return { failure: `Nothing to ${way}` };
+    if (outcome.kind === "changed")
+      return { failure: `${outcome.file} changed since: nothing ${word}` };
+    // Not on stderr: a line printed there would land in the middle of the screen.
+    const { config } = await loadConfig(paths, { log: () => {} });
+    return { config, undone: `${word[0]?.toUpperCase()}${word.slice(1)}: ${outcome.label}` };
+  };
   const keepVariable = async (name: string, value: string) => {
     // Before the value is written: the file that holds it must never be committed.
     await ignoreLocalFiles(paths.root);
@@ -242,24 +261,8 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
       );
       return { failure, ...(written as ParameterWritten | null) };
     },
-    onUndo: async () => {
-      let outcome = { kind: "empty" } as UndoOutcome;
-      const failure = await saves.save(
-        configFile,
-        async () => {
-          outcome = await journal.undo();
-          return true;
-        },
-        "",
-      );
-      if (failure) return { failure };
-      if (outcome.kind === "empty") return { failure: "Nothing to undo" };
-      if (outcome.kind === "changed")
-        return { failure: `${outcome.file} changed since: nothing undone` };
-      // Not on stderr: a line printed there would land in the middle of the screen.
-      const { config } = await loadConfig(paths, { log: () => {} });
-      return { config, undone: `Undone: ${outcome.label}` };
-    },
+    onUndo: () => revert("undo"),
+    onRedo: () => revert("redo"),
   });
   await saves.idle();
   // The dashboard said so too, but its screen is gone once it closes.

@@ -51,6 +51,45 @@ describe("createUndoJournal", () => {
     expect(await journal.undo()).toEqual({ kind: "empty" });
   });
 
+  it("should write again on redo what undo took back", async () => {
+    const journal = createUndoJournal([config, makefile]);
+    await journal.record("add web", async () => {
+      await writeFile(config.path, "v2\n");
+      await writeFile(makefile.path, "m2\n");
+      return true;
+    });
+    await journal.undo();
+
+    const outcome = await journal.redo();
+
+    expect(outcome).toEqual({ kind: "undone", label: "add web" });
+    expect(await readFile(config.path, "utf8")).toBe("v2\n");
+    expect(await readFile(makefile.path, "utf8")).toBe("m2\n");
+    expect(await journal.undo()).toEqual({ kind: "undone", label: "add web" });
+  });
+
+  it("should have nothing to redo once a new write is recorded", async () => {
+    const journal = createUndoJournal([config]);
+    await journal.record("first", write(config, "v2\n"));
+    await journal.undo();
+
+    await journal.record("second", write(config, "v3\n"));
+
+    expect(await journal.redo()).toEqual({ kind: "empty" });
+  });
+
+  it("should redo nothing when a file changed since the undo", async () => {
+    const journal = createUndoJournal([config]);
+    await journal.record("add web", write(config, "v2\n"));
+    await journal.undo();
+    await writeFile(config.path, "by hand\n");
+
+    const outcome = await journal.redo();
+
+    expect(outcome).toEqual({ kind: "changed", file: ".probe/config.yml" });
+    expect(await readFile(config.path, "utf8")).toBe("by hand\n");
+  });
+
   it("should touch nothing when a file changed since the write", async () => {
     const journal = createUndoJournal([config, makefile]);
     await journal.record("add web", async () => {

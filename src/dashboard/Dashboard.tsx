@@ -113,6 +113,8 @@ export interface DashboardProps {
   onParameterWrite?: (write: ParameterWrite) => Promise<ParameterWriteOutcome>;
   /** Puts back the local config as it was before the last write; `timeouts` once it is done. */
   onUndo?: () => Promise<{ undone?: string; failure?: string; timeouts?: ServiceTimeouts }>;
+  /** Writes again what the last undo took back: `undone` says what. */
+  onRedo?: DashboardProps["onUndo"];
   /** The services of the local config and their address for each value of the `url` parameter. */
   addresses?: () => Addresses;
   /** The `url` parameter of the local config, whose values give a service its own address. */
@@ -284,6 +286,7 @@ export function Dashboard({
   serviceForm,
   onParameterWrite,
   onUndo,
+  onRedo,
   variables,
   onVariableWrite,
   environments = NO_ENVIRONMENTS,
@@ -908,13 +911,16 @@ export function Dashboard({
         if (elsewhere) return setNotice(elsewhere);
         return onServiceWrite && name ? setDialog({ kind: "confirm", name }) : undefined;
       case "undo":
+      case "redo":
         if (elsewhere) return setNotice(elsewhere);
-        return void onUndo?.().then(({ undone, failure, timeouts: restored }) => {
-          setNotice(undone ?? failure);
-          if (!restored) return;
-          setTimeouts(restored);
-          setWrites((count) => count + 1);
-        });
+        return void (command === "undo" ? onUndo : onRedo)?.().then(
+          ({ undone, failure, timeouts: restored }) => {
+            setNotice(undone ?? failure);
+            if (!restored) return;
+            setTimeouts(restored);
+            setWrites((count) => count + 1);
+          },
+        );
       case "help":
         return setHelp(true);
       case "quit":
