@@ -1,4 +1,5 @@
 import { render } from "ink";
+import { defaultType, serviceType } from "../checkers/registry";
 import { runChecks } from "../checkers/run";
 import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
@@ -164,6 +165,10 @@ export async function openDashboard(
       {...state}
       terminalFocused={focus.focused}
       onClose={focus.stop}
+      serviceForm={(name) => {
+        const service = name === undefined ? undefined : config.services[name];
+        return (service ? serviceType(service) : defaultType()).form;
+      }}
       serviceFields={(name) => {
         const service = config.services[name];
         if (service?.url !== undefined) {

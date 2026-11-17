@@ -21,4 +21,7 @@ export const typeName = (service: Service): string =>
 
 export const serviceType: ServiceTypes = (service) => getServiceType(typeName(service));
 
+/** The type `a` adds: the config has no key to name another one. */
+export const defaultType = (): ServiceType => getServiceType(DEFAULT_CHECKER_TYPE);
+
 export const targetOf = (service: Service): string => serviceType(service).target(service);

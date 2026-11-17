@@ -1,3 +1,4 @@
+import type { ServiceFields } from "../commands/service-writes";
 import type { Variables } from "../config/local";
 import type { Service } from "../config/schema";
 import type { ResponseDetail } from "./response";
@@ -51,6 +52,28 @@ export interface ServiceType extends Checker {
   open?(service: Service): string;
   /** What `c` and `probe curl` give: a type without one has no command. */
   copy?(service: Service, env: NodeJS.ProcessEnv): CopiedCommand;
+  form: ServiceForm;
+}
+
+export interface FormField {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export type FieldValues = Readonly<Record<string, string>>;
+
+/** The fields the dashboard asks for a service of a type, after its name. */
+export interface ServiceForm {
+  fields: readonly FormField[];
+  /** One line per header, `Name: value`, a secret kept in local.yml. */
+  headers?: boolean;
+  /** What an address of the `url` parameter replaces: its lines come before the first of them. */
+  replacedByUrl?: ReadonlySet<string>;
+  read(fields: ServiceFields): FieldValues;
+  /** What the config would refuse in a field, said without the value. */
+  problem(key: string, value: string): string | undefined;
+  written(values: FieldValues): Omit<ServiceFields, "headers">;
 }
 
 /** The type of each service: the registry by default, another one in tests. */

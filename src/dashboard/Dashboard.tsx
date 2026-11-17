@@ -1,6 +1,7 @@
 import { Box, Text, useApp, useInput, useWindowSize } from "ink";
 import { Fragment, useEffect, useRef, useState } from "react";
-import type { CheckResult } from "../checkers/types";
+import { defaultType } from "../checkers/registry";
+import type { CheckResult, ServiceForm } from "../checkers/types";
 import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { hiddenHeaderLine, serviceVariables, variableValueProblem } from "../config/headers";
@@ -24,10 +25,10 @@ import { type Terminal, truncate } from "../ui/terminal";
 import { changeMessage, type KnownStates, stateChanges } from "./changes";
 import { detailLines, type LatencyHistory, recordLatencies } from "./detail";
 import {
-  ADDRESS_FIELDS,
-  EMPTY_FORM,
+  emptyForm,
   type FormSecret,
   type FormValues,
+  fieldText,
   formFields,
   formProblem,
   formRows,
@@ -113,6 +114,8 @@ export interface DashboardProps {
   addresses?: () => Addresses;
   /** The `url` parameter of the local config, whose values give a service its own address. */
   urlParameter?: () => UrlParameter | undefined;
+  /** The fields of a service, given by its type; without a name, those of the type `a` adds. */
+  serviceForm?: (name?: string) => ServiceForm;
   variables?: VariableTools;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentColumn[];
@@ -163,6 +166,7 @@ interface Form {
   editing?: string;
   row: number;
   values: FormValues;
+  spec: ServiceForm;
   url?: UrlParameter;
   urls: Readonly<Record<string, string>>;
   problem?: string;
@@ -274,6 +278,7 @@ export function Dashboard({
   parameterFields,
   addresses,
   urlParameter,
+  serviceForm,
   onParameterWrite,
   variables,
   onVariableWrite,
@@ -465,6 +470,16 @@ export function Dashboard({
     setWrites((count) => count + 1);
   };
 
+  const formOf = (name?: string) => serviceForm?.(name) ?? defaultType().form;
+  // The URL lines are for a type whose address the `url` parameter replaces.
+  const newForm = (spec: ServiceForm) => ({
+    kind: "form" as const,
+    row: 0,
+    spec,
+    url: spec.replacedByUrl?.size ? urlParameter?.() : undefined,
+  });
+  const firstReplaced = ({ spec }: Form) =>
+    spec.fields.find(({ key }) => spec.replacedByUrl?.has(key))?.key;
   const nameRows = (form: Form) => (form.editing === undefined ? 1 : 0);
   const urlCount = (form: Form) => form.url?.values.length ?? 0;
   /** The line a row of `formRows` (or a header after them) is drawn on, URLs counted. */
@@ -476,9 +491,9 @@ export function Dashboard({
     row >= nameRows(form) ? form.url?.values[row - nameRows(form)] : undefined;
 
   const submit = (form: Form) => {
-    const rows = formRows(form.editing === undefined);
+    const rows = formRows(form.editing === undefined, form.spec);
     const taken = (latest ?? []).map(({ name }) => name);
-    const problem = formProblem(rows, form.values, taken);
+    const problem = formProblem(rows, form.values, taken, form.spec);
     if (problem)
       return setDialog({ ...form, row: shownRow(form, problem.row), problem: problem.message });
     const values = form.url?.values ?? [];
@@ -491,7 +506,7 @@ export function Dashboard({
       const row = nameRows(form) + index;
       return setDialog({ ...form, row, problem: `${urlLabel(value)} expects ${wrong}` });
     }
-    const service = form.editing ?? form.values.name;
+    const service = form.editing ?? fieldText(form.values, "name");
     const secret = formSecret(form.values);
     if (secret) {
       const row = shownRow(form, rows.length + secret.index);
@@ -509,7 +524,7 @@ export function Dashboard({
       });
     }
     setDialog(null);
-    const fields = formFields(form.values);
+    const fields = formFields(form.values, form.spec);
     // A secret named before its header was retyped or removed is kept nowhere.
     const sent = serviceVariables(fields.headers);
     const kept = Object.entries(form.secrets ?? {}).filter(([name]) => sent.includes(name));
@@ -523,18 +538,20 @@ export function Dashboard({
 
   const typeInForm = (form: Form, keystroke: Keystroke) => {
     const { key } = keystroke;
-    const rows = formRows(form.editing === undefined);
+    const rows = formRows(form.editing === undefined, form.spec);
     const url = urlAt(form, form.row);
     const base = baseRow(form, form.row);
     const field = url === undefined ? rows[base]?.key : undefined;
     const header = base - rows.length;
-    const lastRow = rows.length + form.values.headers.length + urlCount(form);
+    // With headers, the last row is the empty one that adds another.
+    const lastRow =
+      rows.length + (form.spec.headers ? form.values.headers.length : -1) + urlCount(form);
     const typed = typedCharacter(keystroke);
     const value =
       url !== undefined
         ? (form.urls[url] ?? "")
         : field
-          ? form.values[field]
+          ? fieldText(form.values, field)
           : (form.values.headers[header] ?? "");
     const edit = (next: string) =>
       setDialog(
@@ -573,7 +590,7 @@ export function Dashboard({
       if (formVariables(form.values).includes(variable))
         return setDialog({ ...step, problem: `${variable} already keeps another header` });
       looking.current = true;
-      const service = form.editing ?? form.values.name;
+      const service = form.editing ?? fieldText(form.values, "name");
       void variables?.variableProblem(variable, service).then((problem) => {
         looking.current = false;
         if (problem) return setDialog({ ...step, problem });
@@ -864,20 +881,17 @@ export function Dashboard({
         return setFiltering(true);
       case "add":
         if (elsewhere) return setNotice(elsewhere);
-        return onServiceWrite
-          ? setDialog({ kind: "form", row: 0, values: EMPTY_FORM, url: urlParameter?.(), urls: {} })
-          : undefined;
+        if (!onServiceWrite) return;
+        return setDialog({ ...newForm(formOf()), values: emptyForm(formOf()), urls: {} });
       case "edit": {
         if (elsewhere) return setNotice(elsewhere);
         const fields = onServiceWrite && name ? serviceFields?.(name) : undefined;
         if (typeof fields === "string") return setNotice(fields);
         if (fields)
           setDialog({
-            kind: "form",
+            ...newForm(formOf(name)),
             editing: name,
-            row: 0,
-            values: formValues(fields),
-            url: urlParameter?.(),
+            values: formValues(fields, formOf(name)),
             urls: { ...(name ? addresses?.()[name] : undefined) },
           });
         return;
@@ -1296,7 +1310,7 @@ export function Dashboard({
   const formWidth = Math.min(FORM_WIDTH, columns);
   const formLabels =
     dialog?.kind === "form"
-      ? formRows(dialog.editing === undefined)
+      ? formRows(dialog.editing === undefined, dialog.spec)
       : dialog?.kind === "parameter-form"
         ? parameterFormRows(dialog.editing === undefined, dialog.values.strategy)
         : [];
@@ -1519,24 +1533,24 @@ export function Dashboard({
               ),
             )}
           </Text>
-          {formRows(dialog.editing === undefined).map(({ key, label, placeholder }, index) => (
+          {formLabels.map(({ key, label, placeholder }, index) => (
             <Fragment key={key}>
-              {key === "port" && serviceUrlLines(dialog)}
+              {key === firstReplaced(dialog) && serviceUrlLines(dialog)}
               <Text>
                 {formLine(
                   shownRow(dialog, index) === dialog.row,
                   label,
-                  dialog.values[key],
+                  fieldText(dialog.values, key),
                   placeholder,
                   formLabelWidth,
-                  ADDRESS_FIELDS.has(key) &&
+                  dialog.spec.replacedByUrl?.has(key) === true &&
                     overridden(dialog).length === urlCount(dialog) &&
                     urlCount(dialog) > 0,
                 )}
               </Text>
             </Fragment>
           ))}
-          {[...dialog.values.headers, ""].map((line, index) => (
+          {(dialog.spec.headers ? [...dialog.values.headers, ""] : []).map((line, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a header row is its position, its text changes at each key
             <Text key={`header ${index}`}>
               {formLine(

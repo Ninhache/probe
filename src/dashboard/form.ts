@@ -1,3 +1,5 @@
+import { defaultType } from "../checkers/registry";
+import type { FormField, ServiceForm } from "../checkers/types";
 import type { ServiceFields } from "../commands/service-writes";
 import {
   type HeaderTemplates,
@@ -10,28 +12,25 @@ import {
   splitSecret,
   variableValueProblem,
 } from "../config/headers";
-import { DEFAULT_METHOD, type Method } from "../config/schema";
-import {
-  expectProblem,
-  hostProblem,
-  methodProblem,
-  nameProblem,
-  parseExpectList,
-  pathProblem,
-  portProblem,
-} from "../config/service-input";
+import { nameProblem } from "../config/service-input";
 
-export type FieldKey = "name" | "port" | "host" | "path" | "expect" | "method";
+export type FieldKey = string;
 
-export type FormValues = Readonly<Record<FieldKey, string>> & {
-  readonly headers: readonly string[];
+// `headers` is the only list: every other key is the text of a field.
+export type FormValues = Readonly<{
+  headers: readonly string[];
+  [key: FieldKey]: string | readonly string[];
+}>;
+
+export const fieldText = (values: FormValues, key: FieldKey): string => {
+  const value = values[key];
+  return typeof value === "string" ? value : "";
 };
 
-export interface FormRow {
-  key: FieldKey;
-  label: string;
-  placeholder: string;
-}
+const fieldTexts = ({ headers: _, ...fields }: FormValues) =>
+  Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, String(value)]));
+
+export type FormRow = FormField;
 
 export interface FormSecret {
   index: number;
@@ -40,14 +39,7 @@ export interface FormSecret {
   secret: string;
 }
 
-const ROWS: readonly FormRow[] = [
-  { key: "name", label: "Name", placeholder: "api" },
-  { key: "port", label: "Port", placeholder: "3000" },
-  { key: "host", label: "Host", placeholder: "localhost" },
-  { key: "path", label: "Path", placeholder: "/" },
-  { key: "expect", label: "Expect", placeholder: "any 2xx" },
-  { key: "method", label: "Method", placeholder: DEFAULT_METHOD },
-];
+const NAME_ROW: FormRow = { key: "name", label: "Name", placeholder: "api" };
 
 /** The `url` parameter of the config: a service can have its own address for each value. */
 export interface UrlParameter {
@@ -57,42 +49,32 @@ export interface UrlParameter {
 
 export const urlLabel = (value: string) => `URL ${value}`;
 
-/** Port, host and path: what an address under `urls:` replaces. */
-export const ADDRESS_FIELDS: ReadonlySet<FieldKey> = new Set(["port", "host", "path"]);
-
 export const HEADER_LABEL = "Header";
 export const HEADER_PLACEHOLDER = "Accept: application/json";
 
-export const EMPTY_FORM: FormValues = {
-  name: "",
-  port: "",
-  host: "",
-  path: "",
-  expect: "",
-  method: "",
-  headers: [],
-};
+const defaultForm = (): ServiceForm => defaultType().form;
 
-export function formRows(adding: boolean): readonly FormRow[] {
-  return adding ? ROWS : ROWS.filter(({ key }) => key !== "name");
-}
-
-export function formValues({
-  host,
-  port,
-  path,
-  expect,
-  method,
-  headers,
-}: ServiceFields): FormValues {
+export function emptyForm(form: ServiceForm = defaultForm()): FormValues {
   return {
     name: "",
-    port: String(port),
-    host,
-    path,
-    expect: [expect ?? []].flat().join(","),
-    method: method ?? "",
-    headers: Object.entries(headers ?? {}).map(([name, value]) => `${name}: ${value}`),
+    ...Object.fromEntries(form.fields.map(({ key }) => [key, ""])),
+    headers: [],
+  };
+}
+
+export const EMPTY_FORM: FormValues = emptyForm();
+
+export function formRows(adding: boolean, form: ServiceForm = defaultForm()): readonly FormRow[] {
+  return adding ? [NAME_ROW, ...form.fields] : form.fields;
+}
+
+export function formValues(fields: ServiceFields, form: ServiceForm = defaultForm()): FormValues {
+  return {
+    name: "",
+    ...form.read(fields),
+    headers: form.headers
+      ? Object.entries(fields.headers ?? {}).map(([name, value]) => `${name}: ${value}`)
+      : [],
   };
 }
 
@@ -107,14 +89,10 @@ function formHeaders(values: FormValues): HeaderTemplates | undefined {
   return headers.length > 0 ? Object.fromEntries(headers) : undefined;
 }
 
-export function formFields(values: FormValues): ServiceFields {
+export function formFields(values: FormValues, form: ServiceForm = defaultForm()): ServiceFields {
   return {
-    port: Number(values.port),
-    host: values.host || "localhost",
-    path: values.path || "/",
-    expect: values.expect ? parseExpectList(values.expect) : undefined,
-    method: values.method ? (values.method.toUpperCase() as Method) : undefined,
-    headers: formHeaders(values),
+    ...form.written(fieldTexts(values)),
+    headers: form.headers ? formHeaders(values) : undefined,
   };
 }
 
@@ -164,17 +142,11 @@ export function formProblem(
   rows: readonly FormRow[],
   values: FormValues,
   taken: Iterable<string>,
+  form: ServiceForm = defaultForm(),
 ): { row: number; message: string } | undefined {
-  const problems: Record<FieldKey, () => string | undefined> = {
-    name: () => nameProblem(values.name, taken),
-    port: () => portProblem(values.port),
-    host: () => (values.host ? hostProblem(values.host) : undefined),
-    path: () => (values.path ? pathProblem(values.path) : undefined),
-    expect: () => (values.expect ? expectProblem(values.expect) : undefined),
-    method: () => (values.method ? methodProblem(values.method) : undefined),
-  };
   for (const [row, { key }] of rows.entries()) {
-    const message = problems[key]();
+    const value = fieldText(values, key);
+    const message = key === "name" ? nameProblem(value, taken) : form.problem(key, value);
     if (message) return { row, message };
   }
   const seen = new Set<string>();

@@ -21,6 +21,7 @@ import {
   TOO_MANY_REDIRECTS,
   unknownIssuerHint,
 } from "./diagnosis";
+import { httpForm } from "./http-form";
 import { describeResponse, type ResponseDetail } from "./response";
 import { type SystemTrust, systemTrust } from "./system-ca";
 import type { CheckContext, CheckResult, ServiceType } from "./types";
@@ -241,6 +242,7 @@ export function createHttpChecker(trust: SystemTrust = systemTrust): ServiceType
   return {
     type: "http",
     target: targetUrl,
+    form: httpForm,
     open: targetUrl,
     copy: (service, env) => ({ command: curlCommand(service), note: curlNote(service, env) }),
     async check(name, service, context) {
