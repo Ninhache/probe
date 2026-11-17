@@ -8,7 +8,6 @@ describe("a service address", () => {
     ["3000", { host: "localhost", port: 3000, path: "/" }],
     ["localhost:3000", { host: "localhost", port: 3000, path: "/" }],
     ["Api.local:8080/health", { host: "Api.local", port: 8080, path: "/health" }],
-    ["http://127.0.0.1:80/", { host: "127.0.0.1", port: 80, path: "/" }],
     ["[::1]:3000/up", { host: "::1", port: 3000, path: "/up" }],
   ])("should keep host, port and path when %j is plain http with a port", (typed, fields) => {
     expect(addressFields(typed)).toEqual(fields);
@@ -24,6 +23,13 @@ describe("a service address", () => {
     ],
   ])("should give %j as a url", (typed, url, port) => {
     expect(addressFields(typed)).toMatchObject({ url, port });
+  });
+
+  it.each([
+    ["http://localhost:3000/health", 3000],
+    ["http://127.0.0.1:80/", 80],
+  ])("should keep %j as a url, its scheme typed", (url, port) => {
+    expect(addressFields(url)).toMatchObject({ url, port });
   });
 
   it("should keep a port written in an address without a scheme", () => {

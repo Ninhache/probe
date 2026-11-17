@@ -73,15 +73,15 @@ export type Address = Pick<Service, "url" | "host" | "port" | "path">;
 
 // The text is split by hand, not by `new URL`: it would lowercase a host written by hand,
 // and a host left as typed is a host an edit does not rewrite.
-const PLAIN_HTTP = /^http:\/\/(\[[^\]]+\]|[^/:?#[\]]+):(\d+)(\/.*)?$/i;
+const HOST_PORT = /^(\[[^\]]+\]|[^/:?#[\]]+):(\d+)(\/.*)?$/;
 
 // A bare port is a port on this machine: `http://3000` would be read as the IP 0.0.11.184.
 const expanded = (text: string) =>
   withScheme(INTEGER.test(text.trim()) ? `localhost:${text.trim()}` : text);
 
-/** What is wrong with an address; it is never repeated, it may hold a user and a password. */
 const TYPED_PORT = /^[a-z]+:\/\/(?:\[[^\]]*\]|[^/:?#]*):(\d+)(?:[/?#]|$)/i;
 
+/** What is wrong with an address; it is never repeated, it may hold a user and a password. */
 export function addressProblem(text: string): string | undefined {
   if (text.trim() === "") return "An address, e.g. localhost:3000 or https://api.example.com";
   // Checked first: past 65535 the URL itself is refused, which says less.
@@ -93,12 +93,14 @@ export function addressProblem(text: string): string | undefined {
 }
 
 /**
- * The keys an address is written with: plain http with its port keeps `host`, `port` and `path`,
- * the shape a form has always written; anything else (https, no port, a query) is a `url`.
+ * The keys an address is written with: a host and a port typed without a scheme keep `host`, `port`
+ * and `path`, the shape a form has always written; a scheme typed, or no port, makes a `url`.
+ * A `url` reads back with its scheme: an edit that leaves it alone writes it as it was.
  */
 export function addressFields(text: string): Address {
   const url = expanded(text);
-  const plain = PLAIN_HTTP.exec(url);
+  const bare = INTEGER.test(text.trim()) ? `localhost:${text.trim()}` : text.trim();
+  const plain = SCHEME.test(bare) ? null : HOST_PORT.exec(bare);
   if (!plain) {
     // What the config reads from a `url`; only `url` is written.
     const parsed = new URL(url);

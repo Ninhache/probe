@@ -6,6 +6,7 @@ import { curlCommand, targetUrl } from "../src/checkers/http";
 import { createSystemTrust } from "../src/checkers/system-ca";
 import { writeService } from "../src/commands/service-writes";
 import { configSchemaV1, serviceSchemaV1, urlProblem } from "../src/config/schema";
+import { addressFields } from "../src/config/service-input";
 import { address } from "../src/detect/shared";
 import { tempProject } from "./helpers";
 
@@ -155,6 +156,19 @@ describe("writeService", () => {
 
     expect(await readFile(paths.config, "utf8")).toBe(
       "schemaVersion: 1\nservices:\n  api: { url: https://localhost:8443/health, expect: 204 }\n",
+    );
+  });
+
+  it("should leave an http `url` as it is when only another field changes", async () => {
+    const paths = await tempProject(
+      "schemaVersion: 1\nservices:\n  api: { url: http://localhost:3000/health }\n",
+    );
+    const fields = addressFields("http://localhost:3000/health");
+
+    await writeService(paths, { kind: "edit", name: "api", fields: { ...fields, expect: 204 } });
+
+    expect(await readFile(paths.config, "utf8")).toBe(
+      "schemaVersion: 1\nservices:\n  api: { url: http://localhost:3000/health, expect: 204 }\n",
     );
   });
 
