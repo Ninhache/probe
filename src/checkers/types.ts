@@ -65,6 +65,8 @@ export interface FormField {
   key: string;
   label: string;
   placeholder: string;
+  /** A closed list: the value is chosen, never typed, and empty stands for the first choice. */
+  choices?: readonly string[];
 }
 
 export type FieldValues = Readonly<Record<string, string>>;

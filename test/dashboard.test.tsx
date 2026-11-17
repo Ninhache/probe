@@ -36,6 +36,7 @@ const ESCAPE = String.fromCharCode(27);
 const ENTER = "\r";
 const BACKSPACE = String.fromCharCode(127);
 const TAB = "\t";
+const LEFT = "\u001B[D";
 const SAVED = { saved: true };
 const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, skipped) =>
   [api, db].map((result) =>
@@ -1388,12 +1389,12 @@ describe("dashboard service changes", () => {
     });
   });
 
-  it("adds a service with the method typed, in capitals", async () => {
+  it("adds a service with the method its letter picks", async () => {
     const { onServiceWrite, ...props } = project();
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}post${ENTER}`);
+    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}p${ENTER}`);
 
     await shows(lastFrame, "Added web");
     expect(onServiceWrite).toHaveBeenCalledWith({
@@ -1403,16 +1404,20 @@ describe("dashboard service changes", () => {
     });
   });
 
-  it("refuses a method it does not know, the form still open", async () => {
-    const { onServiceWrite, ...props } = project();
-    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+  it("chooses the method in the list, GET first, never typed", async () => {
+    const { lastFrame, stdin } = open(project());
     await tick();
+    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}`);
+    await shows(lastFrame, "› Method  ‹ GET ›");
 
-    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}trace${ENTER}`);
+    stdin.write("xo");
+    await shows(lastFrame, "› Method  ‹ OPTIONS ›");
+    stdin.write("pp");
+    await shows(lastFrame, "› Method  ‹ PUT ›");
+    stdin.write(LEFT);
 
-    await shows(lastFrame, "One of GET, HEAD, POST, PUT, PATCH");
-    expect(lastFrame()).toContain("› Method  trace_");
-    expect(onServiceWrite).not.toHaveBeenCalled();
+    await shows(lastFrame, "› Method  ‹ POST ›");
+    expect(lastFrame()).toContain("←→ or a first letter, again for the next");
   });
 
   it("shows the warning that comes with a write", async () => {
