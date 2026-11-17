@@ -14,6 +14,7 @@ const BLOCKS = "▁▂▃▄▅▆▇█";
 const HEADER_LINES = 6;
 const BODY_LINES = 5;
 const HINT_LINES = 3;
+const SENT_LINES = 2;
 // What every response carries: listed after the headers that tell something about the service.
 const TRANSPORT_HEADERS = new Set([
   "connection",
@@ -86,6 +87,11 @@ export function detailLines(
   if (result.hint) {
     for (const [index, text] of wrap(result.hint, width, HINT_LINES).entries())
       lines.push({ id: `hint ${index}`, text, tone: "dim" });
+  }
+  if (result.sent) {
+    const sends = wrap(`sends ${result.sent.join(` ${dot} `)}`, width, SENT_LINES);
+    for (const [index, text] of sends.entries())
+      lines.push({ id: `sent ${index}`, text, tone: "dim" });
   }
   const latencies = sparkline(history, unicode, width);
   if (latencies) lines.push({ id: "latencies", text: cut(latencies), tone: "dim" });

@@ -22,6 +22,8 @@ export interface CheckResult {
   hint?: string;
   /** Only when the check was asked for the detail: never in what `check --json` prints. */
   response?: ResponseDetail;
+  /** The headers as `.probe/config.yml` writes them, secrets hidden; only for the detail too. */
+  sent?: string[];
 }
 
 export interface Checker {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
+import { reference } from "../src/config/headers";
 import { DASHBOARD_HISTORY_LENGTH } from "../src/constants";
 import { detailLines, recordLatencies, sparkline } from "../src/dashboard/detail";
 
@@ -163,5 +164,22 @@ describe("detailLines", () => {
     expect(lines.every((line) => line.length <= 12)).toBe(true);
     expect(lines[0]).toBe("200 OK - 4ms");
     expect(lines.join("\n")).not.toMatch(/[·–▁]/);
+  });
+});
+
+describe("detailLines sent headers", () => {
+  it("should say which headers a service that did not answer sends", () => {
+    const refused: CheckResult = {
+      ...base,
+      ok: false,
+      latencyMs: 1,
+      error: "connection refused",
+      sent: ["X-Tenant: acme", `Authorization: Bearer ${reference("API_TOKEN")}`],
+    };
+
+    expect(texts(refused, [], { width: 80 })).toEqual([
+      "connection refused",
+      `sends X-Tenant: acme · Authorization: Bearer ${reference("API_TOKEN")}`,
+    ]);
   });
 });

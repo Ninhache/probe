@@ -61,6 +61,9 @@ On `Enter` the form asks under which variable to keep it and proposes a name (`A
 `Enter` shows the last answer of the selected service: status, latencies of this session, headers and the
 first lines of the body. For a service that is down: what failed and what to try.
 
+A `sends` line lists the headers the request carries, parameters included, as `config.yml` writes them:
+`sends X-Tenant: acme · Authorization: Bearer ${API_TOKEN}`. A variable stays `${NAME}`, never its value.
+
 - The value of a header that can carry a secret (`Authorization`, `Set-Cookie`, anything named after a token
   or a key) is replaced by `(hidden)`.
 - None of it is written anywhere.
