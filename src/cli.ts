@@ -17,6 +17,7 @@ import init, { ignoreLocalFiles, initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import open from "./commands/open";
+import { type ParameterWritten, writeParameter } from "./commands/parameter-writes";
 import rm from "./commands/rm";
 import { type ServiceWritten, writeService } from "./commands/service-writes";
 import { secondsToMs, stdoutTerminal } from "./commands/shared";
@@ -38,10 +39,12 @@ import {
   initialDashboardSettings,
   loadVariables,
   readDashboardPreferences,
+  readDashboardSelection,
   readLocalVariables,
   readSkippedServices,
   variableSource,
   writeDashboardPreferences,
+  writeDashboardSelection,
   writeServiceSkip,
   writeVariable,
 } from "./config/local";
@@ -55,6 +58,7 @@ import {
   REFRESH_COMMAND,
 } from "./constants";
 import { createSaveQueue } from "./dashboard/saves";
+import { createUndoJournal, journalFiles, type UndoOutcome } from "./dashboard/undo";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
 import { formatExamples } from "./ui/examples";
@@ -171,6 +175,27 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   const local = `${PROBE_DIR}/${LOCAL_FILE}`;
   const saveLocal = (write: () => Promise<boolean>) =>
     saves.save(local, write, `${local} cannot be edited safely: fix or delete it`);
+  const configFile = `${PROBE_DIR}/${CONFIG_FILE}`;
+  const journal = createUndoJournal(journalFiles(paths));
+  const revert = async (way: "undo" | "redo") => {
+    const word = way === "undo" ? "undone" : "redone";
+    let outcome = { kind: "empty" } as UndoOutcome;
+    const failure = await saves.save(
+      configFile,
+      async () => {
+        outcome = await journal[way]();
+        return true;
+      },
+      "",
+    );
+    if (failure) return { failure };
+    if (outcome.kind === "empty") return { failure: `Nothing to ${way}` };
+    if (outcome.kind === "changed")
+      return { failure: `${outcome.file} changed since: nothing ${word}` };
+    // Not on stderr: a line printed there would land in the middle of the screen.
+    const { config } = await loadConfig(paths, { log: () => {} });
+    return { config, undone: `${word[0]?.toUpperCase()}${word.slice(1)}: ${outcome.label}` };
+  };
   const keepVariable = async (name: string, value: string) => {
     // Before the value is written: the file that holds it must never be committed.
     await ignoreLocalFiles(paths.root);
@@ -180,6 +205,9 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     environments: environments.map((name) => environmentSource(paths, name)),
     settings,
     skipped: await readSkippedServices(paths),
+    selection: await readDashboardSelection(paths),
+    onParameterChange: (name, value) =>
+      saveLocal(() => writeDashboardSelection(paths, name, value)),
     variables: () => loadVariables(paths),
     variableSources: async (names) => {
       const { values } = await readLocalVariables(paths);
@@ -197,17 +225,18 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     onTimeoutChange: (name, seconds) =>
       saves.save(
         `${PROBE_DIR}/${CONFIG_FILE}`,
-        () => writeServiceTimeout(paths, name, seconds),
+        () => journal.record(`timeout of ${name}`, () => writeServiceTimeout(paths, name, seconds)),
         `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
       ),
     onServiceWrite: async (write, secrets = {}) => {
       let written: ServiceWritten | null = null;
       let failure = await saves.save(
         `${PROBE_DIR}/${CONFIG_FILE}`,
-        async () => {
-          written = await writeService(paths, write);
-          return written !== null;
-        },
+        () =>
+          journal.record(`${write.kind} ${write.name}`, async () => {
+            written = await writeService(paths, write);
+            return written !== null;
+          }),
         write.kind === "add"
           ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
           : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
@@ -217,6 +246,23 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
         failure = (await saveLocal(() => keepVariable(name, value))) ?? failure;
       return { failure, ...(written as ServiceWritten | null) };
     },
+    onParameterWrite: async (write) => {
+      let written: ParameterWritten | null = null;
+      const failure = await saves.save(
+        `${PROBE_DIR}/${CONFIG_FILE}`,
+        () =>
+          journal.record(`${write.kind} parameter ${write.name}`, async () => {
+            written = await writeParameter(paths, write);
+            return written !== null;
+          }),
+        write.kind === "add"
+          ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
+          : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+      );
+      return { failure, ...(written as ParameterWritten | null) };
+    },
+    onUndo: () => revert("undo"),
+    onRedo: () => revert("redo"),
   });
   await saves.idle();
   // The dashboard said so too, but its screen is gone once it closes.

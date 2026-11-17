@@ -1,4 +1,4 @@
-import type { CheckResult } from "../checkers/types";
+import { answer, type CheckResult } from "../checkers/types";
 import type { Colors } from "../ui/colors";
 import { truncate } from "../ui/terminal";
 
@@ -39,8 +39,8 @@ function cellText(column: GridColumn, name: string, room: number, pending: strin
   if (!result) return "";
   if (result.skipped) return "- skipped";
   if (!result.ok) return `✗ ${result.error ?? "down"}`;
-  const full = `✓ ${result.status} ${result.latencyMs}ms`;
-  return full.length > room ? `✓ ${result.status}` : full;
+  const full = `✓ ${answer(result)} ${result.latencyMs}ms`;
+  return full.length > room ? `✓ ${answer(result)}` : full;
 }
 
 function tone(column: GridColumn, name: string): "good" | "bad" | "dim" {

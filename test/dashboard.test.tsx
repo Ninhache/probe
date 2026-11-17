@@ -36,6 +36,7 @@ const ESCAPE = String.fromCharCode(27);
 const ENTER = "\r";
 const BACKSPACE = String.fromCharCode(127);
 const TAB = "\t";
+const LEFT = "\u001B[D";
 const SAVED = { saved: true };
 const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, skipped) =>
   [api, db].map((result) =>
@@ -82,6 +83,8 @@ function open(options: {
   onServiceWrite?: DashboardProps["onServiceWrite"];
   variables?: DashboardProps["variables"];
   onVariableWrite?: DashboardProps["onVariableWrite"];
+  onUndo?: DashboardProps["onUndo"];
+  onRedo?: DashboardProps["onRedo"];
 }) {
   app = render(
     <Dashboard
@@ -107,6 +110,8 @@ function open(options: {
       onServiceWrite={options.onServiceWrite}
       variables={options.variables}
       onVariableWrite={options.onVariableWrite}
+      onUndo={options.onUndo}
+      onRedo={options.onRedo}
     />,
   );
   return app;
@@ -645,9 +650,19 @@ describe("dashboard", () => {
       "  e       Edit the service",
       "  d       Remove it",
       "  a       Add a service",
+      "  z       Undo last change",
+      "  Z       Redo what z undid",
       "  /       Filter by name",
+      "  p       Parameter values",
       "  :       Find a command",
       "  o       Options",
+      "Parameters",
+      "  ←→ hl   Change parameter",
+      "  ↑↓ jk   Choose its value",
+      "  a       Add a parameter",
+      "  e       Edit the parameter",
+      "  d       Remove it",
+      "  p esc   Close",
     ];
     const right = [
       "Panels",
@@ -672,7 +687,9 @@ describe("dashboard", () => {
     expect(lastFrame()).toBe(
       [
         "probe · keys",
-        ...right.map((line, index) => `${(left[index] ?? "").padEnd(gutter)}${line}`),
+        ...left.map((line, index) =>
+          right[index] === undefined ? line : `${line.padEnd(gutter)}${right[index]}`,
+        ),
         "? esc close · q quit",
       ].join("\n"),
     );
@@ -927,7 +944,7 @@ describe("dashboard filter", () => {
 
     stdin.write(`/d${ENTER}u`);
 
-    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("db"));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("db", {}));
     expect(lastFrame()).toContain("probe · 1/2 up · every 60s · filter: d");
   });
 
@@ -966,7 +983,10 @@ describe("dashboard command palette", () => {
         "  Edit the service   e",
         "  Remove it          d",
         "  Add a service      a",
+        "  Undo last change   z",
+        "  Redo what z undid  Z",
         "  Filter by name     /",
+        "  Parameter values   p",
         "  Options            o",
         "  This help          ?",
         "  Quit               q",
@@ -994,7 +1014,7 @@ describe("dashboard command palette", () => {
     stdin.write(`j:curl${ENTER}`);
 
     await shows(lastFrame, "Copied");
-    expect(onCopy).toHaveBeenCalledWith("db", undefined);
+    expect(onCopy).toHaveBeenCalledWith("db", undefined, {});
     expect(lastFrame()).not.toContain(": curl");
   });
 
@@ -1079,7 +1099,7 @@ describe("dashboard command palette", () => {
     await hides(lastFrame, "Filter:");
     stdin.write("a:");
 
-    await shows(lastFrame, "› Name    :_");
+    await shows(lastFrame, "› Name     :_");
   });
 
   it("opens the help and the filter from the palette", async () => {
@@ -1098,7 +1118,7 @@ describe("dashboard command palette", () => {
     const { lastFrame, stdin } = open({ check: async () => services });
     await tick();
 
-    stdin.write(`:${`${ESCAPE}[B`.repeat(10)}`);
+    stdin.write(`:${`${ESCAPE}[B`.repeat(13)}`);
 
     await shows(lastFrame, "› Quit");
     expect((lastFrame() ?? "").split("\n").length).toBeLessThan(24);
@@ -1222,10 +1242,10 @@ describe("dashboard service changes", () => {
 
     await shows(lastFrame, "│ Add a service");
     const frame = lastFrame() ?? "";
-    expect(frame).toContain("│ › Name    _ api");
-    expect(frame).toContain("│   Port    3000");
-    expect(frame).toContain("│   Expect  any 2xx");
-    expect(frame).toContain("│   Header  Accept: application/json");
+    expect(frame).toContain("│ › Name     _ api");
+    expect(frame).toContain("│   Address  localhost:3000/health");
+    expect(frame).toContain("│   Expect   any 2xx");
+    expect(frame).toContain("│   Header   Accept: application/json");
     expect(frame).toContain("↑↓ tab field · ↵ save · ctrl+u empty · esc cancel");
   });
 
@@ -1252,18 +1272,18 @@ describe("dashboard service changes", () => {
 
     stdin.write("aq?jk");
 
-    await shows(lastFrame, "› Name    q?jk_");
+    await shows(lastFrame, "› Name     q?jk_");
   });
 
   it("deletes the last character on backspace", async () => {
     const { lastFrame, stdin } = open(project());
     await tick();
     stdin.write("awebb");
-    await shows(lastFrame, "› Name    webb_");
+    await shows(lastFrame, "› Name     webb_");
 
     stdin.write(BACKSPACE);
 
-    await shows(lastFrame, "› Name    web_");
+    await shows(lastFrame, "› Name     web_");
   });
 
   it("moves between the fields with the arrows", async () => {
@@ -1272,7 +1292,7 @@ describe("dashboard service changes", () => {
 
     stdin.write(`a${ESCAPE}[B${ESCAPE}[B${ESCAPE}[A8`);
 
-    await shows(lastFrame, "› Port    8_");
+    await shows(lastFrame, "› Address  8_");
   });
 
   it("shows the end of a value too long for the field", async () => {
@@ -1280,10 +1300,10 @@ describe("dashboard service changes", () => {
     await tick();
     const path = `/${"a".repeat(40)}/end`;
 
-    stdin.write(`e${TAB}${TAB}${BACKSPACE.repeat(7)}${path}`);
+    stdin.write(`e${BACKSPACE.repeat(7)}${path}`);
 
     await shows(lastFrame, "/end_ │");
-    expect(lastFrame()).toContain("› Path    …aaa");
+    expect(lastFrame()).toContain("› Address  …aaa");
   });
 
   it("reads every status typed in the last field", async () => {
@@ -1291,7 +1311,7 @@ describe("dashboard service changes", () => {
     const { stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`aweb${TAB}80${TAB}127.0.0.1${TAB}/up${TAB}200,204${ENTER}`);
+    stdin.write(`aweb${TAB}127.0.0.1:80/up${TAB}200,204${ENTER}`);
 
     await waitFor(() =>
       expect(onServiceWrite).toHaveBeenCalledWith({
@@ -1310,7 +1330,7 @@ describe("dashboard service changes", () => {
     stdin.write(`aweb${TAB}99999${TAB}${ENTER}`);
 
     await shows(lastFrame, "A port between 1 and 65535");
-    expect(lastFrame()).toContain("› Port    99999_");
+    expect(lastFrame()).toContain("› Address  99999_");
     expect(onServiceWrite).not.toHaveBeenCalled();
   });
 
@@ -1330,23 +1350,12 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
     stdin.write("aweb");
-    await shows(lastFrame, "› Name    web_");
+    await shows(lastFrame, "› Name     web_");
 
     stdin.write(ESCAPE);
 
     await hides(lastFrame, "Add a service");
     expect(onServiceWrite).not.toHaveBeenCalled();
-  });
-
-  it("says where to edit a service the form cannot hold, instead of opening it", async () => {
-    const serviceFields = () => "api is declared by `url`: edit it in .probe/config.yml";
-    const { lastFrame, stdin } = open({ ...project(), serviceFields });
-    await tick();
-
-    stdin.write("e");
-
-    await shows(lastFrame, "api is declared by `url`: edit it in .probe/config.yml");
-    expect(lastFrame()).not.toContain("Edit api");
   });
 
   it("opens the form of the selected service on e, filled with what it has", async () => {
@@ -1358,8 +1367,130 @@ describe("dashboard service changes", () => {
     await shows(lastFrame, "│ Edit api");
     const frame = lastFrame() ?? "";
     expect(frame).not.toContain("Name");
-    expect(frame).toContain("│ › Port    3000_");
-    expect(frame).toContain("│   Path    /health");
+    expect(frame).toContain("│ › Address  localhost:3000/health_");
+  });
+
+  const URL_API = {
+    url: "https://api.example.com/health",
+    host: "api.example.com",
+    port: 443,
+    path: "/health",
+  };
+
+  it("should open a service declared by `url` with its url as the address", async () => {
+    const { lastFrame, stdin } = open({
+      ...project(),
+      serviceFields: () => ({ ...URL_API, expect: undefined }),
+    });
+    await tick();
+
+    stdin.write("e");
+
+    await shows(lastFrame, "│ › Address  https://api.example.com/health_");
+  });
+
+  it("should keep the url of a service when only its status changes", async () => {
+    const { onServiceWrite, ...props } = project();
+    const { lastFrame, stdin } = open({
+      ...props,
+      onServiceWrite,
+      serviceFields: () => ({ ...URL_API, expect: undefined }),
+    });
+    await tick();
+
+    stdin.write(`e${TAB}204${ENTER}`);
+
+    await shows(lastFrame, "Saved api");
+    expect(onServiceWrite).toHaveBeenCalledWith({
+      kind: "edit",
+      name: "api",
+      fields: { ...URL_API, expect: 204, method: undefined, headers: undefined },
+    });
+  });
+
+  it("should add a service by an https address without a port", async () => {
+    const { onServiceWrite, ...props } = project();
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`aweb${TAB}https://api.example.com/health${ENTER}`);
+
+    await shows(lastFrame, "Added web");
+    expect(onServiceWrite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "add",
+        fields: expect.objectContaining({ url: "https://api.example.com/health", port: 443 }),
+      }),
+    );
+  });
+
+  it("should refuse an address with a password without repeating it in the problem", async () => {
+    const { onServiceWrite, ...props } = project();
+    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+    await tick();
+
+    stdin.write(`aweb${TAB}https://admin:hunter2@api.example.com${ENTER}`);
+
+    await shows(lastFrame, "Expected a URL without a user or a password");
+    const problem = (lastFrame() ?? "").split("\n").filter((line) => line.includes("Expected"));
+    expect(problem.join("")).not.toContain("hunter2");
+    expect(onServiceWrite).not.toHaveBeenCalled();
+  });
+
+  it("should undo the last write on z and say what was undone", async () => {
+    const onUndo = vi.fn(async () => ({ undone: "Undone: add web", timeouts: {} }));
+    const { lastFrame, stdin } = open({ ...project(), onUndo });
+    await tick();
+
+    stdin.write("z");
+
+    await shows(lastFrame, "Undone: add web");
+    expect(onUndo).toHaveBeenCalledOnce();
+  });
+
+  it("should say why nothing was undone", async () => {
+    const onUndo = async () => ({ failure: ".probe/config.yml changed since: nothing undone" });
+    const { lastFrame, stdin } = open({ ...project(), onUndo });
+    await tick();
+
+    stdin.write("z");
+
+    await shows(lastFrame, ".probe/config.yml changed since: nothing undone");
+  });
+
+  it("should check again with the timeouts of the config put back", async () => {
+    const { check: services, ...props } = project();
+    const check = vi.fn<DashboardProps["check"]>(services);
+    const onUndo = async () => ({ undone: "Undone: timeout of api", timeouts: { api: 7 } });
+    const { lastFrame, stdin } = open({ ...props, check, timeouts: { api: 3 }, onUndo });
+    await tick();
+
+    stdin.write("z");
+
+    await shows(lastFrame, "Undone: timeout of api");
+    await waitFor(() => expect(check.mock.calls.at(-1)?.[3]).toEqual({ api: 7 }));
+  });
+
+  it("should redo on Z what z undid", async () => {
+    const onRedo = vi.fn(async () => ({ undone: "Redone: add web", timeouts: {} }));
+    const { lastFrame, stdin } = open({ ...project(), onRedo });
+    await tick();
+
+    stdin.write("Z");
+
+    await shows(lastFrame, "Redone: add web");
+    expect(onRedo).toHaveBeenCalledOnce();
+  });
+
+  it("should take z as a letter in the form", async () => {
+    const onUndo = vi.fn(async () => ({ undone: "Undone: add web" }));
+    const { lastFrame, stdin } = open({ ...project(), onUndo });
+    await tick();
+
+    stdin.write("az");
+
+    await shows(lastFrame, "› Name     z_");
+    expect(onUndo).not.toHaveBeenCalled();
   });
 
   it("saves what the form changed on a service", async () => {
@@ -1367,7 +1498,7 @@ describe("dashboard service changes", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${BACKSPACE.repeat(4)}4000${ENTER}`);
+    stdin.write(`e${BACKSPACE.repeat(11)}4000/health${ENTER}`);
 
     await shows(lastFrame, "Saved api");
     expect(onServiceWrite).toHaveBeenCalledWith({
@@ -1377,12 +1508,12 @@ describe("dashboard service changes", () => {
     });
   });
 
-  it("adds a service with the method typed, in capitals", async () => {
+  it("adds a service with the method its letter picks", async () => {
     const { onServiceWrite, ...props } = project();
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}post${ENTER}`);
+    stdin.write(`aweb${TAB}8080${TAB.repeat(2)}p${ENTER}`);
 
     await shows(lastFrame, "Added web");
     expect(onServiceWrite).toHaveBeenCalledWith({
@@ -1392,16 +1523,20 @@ describe("dashboard service changes", () => {
     });
   });
 
-  it("refuses a method it does not know, the form still open", async () => {
-    const { onServiceWrite, ...props } = project();
-    const { lastFrame, stdin } = open({ ...props, onServiceWrite });
+  it("chooses the method in the list, GET first, never typed", async () => {
+    const { lastFrame, stdin } = open(project());
     await tick();
+    stdin.write(`aweb${TAB}8080${TAB.repeat(2)}`);
+    await shows(lastFrame, "› Method   ‹ GET ›");
 
-    stdin.write(`aweb${TAB}8080${TAB.repeat(4)}trace${ENTER}`);
+    stdin.write("xo");
+    await shows(lastFrame, "› Method   ‹ OPTIONS ›");
+    stdin.write("pp");
+    await shows(lastFrame, "› Method   ‹ PUT ›");
+    stdin.write(LEFT);
 
-    await shows(lastFrame, "One of GET, HEAD, POST, PUT, PATCH");
-    expect(lastFrame()).toContain("› Method  trace_");
-    expect(onServiceWrite).not.toHaveBeenCalled();
+    await shows(lastFrame, "› Method   ‹ POST ›");
+    expect(lastFrame()).toContain("←→ or a first letter, again for the next");
   });
 
   it("shows the warning that comes with a write", async () => {
@@ -1636,8 +1771,8 @@ describe("dashboard headers and variables", () => {
     stdin.write("e");
 
     await shows(lastFrame, "│ Edit api");
-    expect(lastFrame()).toContain("│   Header  Accept: text/plain");
-    expect(lastFrame()).toContain("│   Header  Accept: application/json");
+    expect(lastFrame()).toContain("│   Header   Accept: text/plain");
+    expect(lastFrame()).toContain("│   Header   Accept: application/json");
   });
 
   it("writes the headers as they were when nothing was typed", async () => {
@@ -1661,8 +1796,8 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}${ACCEPT}`);
-    await shows(lastFrame, `│ › Header  ${ACCEPT}_`);
+    stdin.write(`e${DOWN.repeat(3)}${ACCEPT}`);
+    await shows(lastFrame, `│ › Header   ${ACCEPT}_`);
     expect(lastFrame()).toContain("Name: value. Emptied, it is removed.");
     stdin.write(ENTER);
 
@@ -1679,7 +1814,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}${CLEAR}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(3)}${CLEAR}${ENTER}`);
 
     await shows(lastFrame, "Saved api");
     expect(onServiceWrite).toHaveBeenCalledWith({
@@ -1694,10 +1829,10 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(6)}accept: text/html${TAB}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(4)}accept: text/html${TAB}${ENTER}`);
 
     await shows(lastFrame, "accept is given twice");
-    expect(lastFrame()).toContain("│ › Header  accept: text/html_");
+    expect(lastFrame()).toContain("│ › Header   accept: text/html_");
     expect(onServiceWrite).not.toHaveBeenCalled();
   });
 
@@ -1706,7 +1841,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}Authorization: Bearer ${SECRET}`);
+    stdin.write(`e${DOWN.repeat(3)}Authorization: Bearer ${SECRET}`);
     await shows(lastFrame, `Authorization: Bearer ${"•".repeat(SECRET.length)}`.slice(-20));
     stdin.write(ENTER);
     await shows(lastFrame, "│ Authorization holds a secret");
@@ -1735,13 +1870,13 @@ describe("dashboard headers and variables", () => {
     });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}X-Api-Key: ${SECRET}`);
+    stdin.write(`e${DOWN.repeat(3)}X-Api-Key: ${SECRET}`);
     await shows(lastFrame, "*****_");
     stdin.write("$" + "{");
     await shows(lastFrame, `${"*".repeat(SECRET.length + 2)}_`);
     stdin.write(`${CLEAR}X-Api-Key: ${reference("KEY")}`);
 
-    await shows(lastFrame, `> Header  X-Api-Key: ${reference("KEY")}_`);
+    await shows(lastFrame, `> Header   X-Api-Key: ${reference("KEY")}_`);
     expect(frames.join("\n")).not.toContain(SECRET);
   });
 
@@ -1751,7 +1886,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}X-Api-Key: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(3)}X-Api-Key: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(`${CLEAR}MINE${ENTER}`);
     await shows(lastFrame, taken);
@@ -1776,7 +1911,7 @@ describe("dashboard headers and variables", () => {
     await tick();
 
     stdin.write(
-      `e${DOWN.repeat(5)}Authorization: Basic ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`,
+      `e${DOWN.repeat(3)}Authorization: Basic ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`,
     );
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ENTER);
@@ -1805,7 +1940,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`aweb${TAB}8080${DOWN.repeat(5)}X-Api-Key: ${SECRET}${ENTER}`);
+    stdin.write(`aweb${TAB}8080${DOWN.repeat(3)}X-Api-Key: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  WEB_TOKEN_");
     stdin.write(ENTER);
 
@@ -1832,7 +1967,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(6)}Authorization: Bearer ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(4)}Authorization: Bearer ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  OTHER_");
     stdin.write(`${CLEAR}API_TOKEN${ENTER}`);
 
@@ -1845,7 +1980,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(3)}X-Token: ${SECRET}${DOWN}Cookie: sid=${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ENTER);
     await shows(lastFrame, "│ Cookie holds a secret");
@@ -1868,7 +2003,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open({ ...props, onServiceWrite });
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(3)}X-Token: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ESCAPE);
 
@@ -1883,7 +2018,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, stdin } = open(props);
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(3)}X-Token: ${SECRET}${ENTER}`);
     await shows(lastFrame, "│ › Variable  API_TOKEN_");
     stdin.write(ENTER);
 
@@ -1896,7 +2031,7 @@ describe("dashboard headers and variables", () => {
     const { lastFrame, frames, stdin } = open(props);
     await tick();
 
-    stdin.write(`e${DOWN.repeat(5)}X-Token: ${SECRET}${ENTER}`);
+    stdin.write(`e${DOWN.repeat(3)}X-Token: ${SECRET}${ENTER}`);
 
     await shows(lastFrame, "X-Token expects a reference");
     expect(props.onServiceWrite).not.toHaveBeenCalled();

@@ -31,6 +31,7 @@ The strategy says where the chosen value goes in the request.
 | `header` | `name` | `/health`, sent with `name: v2`        |
 | `query`  | `name` | `/health?name=v2`                      |
 | `path`   |        | `/v2/health`                           |
+| `url`    |        | the address the service gives for `v2` |
 
 - `query` is added after the query the service already has: `/find?q=a` becomes `/find?q=a&name=v2`.
 - `path` goes before the path of the service, for a `url` too: `https://example.com/status` becomes
@@ -41,10 +42,47 @@ The strategy says where the chosen value goes in the request.
 - With a `header` parameter, every service sends a header: a redirect is then followed on the same host and
   port only, as for the [headers](headers.md) of a service.
 
+## One address per value
+
+With the `url` strategy, a value changes where a service is: each service lists its address for the values
+that move it, under `urls`. Since 0.21.0.
+
+```yaml
+parameters:
+  env: { values: [local, prod], strategy: { kind: url } }
+
+services:
+  api:
+    port: 3000
+    path: /health
+    urls: { prod: https://api.example.com/health }
+  db: { port: 5432 }
+```
+
+```sh
+probe check                  # api at http://localhost:3000/health
+probe check --set env=prod   # api at https://api.example.com/health, db where it was
+```
+
+- A value without an address in `urls` keeps the `port` or the `url` of the service.
+- A service with an address in `urls` for every value needs no `port` or `url` of its own (since 0.23.0).
+  A value left without one, in `config.yml` or in an environment, is refused by name:
+  `local has no address, and api has no port or url of its own`.
+
+  ```yaml
+  services:
+    api:
+      urls: { local: http://localhost:3000/health, prod: https://api.example.com/health }
+  ```
+- A config has one `url` parameter at most, and `urls` only names its values.
+- The other parameters apply to the address that is chosen.
+
 ## Names and values
 
 - The name of a parameter is made of letters, digits, `_` and `-`.
-- A value is made of letters, digits, `.`, `_` and `-`, and is listed once.
+- A value is any text on one line, without a comma or spaces around it, and is listed once (since 0.21.0;
+  letters, digits, `.`, `_` and `-` before). A query or a path encodes it: `new york` is sent as `new%20york`.
+- A value sent in a header is ASCII only: no accent, and no `${`, which would be read as a variable.
 - The values are written in `config.yml`, which is shared: a header that carries a secret, such as
   `Authorization`, is refused. See [Headers and secrets](headers.md) for those.
 
@@ -58,8 +96,9 @@ probe check --set tenant=globex --set version=v2
 probe curl api --set tenant=globex
 ```
 
-- Without `--set`, a parameter takes its first value. That is what the [dashboard](dashboard.md) and
-  `make check` use.
+- Without `--set`, a parameter takes its first value. That is what `make check` uses.
+- In the [dashboard](dashboard.md#parameters), `p` chooses the values, saved for the next start, and adds,
+  edits or removes the parameters of `config.yml` (since 0.21.0).
 - The other commands refuse `--set`.
 - A parameter or a value the config does not list is refused: exit code `2`, and the known ones are listed.
 - An [environment](environments.md) file has its own `parameters`: `probe check --env prod --set tenant=globex`

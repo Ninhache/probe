@@ -1,12 +1,10 @@
 import type { Variables } from "../config/local";
 import { applySelection, type Selection } from "../config/parameters";
 import type { Config, Service } from "../config/schema";
-import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { CONFIG } from "./diagnosis";
-import { targetUrl } from "./http";
-import { getChecker } from "./registry";
+import { serviceType } from "./registry";
 import { selectServices } from "./select";
-import type { CheckResult } from "./types";
+import type { CheckResult, ServiceTypes } from "./types";
 
 export interface RunOptions {
   timeoutMs: number;
@@ -18,6 +16,7 @@ export interface RunOptions {
   configFile?: string;
   tags?: readonly string[];
   selection?: Selection;
+  types?: ServiceTypes;
 }
 
 export function resolveTimeoutMs(service: Service, options: RunOptions): number {
@@ -37,20 +36,19 @@ export async function runChecks(
   const results = await Promise.all(
     selected.map(({ name, skipped: skip }) => {
       const service = config.services[name] as Service;
-      // Schema v1 has no `type` field; a later schema adds it.
-      const type = (service as { type?: string }).type ?? DEFAULT_CHECKER_TYPE;
+      const type = (options.types ?? serviceType)(service);
       if (skip) {
         const result: CheckResult = {
           name,
-          type,
+          type: type.type,
           ok: true,
           skipped: true,
-          target: targetUrl(service),
+          target: type.target(service),
           latencyMs: 0,
         };
         return result;
       }
-      return getChecker(type).check(name, service, {
+      return type.check(name, service, {
         timeoutMs: resolveTimeoutMs(service, options),
         signal: options.signal,
         detail: options.detail,

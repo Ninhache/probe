@@ -1,5 +1,5 @@
-import { targetUrl } from "../checkers/http";
-import type { CheckResult } from "../checkers/types";
+import { targetOf } from "../checkers/registry";
+import { answer, type CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
 import { CONTAINS_SHOWN_CHARACTERS } from "../constants";
 import { createColors } from "./colors";
@@ -23,7 +23,7 @@ export function formatCheckResults(results: CheckResult[], terminal: Terminal): 
   const targetWidth = width(results.map((result) => result.target));
   const outcomes = results.map((result) => {
     if (result.skipped) return SKIPPED;
-    return result.ok ? `${result.status}${GAP}${result.latencyMs}ms` : (result.error ?? "down");
+    return result.ok ? `${answer(result)}${GAP}${result.latencyMs}ms` : (result.error ?? "down");
   });
   const fullWidth = 2 + nameWidth + GAP.length + targetWidth + GAP.length + width(outcomes);
   const { columns } = terminal;
@@ -49,9 +49,9 @@ export function formatCheckResults(results: CheckResult[], terminal: Terminal): 
       } else if (!result.ok) {
         outcome = colors.red(outcomeMax === undefined ? plain : truncate(plain, outcomeMax));
       } else if (outcomeMax !== undefined && plain.length > outcomeMax) {
-        outcome = colors.green(truncate(String(result.status), outcomeMax));
+        outcome = colors.green(truncate(answer(result), outcomeMax));
       } else {
-        outcome = `${colors.green(String(result.status))}${GAP}${colors.dim(`${result.latencyMs}ms`)}`;
+        outcome = `${colors.green(answer(result))}${GAP}${colors.dim(`${result.latencyMs}ms`)}`;
       }
       const line = `${mark} ${name}${GAP}${target}${outcome}`;
       if (!result.hint) return line;
@@ -70,7 +70,7 @@ export function formatServices(
   const colors = createColors(terminal.color);
   const rows = Object.entries(config.services).map(([name, service]) => ({
     name,
-    url: targetUrl(service),
+    url: targetOf(service),
     notes:
       (service.method === undefined ? "" : `${GAP}${service.method}`) +
       (service.expect === undefined ? "" : `${GAP}expect ${service.expect}`) +

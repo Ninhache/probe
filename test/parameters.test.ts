@@ -5,15 +5,17 @@ import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { targetUrl } from "../src/checkers/http";
 import { selectionFrom as selectionFromArgs } from "../src/commands/shared";
 import { applySelection, selectionFrom } from "../src/config/parameters";
-import { type Config, configSchemaV1 } from "../src/config/schema";
+import { type Config, configSchemaV1, type Service } from "../src/config/schema";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 
 const TENANT = { values: ["acme", "globex"], strategy: { kind: "header", name: "X-Tenant" } };
 const VERSION = { values: ["v1", "v2"], strategy: { kind: "path" } };
+const ENV = { values: ["local", "prod"], strategy: { kind: "url" } };
 const REGION = { values: ["eu", "us"], strategy: { kind: "query", name: "region" } };
 
 const parsed = (parameters: unknown, services: unknown = { api: { port: 3000 } }): Config =>
@@ -46,8 +48,11 @@ describe("the parameters of a config", () => {
   it.each([
     ["no value", { tenant: { ...TENANT, values: [] } }],
     ["a value twice", { tenant: { ...TENANT, values: ["acme", "acme"] } }],
-    ["a value with a slash", { version: { ...VERSION, values: ["v1/x"] } }],
-    ["a value with a space", { tenant: { ...TENANT, values: ["a b"] } }],
+    ["a value with a comma", { version: { ...VERSION, values: ["v1,v2"] } }],
+    ["a value with a space around it", { version: { ...VERSION, values: [" v1"] } }],
+    ["a value on two lines", { version: { ...VERSION, values: ["v1\nv2"] } }],
+    ["an accent in a header", { tenant: { ...TENANT, values: ["créteil"] } }],
+    ["a variable in a header", { tenant: { ...TENANT, values: [`$\{API_TOKEN}`] } }],
     ["a name with a space", { "my tenant": TENANT }],
     ["an unknown strategy", { tenant: { ...TENANT, strategy: { kind: "script" } } }],
     ["a header without a name", { tenant: { ...TENANT, strategy: { kind: "header" } } }],
@@ -60,8 +65,19 @@ describe("the parameters of a config", () => {
       { tenant: TENANT, client: { ...TENANT, strategy: { kind: "header", name: "x-tenant" } } },
     ],
     ["two parameters on one query", { region: REGION, zone: REGION }],
+    ["two url parameters", { env: ENV, stage: ENV }],
+    ["a url with a name", { env: { ...ENV, strategy: { kind: "url", name: "x" } } }],
   ])("refuse %s", (_what, parameters) => {
     expect(refused(parameters)).not.toBe("");
+  });
+
+  it("take any text on one line as a value of a query or a path", () => {
+    const { parameters } = parsed({
+      city: { ...REGION, values: ["new york", "créteil", "a/b"] },
+      tenant: { ...TENANT, values: ["acme & co"] },
+    });
+
+    expect(parameters?.city?.values).toEqual(["new york", "créteil", "a/b"]);
   });
 
   it("refuse a header that carries a secret, without repeating a value", () => {
@@ -83,6 +99,94 @@ describe("two parameters", () => {
 
   it("may be several paths", () => {
     expect(refused({ version: VERSION, area: VERSION })).toBe("");
+  });
+});
+
+describe("the urls of a service", () => {
+  const issues = (parameters: unknown, urls: unknown): string => {
+    const services = { api: { port: 3000, urls } };
+    const result = configSchemaV1.safeParse({ schemaVersion: 1, parameters, services });
+    return result.success ? "" : result.error.issues.map((issue) => issue.message).join("\n");
+  };
+
+  it("are one address for a value of the url parameter", () => {
+    expect(issues({ env: ENV }, { prod: "https://api.example.com/health" })).toBe("");
+  });
+
+  it("refuse a value the parameter does not list", () => {
+    expect(issues({ env: ENV }, { staging: "https://api.example.com" })).toContain(
+      "expected a value of the parameter: local, prod",
+    );
+  });
+
+  it("need a url parameter", () => {
+    expect(issues({ tenant: TENANT }, { prod: "https://api.example.com" })).toContain(
+      "needs a parameter with `strategy: { kind: url }`",
+    );
+    expect(issues(undefined, { prod: "https://api.example.com" })).not.toBe("");
+  });
+
+  it("refuse an address with a password, without repeating it", () => {
+    const message = issues({ env: ENV }, { prod: "https://me:hunter2@api.example.com" });
+
+    expect(message).toContain("a URL without a user or a password");
+    expect(message).not.toContain("hunter2");
+  });
+
+  describe("of a service with no port or url of its own", () => {
+    const declared = (urls: unknown, parameters: unknown = { env: ENV }) =>
+      configSchemaV1.safeParse({ schemaVersion: 1, parameters, services: { api: { urls } } });
+    const both = {
+      local: "http://localhost:3000/health",
+      prod: "https://api.example.com/health",
+    };
+
+    it("should be enough when every value of the parameter has one", () => {
+      const result = declared(both);
+
+      expect(result.success).toBe(true);
+      expect(result.data?.services.api).toMatchObject({ host: "localhost", port: 3000 });
+    });
+
+    it("should check each value at its own address", () => {
+      const config = parsed({ env: ENV }, { api: { urls: both } });
+
+      const prod = applySelection(config, { env: "prod" }).services.api as Service;
+
+      expect(targetUrl(prod)).toBe("https://api.example.com/health");
+    });
+
+    it("should name the value left without an address", () => {
+      const result = declared({ prod: "https://api.example.com/health" });
+
+      expect(result.error?.issues.map(({ message, path }) => [path, message])).toEqual([
+        [
+          ["services", "api", "urls", "local"],
+          "local has no address, and api has no port or url of its own",
+        ],
+      ]);
+    });
+
+    it("should not repeat an address in what it says", () => {
+      const result = declared({ prod: "https://me:hunter2@api.example.com/health" });
+
+      expect(JSON.stringify(result.error?.issues)).not.toContain("hunter2");
+    });
+
+    it("should still need a port with a host or a path", () => {
+      const result = configSchemaV1.safeParse({
+        schemaVersion: 1,
+        parameters: { env: ENV },
+        services: { api: { host: "localhost", urls: both } },
+      });
+
+      expect(result.error?.issues.map(({ path }) => path)).toEqual([["services", "api", "port"]]);
+    });
+
+    it("should still need a url parameter", () => {
+      expect(declared(both, { tenant: TENANT }).success).toBe(false);
+      expect(declared(both, {}).success).toBe(false);
+    });
   });
 });
 
@@ -144,6 +248,15 @@ describe("applySelection", () => {
     expect(api?.headers).toEqual({ "X-Tenant": "acme" });
     expect(web?.headers).toEqual({ "X-Tenant": "acme" });
     expect(web?.url).toBe("https://example.com/status?full=1");
+  });
+
+  it("encodes in the URL what it cannot carry as it is", () => {
+    const city = { ...REGION, values: ["new york"] };
+    const place = { ...VERSION, values: ["créteil/sud"] };
+
+    const { api } = rewritten({ city, place });
+
+    expect(api?.path).toBe("/cr%C3%A9teil%2Fsud/health?region=new%20york");
   });
 
   it("sends the value asked for", () => {
@@ -219,6 +332,36 @@ describe("applySelection", () => {
       path: "/v1/beta/health?region=eu",
       headers: { "X-Tenant": "acme" },
     });
+  });
+
+  it("requests the address a service gives for the chosen value", () => {
+    const config = parsed(
+      { env: ENV },
+      {
+        api: { port: 3000, path: "/health", urls: { prod: "https://api.example.com/live?a=1" } },
+        db: { port: 5432 },
+      },
+    );
+
+    const local = applySelection(config).services;
+    const prod = applySelection(config, { env: "prod" }).services;
+
+    expect(targetUrl(local.api as Service)).toBe("http://localhost:3000/health");
+    expect(targetUrl(prod.api as Service)).toBe("https://api.example.com/live?a=1");
+    expect(prod.api).toMatchObject({ host: "api.example.com", port: 443, path: "/live?a=1" });
+    expect(targetUrl(prod.db as Service)).toBe("http://localhost:5432/");
+  });
+
+  it("applies the other parameters to that address", () => {
+    const config = parsed(
+      { env: ENV, version: VERSION, tenant: TENANT },
+      { api: { port: 3000, urls: { prod: "https://api.example.com/live" } } },
+    );
+
+    const { api } = applySelection(config, { env: "prod", version: "v2" }).services;
+
+    expect(targetUrl(api as Service)).toBe("https://api.example.com/v2/live");
+    expect(api?.headers).toEqual({ "X-Tenant": "acme" });
   });
 
   it("does not change the config it is given", () => {
@@ -454,6 +597,52 @@ describe("the other commands with parameters", () => {
     expect(withHeader.code).toBe(1);
     expect(withHeader.stdout).toContain("redirected to");
     expect(received).toEqual([{ url: "/", tenant: undefined }]);
+  });
+
+  it("check and doctor look at the address of the chosen value", async () => {
+    const root = await tempDir();
+    await mkdir(join(root, ".probe"));
+    await writeFile(
+      configFile(root),
+      `schemaVersion: 1\nparameters:\n  env: { values: [local, up], strategy: { kind: url } }\nservices:\n  api:\n    host: 127.0.0.1\n    port: 1\n    urls: { up: "http://127.0.0.1:${port}/live" }\n`,
+    );
+
+    const down = await probe(root, ["check"]);
+    const up = await probe(root, ["check", "--set", "env=up"]);
+    const doctor = await probe(root, ["doctor", "--set", "env=up"]);
+    await probe(root, ["add", "db", "-p", "5432"]);
+
+    expect(down.code).toBe(1);
+    expect(up.code).toBe(0);
+    expect(doctor.code).toBe(0);
+    expect(received.map(({ url }) => url)).toEqual(["/live", "/live"]);
+    expect(parse(await readFile(configFile(root), "utf8")).services.api.urls).toEqual({
+      up: `http://127.0.0.1:${port}/live`,
+    });
+  });
+
+  it("check looks at the address of each value of a service with no port of its own", async () => {
+    const root = await tempDir();
+    await mkdir(join(root, ".probe", "envs"), { recursive: true });
+    const live = `http://127.0.0.1:${port}/live`;
+    await writeFile(
+      configFile(root),
+      `schemaVersion: 1\nparameters:\n  env: { values: [local, up], strategy: { kind: url } }\nservices:\n  api:\n    urls: { local: "http://127.0.0.1:1/", up: "${live}" }\n`,
+    );
+    await writeFile(
+      join(root, ".probe", "envs", "ci.yml"),
+      `schemaVersion: 1\nparameters:\n  env: { values: [up, staging], strategy: { kind: url } }\nservices:\n  api:\n    urls: { up: "${live}" }\n`,
+    );
+
+    const down = await probe(root, ["check"]);
+    const up = await probe(root, ["check", "--set", "env=up"]);
+    const ci = await probe(root, ["check", "--env", "ci"]);
+
+    expect(down.code).toBe(1);
+    expect(up.code).toBe(0);
+    expect(ci.code).toBe(2);
+    expect(ci.stderr).toContain("staging has no address, and api has no port or url of its own");
+    expect(ci.stderr).not.toContain("127.0.0.1");
   });
 
   it("add and rm leave the parameters and their comment in the config", async () => {

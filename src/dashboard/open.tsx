@@ -1,14 +1,16 @@
 import { render } from "ink";
+import { defaultType, serviceType } from "../checkers/registry";
 import { runChecks } from "../checkers/run";
+import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import type { ProbePaths } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { loadConfig } from "../config/loader";
 import { loadVariables, readSkippedServices, type Variables } from "../config/local";
-import { applySelection } from "../config/parameters";
-import type { Config, Service } from "../config/schema";
-import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
+import { applySelection, parameterChoices, type Selection } from "../config/parameters";
+import { type Config, declaresAddress, type Service } from "../config/schema";
+import { ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { type ActionDeps, serviceActions } from "./actions";
 import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
@@ -25,10 +27,19 @@ export interface DashboardState {
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
+  selection?: Selection;
+  onParameterChange?: (name: string, value: string) => Saved | undefined;
   onServiceWrite?: (
     write: ServiceWrite,
     secrets?: Secrets,
   ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
+  onParameterWrite?: (
+    write: ParameterWrite,
+  ) => Promise<{ config?: Config; problem?: ParameterProblem; failure?: string }>;
+  /** Puts back the config as it was before the last write: `config` once it is done. */
+  onUndo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
+  /** Writes again what the last undo took back. */
+  onRedo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentSource[];
@@ -68,50 +79,58 @@ export function environmentColumn(
 ): EnvironmentColumn {
   let known: Config | undefined;
   const { onOpen, onCopy } = serviceActions(
-    () => applySelection(known ?? { schemaVersion: 1, services: {} }),
+    (selection) => applySelection(known ?? { schemaVersion: 1, services: {} }, selection),
     deps,
   );
   return {
     name,
     file,
     onOpen,
-    onCopy: (service) => onCopy(service, known?.services[service]?.timeout),
-    async check(signal, timeoutMs) {
+    onCopy: (service, selection) => onCopy(service, known?.services[service]?.timeout, selection),
+    parameters: () => (known ? parameterChoices(known) : {}),
+    async check(signal, timeoutMs, selection) {
       const { config, variables, skipped } = await load();
       known = config;
       return runChecks(
         config,
         [],
-        { timeoutMs, signal, detail: true, variables, configFile: file },
+        { timeoutMs, signal, detail: true, variables, configFile: file, selection },
         skipped,
       );
     },
   };
 }
 
-const pickFields = ({ host, port, path, expect, method, headers }: Service): ServiceFields => ({
-  host,
-  port,
-  path,
-  expect,
-  method,
-  headers,
-});
+const pickFields = (service: Service): ServiceFields => {
+  const { url, host, port, path, expect, method, headers } = service;
+  // Read from `urls:`, the address is not the service's: the form shows none, and writes none back.
+  const address = declaresAddress(service) ? { url, host, port, path } : {};
+  return { ...address, expect, method, headers };
+};
 
 export async function openDashboard(
   initial: Config,
   terminal: Terminal,
   {
     onServiceWrite,
+    onParameterWrite,
     variables: readVariables,
     variableSources,
     environments = [],
+    onUndo,
+    onRedo,
     ...state
   }: DashboardState,
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
   let config = initial;
-  const check: DashboardProps["check"] = async (signal, timeoutMs, skipped, timeouts) => {
+  const check: DashboardProps["check"] = async (
+    signal,
+    timeoutMs,
+    skipped,
+    timeouts,
+    selection,
+  ) => {
     const services = Object.fromEntries(
       Object.entries(config.services).map(([name, service]) => [
         name,
@@ -122,15 +141,22 @@ export async function openDashboard(
     return runChecks(
       { ...config, services },
       [],
-      { timeoutMs, signal, detail: true, variables },
+      { timeoutMs, signal, detail: true, variables, selection },
       skipped,
     );
   };
-  const timeouts = Object.fromEntries(
-    Object.entries(config.services).flatMap(([name, { timeout }]) =>
-      timeout === undefined ? [] : [[name, timeout]],
-    ),
-  );
+  const timeoutsOf = ({ services }: Config) =>
+    Object.fromEntries(
+      Object.entries(services).flatMap(([name, { timeout }]) =>
+        timeout === undefined ? [] : [[name, timeout]],
+      ),
+    );
+  const timeouts = timeoutsOf(config);
+  const revert = async (way: NonNullable<DashboardState["onUndo"]>) => {
+    const { config: restored, ...outcome } = await way();
+    if (restored) config = restored;
+    return { ...outcome, timeouts: restored && timeoutsOf(restored) };
+  };
   const tools = variableSources && variableTools(() => config, variableSources);
   const unsetNote = async (name: string) => {
     const sent = serviceVariables(config.services[name]?.headers);
@@ -145,15 +171,17 @@ export async function openDashboard(
       terminal={terminal}
       check={check}
       timeouts={timeouts}
-      {...serviceActions(() => applySelection(config))}
+      {...serviceActions((selection) => applySelection(config, selection))}
+      parameters={() => parameterChoices(config)}
       {...state}
       terminalFocused={focus.focused}
       onClose={focus.stop}
+      serviceForm={(name) => {
+        const service = name === undefined ? undefined : config.services[name];
+        return (service ? serviceType(service) : defaultType()).form;
+      }}
       serviceFields={(name) => {
         const service = config.services[name];
-        if (service?.url !== undefined) {
-          return `${name} is declared by \`url\`: edit it in ${PROBE_DIR}/${CONFIG_FILE}`;
-        }
         return service && pickFields(service);
       }}
       onServiceWrite={
@@ -164,6 +192,28 @@ export async function openDashboard(
           const notes = [outcome.warning, written && (await unsetNote(write.name))];
           const warning = notes.filter(Boolean).join("\n") || undefined;
           return { ...outcome, warning, saved: written !== undefined };
+        })
+      }
+      onUndo={onUndo && (() => revert(onUndo))}
+      onRedo={onRedo && (() => revert(onRedo))}
+      parameterFields={(name) => config.parameters?.[name]}
+      addresses={() =>
+        Object.fromEntries(
+          Object.entries(config.services).map(([name, service]) => [name, { ...service.urls }]),
+        )
+      }
+      urlParameter={() => {
+        const found = Object.entries(config.parameters ?? {}).find(
+          ([, { strategy }]) => strategy.kind === "url",
+        );
+        return found && { name: found[0], values: found[1].values };
+      }}
+      onParameterWrite={
+        onParameterWrite &&
+        (async (write) => {
+          const { config: written, ...outcome } = await onParameterWrite(write);
+          if (written) config = written;
+          return { ...outcome, saved: written !== undefined };
         })
       }
       variables={tools}

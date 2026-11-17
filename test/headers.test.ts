@@ -426,6 +426,22 @@ describe("http checker with headers", () => {
     expect(response?.headers).toContainEqual(["x-seen", `key ${MASK}`]);
   });
 
+  it("should give the detail the headers as written, a secret typed in clear starred", async () => {
+    const result = await httpChecker.check(
+      "api",
+      {
+        host: "127.0.0.1",
+        port,
+        path: "/echo",
+        headers: { "X-Api-Key": "${API_KEY}", "X-Tenant": "acme", Cookie: "id=abc" },
+      },
+      { timeoutMs: 2_000, variables, detail: true },
+    );
+
+    expect(result.sent).toEqual(["X-Api-Key: ${API_KEY}", "X-Tenant: acme", "Cookie: ******"]);
+    expect(JSON.stringify(result.sent)).not.toContain(SECRET);
+  });
+
   it("still follows any redirect for a service without headers", async () => {
     const result = await httpChecker.check(
       "api",

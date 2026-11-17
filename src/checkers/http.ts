@@ -1,4 +1,10 @@
-import { masked, resolveHeaders, serviceVariables, templateParts } from "../config/headers";
+import {
+  hiddenHeaderLine,
+  masked,
+  resolveHeaders,
+  serviceVariables,
+  templateParts,
+} from "../config/headers";
 import { DEFAULT_METHOD, type Service } from "../config/schema";
 import { CONTAINS_BODY_BYTES, DEFAULT_TIMEOUT_SECONDS, MAX_REDIRECTS } from "../constants";
 import {
@@ -15,9 +21,11 @@ import {
   TOO_MANY_REDIRECTS,
   unknownIssuerHint,
 } from "./diagnosis";
+import { httpForm } from "./http-form";
+import { withHttpParameters } from "./http-parameters";
 import { describeResponse, type ResponseDetail } from "./response";
 import { type SystemTrust, systemTrust } from "./system-ca";
-import type { CheckContext, Checker, CheckResult } from "./types";
+import type { CheckContext, CheckResult, ServiceType } from "./types";
 
 export function targetUrl(service: Service): string {
   if (service.url !== undefined) return service.url;
@@ -152,7 +160,14 @@ async function request(
   { timeoutMs, signal, detail, variables }: CheckContext,
 ): Promise<{ result: CheckResult; unknownIssuer: boolean }> {
   const target = targetUrl(service);
-  const base = { name, type: "http", target };
+  const written = Object.entries(service.headers ?? {});
+  // As written, never resolved: a variable stays `${NAME}`, a secret typed in clear is starred.
+  const sent =
+    detail && written.length > 0
+      ? { sent: written.map(([header, value]) => hiddenHeaderLine(`${header}: ${value}`, "*")) }
+      : {};
+  const asked = detail ? { method: service.method ?? "GET" } : {};
+  const base = { name, type: "http", target, ...asked, ...sent };
   const failed = (diagnosis: Diagnosis, latencyMs = 0) => ({
     result: { ...base, ok: false, latencyMs, ...diagnosis },
     unknownIssuer: false,
@@ -224,9 +239,15 @@ async function request(
   }
 }
 
-export function createHttpChecker(trust: SystemTrust = systemTrust): Checker {
+export function createHttpChecker(trust: SystemTrust = systemTrust): ServiceType {
   return {
     type: "http",
+    target: targetUrl,
+    form: httpForm,
+    parameterKinds: ["query", "path", "header", "url"],
+    withParameters: withHttpParameters,
+    open: targetUrl,
+    copy: (service, env) => ({ command: curlCommand(service), note: curlNote(service, env) }),
     async check(name, service, context) {
       const firstTry = !trust.tried;
       const first = await request(name, service, context);

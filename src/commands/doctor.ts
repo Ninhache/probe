@@ -4,6 +4,7 @@ import { requireProbeDir } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { loadConfig, pendingMigration } from "../config/loader";
 import { loadVariables, readSkippedServices } from "../config/local";
+import { applySelection } from "../config/parameters";
 import { DEFAULT_TIMEOUT_SECONDS, EXIT_DOWN } from "../constants";
 import { diagnoseServices, type ServiceReport } from "../doctor/diagnose";
 import { formatDiagnosis } from "../doctor/format";
@@ -55,6 +56,7 @@ export default defineCommand({
       const { config } = await loadConfig(paths);
       // The block lists the local services: another environment says nothing about it.
       if (paths.environment === undefined) makefile = await blockState(paths, config);
+      const selection = selectionFrom(config, rawArgs);
       const results = await runChecks(
         config,
         args._,
@@ -64,11 +66,11 @@ export default defineCommand({
           variables: await loadVariables(paths),
           configFile: configFile(paths),
           tags,
-          selection: selectionFrom(config, rawArgs),
+          selection,
         },
         await readSkippedServices(paths),
       );
-      services = await diagnoseServices(config, results, {
+      services = await diagnoseServices(applySelection(config, selection), results, {
         run: runCommand,
         connect: tcpConnect,
         executable: executableName,

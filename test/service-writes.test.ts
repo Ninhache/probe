@@ -266,4 +266,91 @@ describe("writeService", () => {
     expect(printed).not.toHaveBeenCalled();
     expect(await readFile(makefilePath(paths), "utf8")).toContain("check-mine");
   });
+
+  it("should write the address of each value under urls and remove the ones emptied", async () => {
+    const paths = await tempProject(
+      [
+        "schemaVersion: 1",
+        "parameters:",
+        "  env: { values: [dev, prod], strategy: { kind: url } }",
+        "services:",
+        "  # the backend",
+        "  api: { port: 3000, urls: { prod: 'https://example.com/health' } }",
+        "",
+      ].join("\n"),
+    );
+    const edit = (urls: Record<string, string>) =>
+      writeService(paths, { kind: "edit", name: "api", fields: fields({ path: "/" }), urls });
+
+    const written = await edit({
+      dev: "http://localhost:3001",
+      prod: "https://example.com/health",
+    });
+    expect(written?.config.services.api?.urls).toEqual({
+      dev: "http://localhost:3001",
+      prod: "https://example.com/health",
+    });
+    expect(await readFile(paths.config, "utf8")).toContain("# the backend");
+
+    const emptied = await edit({ dev: "", prod: "" });
+    expect(emptied?.config.services.api?.urls).toBeUndefined();
+    expect(await readFile(paths.config, "utf8")).not.toContain("urls");
+  });
+
+  describe("of a service whose address is only under urls", () => {
+    const URLS = [
+      "schemaVersion: 1",
+      "parameters:",
+      "  env: { values: [dev, prod], strategy: { kind: url } }",
+      "services:",
+      "  # the backend",
+      "  api:",
+      "    urls: { dev: 'http://localhost:3001/health', prod: 'https://example.com/health' }",
+      "",
+    ].join("\n");
+    const both = { dev: "http://localhost:3001/health", prod: "https://example.com/health" };
+    // How the file reads once written: the yaml library spaces the brackets of a list.
+    const written = (text: string) => text.replace("[dev, prod]", "[ dev, prod ]");
+    const none: ServiceFields = { expect: undefined, method: undefined, headers: undefined };
+
+    it("should leave the file as it was when the edit changes nothing", async () => {
+      const paths = await tempProject(URLS);
+
+      await writeService(paths, { kind: "edit", name: "api", fields: none, urls: both });
+
+      expect(await readFile(paths.config, "utf8")).toBe(written(URLS));
+    });
+
+    it("should write no port when a service is added with an address for every value", async () => {
+      const paths = await tempProject(URLS);
+
+      await writeService(paths, { kind: "add", name: "web", fields: none, urls: both });
+
+      const { config } = await loadConfig(paths);
+      expect(Object.keys(config.services.web ?? {})).not.toContain("url");
+      expect(await readFile(paths.config, "utf8")).not.toMatch(/^ *(port|host):/m);
+    });
+
+    it("should drop the port of a service when its address goes to urls", async () => {
+      const paths = await tempProject(URLS.replace("  api:\n", "  api:\n    port: 3000\n"));
+
+      await writeService(paths, { kind: "edit", name: "api", fields: none, urls: both });
+
+      expect(await readFile(paths.config, "utf8")).toBe(written(URLS));
+    });
+
+    it("should refuse to remove the address of a value, leaving the file as it was", async () => {
+      const paths = await tempProject(URLS);
+
+      const removed = writeService(paths, {
+        kind: "edit",
+        name: "api",
+        fields: none,
+        urls: { dev: "" },
+      });
+
+      await expect(removed).rejects.toThrow("dev has no address");
+      expect(await readFile(paths.config, "utf8")).toBe(URLS);
+    });
+  });
 });

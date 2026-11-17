@@ -6,6 +6,7 @@ import { curlCommand, targetUrl } from "../src/checkers/http";
 import { createSystemTrust } from "../src/checkers/system-ca";
 import { writeService } from "../src/commands/service-writes";
 import { configSchemaV1, serviceSchemaV1, urlProblem } from "../src/config/schema";
+import { addressFields } from "../src/config/service-input";
 import { address } from "../src/detect/shared";
 import { tempProject } from "./helpers";
 
@@ -140,18 +141,71 @@ describe("createSystemTrust", () => {
 });
 
 describe("writeService", () => {
-  it("leaves a service declared by `url` alone: the form has no key to put there", async () => {
-    const config = "schemaVersion: 1\nservices:\n  api: { url: https://localhost:8443/health }\n";
-    const paths = await tempProject(config);
+  const URL_CONFIG = "schemaVersion: 1\nservices:\n  api: { url: https://localhost:8443/health }\n";
+  const urlFields = {
+    url: "https://localhost:8443/health",
+    host: "localhost",
+    port: 8443,
+    path: "/health",
+  };
 
-    const written = await writeService(paths, {
+  it("should keep only `url` when a service declared by it gets another field", async () => {
+    const paths = await tempProject(URL_CONFIG);
+
+    await writeService(paths, { kind: "edit", name: "api", fields: { ...urlFields, expect: 204 } });
+
+    expect(await readFile(paths.config, "utf8")).toBe(
+      "schemaVersion: 1\nservices:\n  api: { url: https://localhost:8443/health, expect: 204 }\n",
+    );
+  });
+
+  it("should leave an http `url` as it is when only another field changes", async () => {
+    const paths = await tempProject(
+      "schemaVersion: 1\nservices:\n  api: { url: http://localhost:3000/health }\n",
+    );
+    const fields = addressFields("http://localhost:3000/health");
+
+    await writeService(paths, { kind: "edit", name: "api", fields: { ...fields, expect: 204 } });
+
+    expect(await readFile(paths.config, "utf8")).toBe(
+      "schemaVersion: 1\nservices:\n  api: { url: http://localhost:3000/health, expect: 204 }\n",
+    );
+  });
+
+  it("should replace `url` with a host and a port", async () => {
+    const paths = await tempProject(URL_CONFIG);
+
+    await writeService(paths, {
       kind: "edit",
       name: "api",
       fields: { host: "localhost", port: 9000, path: "/", expect: undefined },
     });
 
-    expect(written).toBeNull();
-    expect(await readFile(paths.config, "utf8")).toBe(config);
+    expect(await readFile(paths.config, "utf8")).toBe(
+      "schemaVersion: 1\nservices:\n  api:\n    port: 9000\n",
+    );
+  });
+
+  it("should replace host, port and path with a `url`", async () => {
+    const paths = await tempProject(
+      "schemaVersion: 1\nservices:\n  api: { port: 3000, path: /up }\n",
+    );
+
+    await writeService(paths, { kind: "edit", name: "api", fields: urlFields });
+
+    expect(await readFile(paths.config, "utf8")).toBe(
+      "schemaVersion: 1\nservices:\n  api:\n    url: https://localhost:8443/health\n",
+    );
+  });
+
+  it("should add a service by its `url` alone", async () => {
+    const paths = await tempProject("schemaVersion: 1\nservices: {}\n");
+
+    await writeService(paths, { kind: "add", name: "api", fields: urlFields });
+
+    expect(await readFile(paths.config, "utf8")).toContain(
+      "api: { url: https://localhost:8443/health }",
+    );
   });
 });
 

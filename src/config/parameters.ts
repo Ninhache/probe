@@ -1,6 +1,7 @@
-import { targetUrl } from "../checkers/http";
+import { serviceType } from "../checkers/registry";
+import type { ServiceTypes } from "../checkers/types";
 import { ProbeError } from "../errors";
-import type { Config, Parameter, Service } from "./schema";
+import type { Config, Parameter } from "./schema";
 
 export type Selection = Readonly<Record<string, string>>;
 
@@ -37,6 +38,40 @@ export function selectionFrom(config: Config, pairs: readonly string[]): Selecti
   return selection;
 }
 
+export type ParameterChoices = Readonly<Record<string, readonly string[]>>;
+
+export function parameterChoices(config: Config): ParameterChoices {
+  return Object.fromEntries(
+    Object.entries(config.parameters ?? {}).map(([name, { values }]) => [name, values]),
+  );
+}
+
+/** Every parameter one of the configs declares, with every value one of them lists. */
+export function mergedChoices(all: readonly ParameterChoices[]): ParameterChoices {
+  const merged: Record<string, string[]> = {};
+  for (const choices of all) {
+    for (const [name, values] of Object.entries(choices)) {
+      const known = Object.hasOwn(merged, name) ? (merged[name] as string[]) : [];
+      merged[name] = [...known, ...values.filter((value) => !known.includes(value))];
+    }
+  }
+  return merged;
+}
+
+/** The value each parameter takes: the one asked for when it is listed, else the first. */
+export function effectiveSelection(
+  choices: ParameterChoices,
+  selection: Selection = {},
+): Selection {
+  return Object.fromEntries(
+    Object.entries(choices).flatMap(([name, values]) => {
+      const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
+      const value = asked !== undefined && values.includes(asked) ? asked : values[0];
+      return value === undefined ? [] : [[name, value]];
+    }),
+  );
+}
+
 function chosenValue(name: string, parameter: Parameter, selection: Selection): string {
   const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
   return asked !== undefined && parameter.values.includes(asked)
@@ -44,38 +79,12 @@ function chosenValue(name: string, parameter: Parameter, selection: Selection): 
     : (parameter.values[0] as string);
 }
 
-// What a service declares itself wins: it is the way to keep one service out of a parameter.
-function rewritten(service: Service, chosen: readonly [Parameter, string][]): Service {
-  const headers = { ...service.headers };
-  const sent = new Set(Object.keys(headers).map((name) => name.toLowerCase()));
-  const segments: string[] = [];
-  const queries: [string, string][] = [];
-  for (const [{ strategy }, value] of chosen) {
-    if (strategy.kind === "path") segments.push(value);
-    else if (strategy.kind === "query") queries.push([strategy.name, value]);
-    else if (!sent.has(strategy.name.toLowerCase())) headers[strategy.name] = value;
-  }
-  const next: Service = { ...service };
-  if (Object.keys(headers).length > 0) next.headers = headers;
-  const target = targetUrl(service);
-  if (segments.length + queries.length === 0 || !URL.canParse(target)) return next;
-
-  const url = new URL(target);
-  if (segments.length > 0) {
-    url.pathname = `/${segments.join("/")}${url.pathname === "/" ? "" : url.pathname}`;
-  }
-  for (const [name, value] of queries) {
-    if (url.searchParams.has(name)) continue;
-    // Appended as text: `searchParams.append` would rewrite the query the service declares.
-    url.search = `${url.search === "" ? "?" : `${url.search}&`}${name}=${value}`;
-  }
-  next.path = url.pathname + url.search;
-  if (service.url !== undefined) next.url = url.href;
-  return next;
-}
-
 /** The services as they are requested for one value of each parameter of the config. */
-export function applySelection(config: Config, selection: Selection = {}): Config {
+export function applySelection(
+  config: Config,
+  selection: Selection = {},
+  types: ServiceTypes = serviceType,
+): Config {
   const chosen = Object.entries(config.parameters ?? {}).map(
     ([name, parameter]): [Parameter, string] => [
       parameter,
@@ -84,7 +93,11 @@ export function applySelection(config: Config, selection: Selection = {}): Confi
   );
   if (chosen.length === 0) return config;
   const services = Object.fromEntries(
-    Object.entries(config.services).map(([name, service]) => [name, rewritten(service, chosen)]),
+    Object.entries(config.services).map(([name, service]) => {
+      const { parameterKinds = [], withParameters } = types(service);
+      const understood = chosen.filter(([{ strategy }]) => parameterKinds.includes(strategy.kind));
+      return [name, withParameters?.(service, understood) ?? service];
+    }),
   );
   return { ...config, services };
 }
