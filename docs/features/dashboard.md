@@ -74,32 +74,30 @@ Under it, the panel has:
 
 ## Parameters
 
-With [parameters](parameters.md) in the config, the first line says the value each one has, and `p` opens
-their list (since 0.21.0):
+With [parameters](parameters.md) in the config, a line under the summary shows one selector per parameter
+(since 0.21.0):
 
 ```
-probe · 2/2 up · tenant=globex · every 2s
+probe · 2/2 up · every 2s
+tenant ‹ globex ›   version ‹ v1 ›
 › ✓ api  http://localhost:3000/globex/health  200  4ms
-http://localhost:3000/globex/health
-┌────────────────────────────┐
-│ Parameters                 │
-│ › tenant  ‹ globex ›       │
-│   env     ‹ local ›        │
-└────────────────────────────┘
 ```
 
-- `↑` `↓` choose a parameter, `←` `→` its value. `p` or `Esc` closes.
-- The next check, `u`, `c` and the detail use the chosen value.
-- A parameter starts on its first value. The choice lasts until you quit: nothing is written.
-- With [several environments](#several-environments), `p` is about the selected one, which has its own
-  parameters: the first line names it (`prod: tenant=acme`).
+- `p` goes to the selectors: `↑` `↓` choose a parameter, `←` `→` its value. `p` or `Esc` goes back to the list.
+- The next check, `u`, `c` and the detail use the chosen values.
+- The parameters do not depend on each other: each one is chosen on its own, whatever its name.
+- The choice is saved in `.probe/local.yml` and comes back at the next start. A value the config no longer
+  lists gives the first one again.
+- With [several environments](#several-environments), one choice applies to every column, and the selectors
+  list the parameters of every file. A file that does not list the chosen value keeps its first one, and the
+  line says it for the selected column: `prod uses tenant=acme`.
 
 ## Options saved for your machine
 
 `o` and the panels save what you change in `.probe/local.yml`:
 
 ```yaml
-dashboard: { interval: 5, timeout: 3, notify: true }
+dashboard: { interval: 5, timeout: 3, notify: true, parameters: { tenant: globex } }
 services:
   db: { skip: true }
 ```

@@ -3,7 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "../checkers/types";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { hiddenHeaderLine, serviceVariables, variableValueProblem } from "../config/headers";
-import { effectiveSelection, type ParameterChoices, type Selection } from "../config/parameters";
+import {
+  effectiveSelection,
+  mergedChoices,
+  type ParameterChoices,
+  type Selection,
+} from "../config/parameters";
 import {
   CONFIG_FILE,
   LOCAL_ENVIRONMENT,
@@ -59,8 +64,11 @@ export interface DashboardProps {
     timeouts: ServiceTimeouts,
     selection: Selection,
   ) => Promise<CheckResult[]>;
-  /** The parameters of the local config and their values: chosen here for this run, written nowhere. */
+  /** The parameters of the local config and their values. */
   parameters?: () => ParameterChoices;
+  /** The values chosen last time: one choice for every column. */
+  selection?: Selection;
+  onParameterChange?: (name: string, value: string) => Saved | undefined;
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
@@ -198,6 +206,8 @@ export function Dashboard({
   onVariableWrite,
   environments = NO_ENVIRONMENTS,
   parameters,
+  selection: savedSelection = NO_SELECTION,
+  onParameterChange,
 }: DashboardProps) {
   const { exit } = useApp();
   const { columns, rows: windowRows } = useWindowSize();
@@ -220,11 +230,8 @@ export function Dashboard({
   const [variableRows, setVariableRows] = useState(NO_VARIABLES);
   const [column, setColumn] = useState(0);
   const [remote, setRemote] = useState<Readonly<Record<string, RemoteState>>>({});
-  const [selections, setSelections] = useState<Readonly<Record<string, Selection>>>({});
-  const localSelection = selections[LOCAL_ENVIRONMENT] ?? NO_SELECTION;
-  const remoteSelections = useRef(selections);
-  remoteSelections.current = selections;
-  const remoteSelectionKey = JSON.stringify(environments.map(({ name }) => selections[name]));
+  // One choice for every column: a column that does not list a value keeps its first one.
+  const [selection, setSelection] = useState(savedSelection);
   const grid = environments.length > 0;
   const looking = useRef(false);
   const skipPause = useRef(() => {});
@@ -267,7 +274,7 @@ export function Dashboard({
     const { signal } = controller;
     const loop = async () => {
       while (!signal.aborted) {
-        const next = await check(signal, timeoutMs, skipped, timeouts, localSelection);
+        const next = await check(signal, timeoutMs, skipped, timeouts, selection);
         if (signal.aborted) return;
         setLatest(next);
         tell(next);
@@ -279,10 +286,10 @@ export function Dashboard({
     };
     void loop();
     return () => controller.abort();
-  }, [check, intervalMs, timeoutMs, skipped, timeouts, writes, localSelection]);
+  }, [check, intervalMs, timeoutMs, skipped, timeouts, writes, selection]);
 
   // Apart from the local loop: a skip or a write there does not cut the requests in flight here.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `tell` reads refs only, the key stands for the selections
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tell` reads refs only
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
@@ -290,8 +297,7 @@ export function Dashboard({
       const loop = async () => {
         while (!signal.aborted) {
           // A file that cannot be read now is read again at the next pass.
-          const chosen = remoteSelections.current[name] ?? NO_SELECTION;
-          const outcome = await checkRemote(signal, timeoutMs, chosen).catch((error: unknown) =>
+          const outcome = await checkRemote(signal, timeoutMs, selection).catch((error: unknown) =>
             error instanceof Error ? error.message : String(error),
           );
           if (signal.aborted) return;
@@ -312,7 +318,7 @@ export function Dashboard({
       void loop();
     });
     return () => controller.abort();
-  }, [environments, intervalMs, timeoutMs, remoteSelectionKey]);
+  }, [environments, intervalMs, timeoutMs, selection]);
 
   const detailedName =
     panel?.kind === "service" && panel.environment === undefined ? panel.name : undefined;
@@ -354,10 +360,16 @@ export function Dashboard({
     ({ name }) => name === selectedName,
   );
   const place = environment?.name ?? LOCAL_ENVIRONMENT;
-  const choices = (environment ? environment.parameters?.() : parameters?.()) ?? NO_CHOICES;
+  const choices = mergedChoices([
+    parameters?.() ?? NO_CHOICES,
+    ...environments.map((each) => each.parameters?.() ?? NO_CHOICES),
+  ]);
   const choiceNames = Object.keys(choices);
-  const selection = selections[place] ?? NO_SELECTION;
   const effective = effectiveSelection(choices, selection);
+  const own = effectiveSelection(
+    (environment ? environment.parameters?.() : parameters?.()) ?? NO_CHOICES,
+    selection,
+  );
 
   const write = async (change: ServiceWrite, done: string, secrets?: Secrets) => {
     const outcome = await (secrets ? onServiceWrite?.(change, secrets) : onServiceWrite?.(change));
@@ -532,17 +544,17 @@ export function Dashboard({
     const at = values.indexOf(effective[name] as string) + direction;
     const value = values[Math.max(0, Math.min(values.length - 1, at))];
     if (value === undefined || value === effective[name]) return;
-    setSelections({ ...selections, [place]: { ...selection, [name]: value } });
-    // Another value is another target: its latencies and its state start again.
-    if (environment) {
-      remoteKnown.current.delete(place);
-      setRemote(({ [place]: before, ...others }) =>
-        before ? { ...others, [place]: { ...before, history: {} } } : others,
-      );
-    } else {
-      known.current = new Map();
-      setHistory({});
-    }
+    setSelection({ ...selection, [name]: value });
+    track(onParameterChange?.(name, value));
+    // Another value is another target: the latencies and the states start again.
+    known.current = new Map();
+    remoteKnown.current.clear();
+    setHistory({});
+    setRemote((before) =>
+      Object.fromEntries(
+        Object.entries(before).map(([each, state]) => [each, { ...state, history: {} }]),
+      ),
+    );
   };
 
   const changeTimeout = (name: string, direction: 1 | -1) => {
@@ -568,7 +580,7 @@ export function Dashboard({
       case "parameters":
         if (choiceNames.length > 0) return setPanel({ kind: "parameters", row: 0 });
         return setNotice(
-          `${environment?.file ?? `${PROBE_DIR}/${CONFIG_FILE}`} declares no parameter`,
+          grid ? "No parameter declared" : `${PROBE_DIR}/${CONFIG_FILE} declares no parameter`,
         );
       case "detail":
         return name
@@ -753,8 +765,21 @@ export function Dashboard({
   const counts = environments.map(({ name }) => upCount(remote[name]?.results ?? []));
   const up = counts.reduce((sum, count) => sum + count.up, all.filter(({ ok }) => ok).length);
   const checked = counts.reduce((sum, count) => sum + count.checked, all.length);
-  const pairs = Object.entries(effective).map(([name, value]) => `${name}=${value}`);
-  const chosen = pairs.length > 0 ? `${grid ? `${place}: ` : ""}${pairs.join(" ")}` : undefined;
+  const choosing = panel?.kind === "parameters" ? panel.row : -1;
+  const selectors = choiceNames
+    .map((name, index) => {
+      const value = effective[name] ?? "";
+      const shown = unicode ? `‹ ${value} ›` : `< ${value} >`;
+      return `${index === choosing ? marker : ""}${name} ${shown}`;
+    })
+    .join("   ");
+  // Said apart: the selected column does not list the value chosen, it keeps its first one.
+  const kept = Object.entries(own)
+    .filter(([name, value]) => effective[name] !== value)
+    .map(([name, value]) => `${name}=${value}`);
+  const keptNote = kept.length > 0 ? `${place} uses ${kept.join(" ")}` : "";
+  const selectorLines = choiceNames.length > 0 ? 1 : 0;
+  const selectorLine = cut(keptNote ? `${selectors} ${dot} ${keptNote}` : selectors);
   const table = grid
     ? formatGrid(
         names,
@@ -767,7 +792,6 @@ export function Dashboard({
     "probe",
     `${up}/${checked} up`,
     ...(aside > 0 ? [`${aside} skipped`] : []),
-    ...(chosen ? [chosen] : []),
     `every ${seconds(intervalMs)}`,
     ...(table && table.hidden > 0
       ? [`${gridColumns[column]?.name} ${column + 1}/${gridColumns.length}`]
@@ -811,7 +835,7 @@ export function Dashboard({
   // One more line stays free: ink clears the whole screen on each draw of a frame as tall as it.
   const settingRows = SERVICE_ROWS.length + (panel?.kind === "service" ? variableRows.length : 0);
   const listLines = Math.max(1, rows.length) + (grid ? 1 : 0);
-  const taken = 1 + listLines + 1 + 2 + 1 + 1 + settingRows + 1 + 1;
+  const taken = 1 + selectorLines + listLines + 1 + 2 + 1 + 1 + settingRows + 1 + 1;
   const detail = detailed
     ? detailLines(
         detailedIn === undefined ? asShown(detailed) : detailed,
@@ -837,17 +861,15 @@ export function Dashboard({
           ...SETTING_ROWS.map((row): [string, string] => [row.label, seconds(settings[row.key])]),
           ["Notify", settings.notify ? "on" : "off"],
         ]
-      : panel?.kind === "parameters"
-        ? choiceNames.map((name): [string, string] => [name, effective[name] ?? ""])
-        : panel && panel.environment === undefined
-          ? [
-              ["Skip", skipped.has(panel.name) ? "yes" : "no"],
-              [
-                "Timeout",
-                timeouts[panel.name] === undefined ? "default" : `${timeouts[panel.name]}s`,
-              ],
-            ]
-          : [];
+      : panel?.kind === "service" && panel.environment === undefined
+        ? [
+            ["Skip", skipped.has(panel.name) ? "yes" : "no"],
+            [
+              "Timeout",
+              timeouts[panel.name] === undefined ? "default" : `${timeouts[panel.name]}s`,
+            ],
+          ]
+        : [];
   const shownVariables = panel?.kind === "service" ? variableRows : NO_VARIABLES;
   const labelWidth = Math.max(
     0,
@@ -877,7 +899,7 @@ export function Dashboard({
   const paletteRoom = Math.max(
     1,
     (windowRows || DEFAULT_ROWS) -
-      (1 + listLines + (focused ? 1 : 0) + (focused?.hint ? 1 : 0) + 1 + 1 + 1) -
+      (1 + selectorLines + listLines + (focused ? 1 : 0) + (focused?.hint ? 1 : 0) + 1 + 1 + 1) -
       (unsaved === undefined ? 0 : 1),
   );
   const firstCommand = Math.max(0, (palette?.row ?? 0) - paletteRoom + 1);
@@ -905,6 +927,12 @@ export function Dashboard({
   return (
     <Box flexDirection="column">
       <Text>{colors.bold(cut(summary))}</Text>
+      {selectorLines > 0 && (
+        <Text>
+          {selectorLine.slice(0, selectors.length)}
+          {colors.dim(selectorLine.slice(selectors.length))}
+        </Text>
+      )}
       {table && <Text>{table.header}</Text>}
       {rows.map((row, index) => (
         <Text key={names[index]}>
@@ -927,7 +955,7 @@ export function Dashboard({
       )}
       {problem !== undefined && <Text>{colors.yellow(cut(`${placed}${problem}`))}</Text>}
       {focused?.hint && panel?.kind !== "service" && <Text>{colors.dim(cut(focused.hint))}</Text>}
-      {panel !== null && (
+      {panel !== null && panel.kind !== "parameters" && (
         <Box
           flexDirection="column"
           width={panelWidth}
@@ -939,13 +967,9 @@ export function Dashboard({
               truncate(
                 panel.kind === "options"
                   ? "Options"
-                  : panel.kind === "parameters"
-                    ? grid
-                      ? `Parameters ${dot} ${place}`
-                      : "Parameters"
-                    : panel.environment === undefined
-                      ? panel.name
-                      : `${panel.name} ${dot} ${panel.environment}`,
+                  : panel.environment === undefined
+                    ? panel.name
+                    : `${panel.name} ${dot} ${panel.environment}`,
                 panelRoom,
               ),
             )}

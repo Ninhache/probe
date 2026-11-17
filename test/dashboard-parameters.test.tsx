@@ -51,26 +51,51 @@ function open(props: Partial<DashboardProps> = {}) {
 }
 
 describe("dashboard parameters", () => {
-  it("should show the first value of each parameter when nothing was chosen", async () => {
-    const { lastFrame } = open();
+  it("should show a selector per parameter under the summary", async () => {
+    const { lastFrame } = open({ parameters: () => ({ ...TENANTS, version: ["v1", "v2"] }) });
     await tick();
 
-    expect(lastFrame()?.split("\n")[0]).toBe("probe · 1/1 up · tenant=acme · every 60s");
+    const [summary, selectors] = lastFrame()?.split("\n") ?? [];
+    expect(summary).toBe("probe · 1/1 up · every 60s");
+    expect(selectors).toBe("tenant ‹ acme ›   version ‹ v1 ›");
     expect(lastFrame()).toContain("p parameters");
   });
 
-  it("should check with the value chosen in the panel", async () => {
+  it("should check with the value chosen on the selector", async () => {
     const { lastFrame, stdin, check } = open();
     await tick();
 
     stdin.write("p");
-    await waitFor(() => expect(lastFrame()).toContain("› tenant  ‹ acme ›"));
+    await waitFor(() => expect(lastFrame()).toContain("› tenant ‹ acme ›"));
     stdin.write("l");
 
     await waitFor(() => expect(lastFrame()).toContain("http://localhost:3000/globex/health"));
-    expect(lastFrame()).toContain("› tenant  ‹ globex ›");
-    expect(lastFrame()?.split("\n")[0]).toBe("probe · 1/1 up · tenant=globex · every 60s");
+    expect(lastFrame()).toContain("› tenant ‹ globex ›");
     expect(check.mock.lastCall?.[4]).toEqual({ tenant: "globex" });
+  });
+
+  it("should start on the value chosen last time", async () => {
+    const { lastFrame, check } = open({ selection: { tenant: "globex" } });
+
+    await waitFor(() => expect(lastFrame()).toContain("tenant ‹ globex ›"));
+    expect(check.mock.calls[0]?.[4]).toEqual({ tenant: "globex" });
+  });
+
+  it("should keep the first value when the one chosen last time is no longer listed", async () => {
+    const { lastFrame } = open({ selection: { tenant: "initech" } });
+
+    await waitFor(() => expect(lastFrame()).toContain("tenant ‹ acme ›"));
+  });
+
+  it("should save each value chosen", async () => {
+    const onParameterChange = vi.fn(() => undefined);
+    const { lastFrame, stdin } = open({ onParameterChange });
+    await tick();
+
+    stdin.write("pl");
+
+    await waitFor(() => expect(lastFrame()).toContain("‹ globex ›"));
+    expect(onParameterChange).toHaveBeenCalledWith("tenant", "globex");
   });
 
   it("should stop at the last value and close on p", async () => {
@@ -78,11 +103,11 @@ describe("dashboard parameters", () => {
     await tick();
 
     stdin.write("pll");
-    await waitFor(() => expect(lastFrame()).toContain("‹ globex ›"));
+    await waitFor(() => expect(lastFrame()).toContain("› tenant ‹ globex ›"));
     stdin.write("p");
 
-    await waitFor(() => expect(lastFrame()).not.toContain("Parameters"));
-    expect(lastFrame()).toContain("tenant=globex");
+    await waitFor(() => expect(lastFrame()).toContain("\ntenant ‹ globex ›"));
+    expect(lastFrame()).toContain("p parameters");
   });
 
   it("should open and copy with the chosen value", async () => {
@@ -93,7 +118,7 @@ describe("dashboard parameters", () => {
     stdin.write("pl");
     await waitFor(() => expect(lastFrame()).toContain("‹ globex ›"));
     stdin.write("p");
-    await waitFor(() => expect(lastFrame()).not.toContain("Parameters"));
+    await waitFor(() => expect(lastFrame()).toContain("p parameters"));
 
     stdin.write("u");
     await waitFor(() => expect(lastFrame()).toContain("Opened"));
@@ -112,7 +137,7 @@ describe("dashboard parameters", () => {
 
     await waitFor(() => expect(lastFrame()).toContain(".probe/config.yml declares no parameter"));
     expect(lastFrame()).not.toContain("p parameters");
-    expect(lastFrame()?.split("\n")[0]).toBe("probe · 1/1 up · every 60s");
+    expect(lastFrame()?.split("\n")[1]).toContain("api");
   });
 
   it("should not announce a change of state when the value changes", async () => {
@@ -145,7 +170,7 @@ describe("dashboard parameters", () => {
     stdin.write("pl");
     await waitFor(() => expect(lastFrame()).toContain("/globex/health"));
     stdin.write("p");
-    await waitFor(() => expect(lastFrame()).not.toContain("Parameters"));
+    await waitFor(() => expect(lastFrame()).toContain("p parameters"));
 
     stdin.write("\r");
 
@@ -167,36 +192,37 @@ describe("dashboard parameters with environments", () => {
     return { column, check };
   };
 
-  it("should choose for the selected environment only", async () => {
-    const { column, check: checkProd } = prod({ tenant: ["acme", "globex", "initech"] });
+  it("should apply one choice to every environment", async () => {
+    const { column, check: checkProd } = prod(TENANTS);
     const { lastFrame, stdin, check } = open({ environments: [column] });
     await tick();
 
-    stdin.write("lpll");
+    stdin.write("pl");
 
-    await waitFor(() => expect(lastFrame()).toContain("prod: tenant=initech"));
-    expect(lastFrame()).toContain("Parameters · prod");
-    await waitFor(() => expect(checkProd.mock.lastCall?.[2]).toEqual({ tenant: "initech" }));
-    expect(check.mock.lastCall?.[4]).toEqual({});
-    stdin.write("p");
-    await waitFor(() => expect(lastFrame()).not.toContain("Parameters"));
-    stdin.write("h");
-    await waitFor(() => expect(lastFrame()).toContain("local: tenant=acme"));
+    await waitFor(() => expect(checkProd.mock.lastCall?.[2]).toEqual({ tenant: "globex" }));
+    expect(check.mock.lastCall?.[4]).toEqual({ tenant: "globex" });
+    stdin.write("pl");
+    await waitFor(() => expect(lastFrame()).toContain("prod · http://example.com/globex/health"));
   });
 
-  it("should name the value an environment uses, not the one chosen elsewhere", async () => {
-    const { column, check: checkProd } = prod({ tenant: ["acme"] });
+  it("should list the values of every environment", async () => {
+    const { column } = prod({ tenant: ["acme", "initech"], version: ["v1"] });
+    const { lastFrame } = open({ environments: [column] });
+
+    await waitFor(() => expect(lastFrame()).toContain("tenant ‹ acme ›   version ‹ v1 ›"));
+  });
+
+  it("should say the value an environment uses when it does not list the one chosen", async () => {
+    const { column } = prod({ tenant: ["acme"] });
     const { lastFrame, stdin } = open({ environments: [column] });
     await tick();
-
     stdin.write("pl");
-    await waitFor(() => expect(lastFrame()).toContain("local: tenant=globex"));
+    await waitFor(() => expect(lastFrame()).toContain("tenant ‹ globex ›"));
     stdin.write("p");
-    await waitFor(() => expect(lastFrame()).not.toContain("Parameters"));
+
     stdin.write("l");
 
-    await waitFor(() => expect(lastFrame()).toContain("prod: tenant=acme"));
-    expect(checkProd.mock.lastCall?.[2]).toEqual({});
+    await waitFor(() => expect(lastFrame()).toContain("tenant ‹ globex › · prod uses tenant=acme"));
   });
 });
 

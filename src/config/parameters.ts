@@ -45,6 +45,18 @@ export function parameterChoices(config: Config): ParameterChoices {
   );
 }
 
+/** Every parameter one of the configs declares, with every value one of them lists. */
+export function mergedChoices(all: readonly ParameterChoices[]): ParameterChoices {
+  const merged: Record<string, string[]> = {};
+  for (const choices of all) {
+    for (const [name, values] of Object.entries(choices)) {
+      const known = Object.hasOwn(merged, name) ? (merged[name] as string[]) : [];
+      merged[name] = [...known, ...values.filter((value) => !known.includes(value))];
+    }
+  }
+  return merged;
+}
+
 /** The value each parameter takes: the one asked for when it is listed, else the first. */
 export function effectiveSelection(
   choices: ParameterChoices,

@@ -6,7 +6,7 @@ import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
 import { loadConfig } from "../config/loader";
 import { loadVariables, readSkippedServices, type Variables } from "../config/local";
-import { applySelection, parameterChoices } from "../config/parameters";
+import { applySelection, parameterChoices, type Selection } from "../config/parameters";
 import type { Config, Service } from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
@@ -25,6 +25,8 @@ export interface DashboardState {
   onTimeoutChange?: (name: string, seconds: number | undefined) => Saved | undefined;
   onSettingsChange?: (settings: DashboardSettings) => Saved | undefined;
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
+  selection?: Selection;
+  onParameterChange?: (name: string, value: string) => Saved | undefined;
   onServiceWrite?: (
     write: ServiceWrite,
     secrets?: Secrets,

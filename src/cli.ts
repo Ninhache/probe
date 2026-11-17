@@ -38,10 +38,12 @@ import {
   initialDashboardSettings,
   loadVariables,
   readDashboardPreferences,
+  readDashboardSelection,
   readLocalVariables,
   readSkippedServices,
   variableSource,
   writeDashboardPreferences,
+  writeDashboardSelection,
   writeServiceSkip,
   writeVariable,
 } from "./config/local";
@@ -180,6 +182,9 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     environments: environments.map((name) => environmentSource(paths, name)),
     settings,
     skipped: await readSkippedServices(paths),
+    selection: await readDashboardSelection(paths),
+    onParameterChange: (name, value) =>
+      saveLocal(() => writeDashboardSelection(paths, name, value)),
     variables: () => loadVariables(paths),
     variableSources: async (names) => {
       const { values } = await readLocalVariables(paths);
