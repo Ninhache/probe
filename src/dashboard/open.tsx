@@ -36,6 +36,10 @@ export interface DashboardState {
   onParameterWrite?: (
     write: ParameterWrite,
   ) => Promise<{ config?: Config; problem?: ParameterProblem; failure?: string }>;
+  /** Puts back the config as it was before the last write: `config` once it is done. */
+  onUndo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
+  /** Writes again what the last undo took back. */
+  onRedo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentSource[];
@@ -124,6 +128,8 @@ export async function openDashboard(
     variables: readVariables,
     variableSources,
     environments = [],
+    onUndo,
+    onRedo,
     ...state
   }: DashboardState,
 ): Promise<void> {
@@ -150,11 +156,18 @@ export async function openDashboard(
       skipped,
     );
   };
-  const timeouts = Object.fromEntries(
-    Object.entries(config.services).flatMap(([name, { timeout }]) =>
-      timeout === undefined ? [] : [[name, timeout]],
-    ),
-  );
+  const timeoutsOf = ({ services }: Config) =>
+    Object.fromEntries(
+      Object.entries(services).flatMap(([name, { timeout }]) =>
+        timeout === undefined ? [] : [[name, timeout]],
+      ),
+    );
+  const timeouts = timeoutsOf(config);
+  const revert = async (way: NonNullable<DashboardState["onUndo"]>) => {
+    const { config: restored, ...outcome } = await way();
+    if (restored) config = restored;
+    return { ...outcome, timeouts: restored && timeoutsOf(restored) };
+  };
   const tools = variableSources && variableTools(() => config, variableSources);
   const unsetNote = async (name: string) => {
     const sent = serviceVariables(config.services[name]?.headers);
@@ -192,6 +205,8 @@ export async function openDashboard(
           return { ...outcome, warning, saved: written !== undefined };
         })
       }
+      onUndo={onUndo && (() => revert(onUndo))}
+      onRedo={onRedo && (() => revert(onRedo))}
       parameterFields={(name) => config.parameters?.[name]}
       addresses={() =>
         Object.fromEntries(

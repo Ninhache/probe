@@ -21,6 +21,8 @@ export type Command =
   | "filter"
   | "options"
   | "parameters"
+  | "undo"
+  | "redo"
   | "help"
   | "quit";
 
@@ -79,6 +81,8 @@ const BINDINGS: readonly Binding[] = [
   list({ keys: "e", action: "edit", help: "Edit the service", barless: true, command: "edit" }),
   list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
   list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
+  list({ keys: "z", action: "undo", help: "Undo last change", barless: true, command: "undo" }),
+  list({ keys: "Z", action: "redo", help: "Redo what z undid", barless: true, command: "redo" }),
   list({ keys: "/", action: "filter", help: "Filter by name", drop: 5, command: "filter" }),
   list({
     keys: "p",
