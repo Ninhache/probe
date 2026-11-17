@@ -24,19 +24,20 @@ services:
   db: { port: 5432, timeout: 10 }
 ```
 
-| Key        | Default     | Meaning                                 | Since  |
-| ---------- | ----------- | --------------------------------------- | ------ |
-| `port`     | required    | TCP port                                |        |
-| `host`     | `localhost` | Host name or IP                         |        |
-| `path`     | `/`         | Path requested                          |        |
-| `url`      | none        | Full URL, instead of the three above    | 0.12.0 |
-| `expect`   | any 2xx     | Expected status, or a list of statuses  |        |
-| `method`   | `GET`       | Method of the request, without a body   | 0.14.0 |
-| `timeout`  | 3           | Seconds given to this service to answer | 0.4.0  |
-| `headers`  | none        | Headers sent with the request           | 0.13.0 |
-| `hint`     | none        | What to do when it is down, one line    | 0.19.0 |
-| `tags`     | none        | Groups it belongs to: `tags: [back]`    | 0.20.0 |
-| `contains` | none        | Text the response body must contain     | 0.20.0 |
+| Key        | Default     | Meaning                                                                                      | Since  |
+| ---------- | ----------- | -------------------------------------------------------------------------------------------- | ------ |
+| `port`     | required    | TCP port                                                                                     |        |
+| `host`     | `localhost` | Host name or IP                                                                              |        |
+| `path`     | `/`         | Path requested                                                                               |        |
+| `url`      | none        | Full URL, instead of the three above                                                         | 0.12.0 |
+| `urls`     | none        | Its address for a value of a [`url` parameter](features/parameters.md#one-address-per-value) | 0.21.0 |
+| `expect`   | any 2xx     | Expected status, or a list of statuses                                                       |        |
+| `method`   | `GET`       | Method of the request, without a body                                                        | 0.14.0 |
+| `timeout`  | 3           | Seconds given to this service to answer                                                      | 0.4.0  |
+| `headers`  | none        | Headers sent with the request                                                                | 0.13.0 |
+| `hint`     | none        | What to do when it is down, one line                                                         | 0.19.0 |
+| `tags`     | none        | Groups it belongs to: `tags: [back]`                                                         | 0.20.0 |
+| `contains` | none        | Text the response body must contain                                                          | 0.20.0 |
 
 A `probe` older than the "Since" version refuses a config that uses the key: upgrade it.
 

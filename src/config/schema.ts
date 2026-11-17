@@ -15,7 +15,7 @@ const statusCode = z.number().int().min(100).max(599);
 
 const DEFAULT_HOST = "localhost";
 const DEFAULT_PATH = "/";
-const DEFAULT_PORTS = { "http:": 80, "https:": 443 } as const;
+export const DEFAULT_PORTS = { "http:": 80, "https:": 443 } as const;
 
 function parsedUrl(value: string): URL | undefined {
   return URL.canParse(value) ? new URL(value) : undefined;
@@ -34,6 +34,7 @@ export function urlProblem(value: string): string | undefined {
 
 export interface Service {
   url?: string;
+  urls?: Record<string, string>;
   host: string;
   port: number;
   path: string;
@@ -82,14 +83,18 @@ const oneLine = (expected: string) =>
   });
 
 export const NAME_EXPECTED = "letters, digits, _ and - only";
+export const PARAMETER_VALUE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+export const VALUE_EXPECTED = "letters, digits, ., _ and - only";
+
+const parameterWord = z.string().regex(PARAMETER_VALUE_PATTERN, VALUE_EXPECTED);
+
+const urlText = z.string().refine((value) => urlProblem(value) === undefined, {
+  error: (issue) => `expected ${urlProblem(String(issue.input))}`,
+});
 
 export const serviceObjectV1 = z.strictObject({
-  url: z
-    .string()
-    .refine((value) => urlProblem(value) === undefined, {
-      error: (issue) => `expected ${urlProblem(String(issue.input))}`,
-    })
-    .optional(),
+  url: urlText.optional(),
+  urls: z.record(parameterWord, urlText).optional(),
   host: z.string().min(1).optional(),
   port: z.number().int().min(1).max(65535).optional(),
   path: z.string().startsWith("/").optional(),
@@ -154,11 +159,6 @@ export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service
   };
 });
 
-export const PARAMETER_VALUE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
-export const VALUE_EXPECTED = "letters, digits, ., _ and - only";
-
-const parameterWord = z.string().regex(PARAMETER_VALUE_PATTERN, VALUE_EXPECTED);
-
 function strategyHeaderProblem(name: string): string | undefined {
   const problem = headerNameProblem(name);
   if (problem) return problem;
@@ -175,6 +175,7 @@ const strategySchemaV1 = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("query"), name: parameterWord }),
   z.strictObject({ kind: z.literal("path") }),
+  z.strictObject({ kind: z.literal("url") }),
 ]);
 
 const parameterSchemaV1 = z.strictObject({
@@ -190,37 +191,60 @@ const parameterSchemaV1 = z.strictObject({
 
 export type Parameter = z.infer<typeof parameterSchemaV1>;
 
-export const configSchemaV1 = z.strictObject({
-  schemaVersion: z.literal(1),
-  parameters: z
-    .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), parameterSchemaV1)
-    .superRefine((parameters, ctx) => {
-      const taken = new Map<string, string>();
-      for (const [name, { strategy }] of Object.entries(parameters)) {
-        if (strategy.kind === "path") continue;
-        // Header names ignore case, query names do not.
-        const place =
-          strategy.kind === "header"
-            ? `header ${strategy.name.toLowerCase()}`
-            : `query ${strategy.name}`;
-        const twin = taken.get(place);
-        taken.set(place, name);
-        if (twin === undefined) continue;
+const URL_STRATEGY = "strategy: { kind: url }";
+
+export const configSchemaV1 = z
+  .strictObject({
+    schemaVersion: z.literal(1),
+    parameters: z
+      .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), parameterSchemaV1)
+      .superRefine((parameters, ctx) => {
+        const taken = new Map<string, string>();
+        for (const [name, { strategy }] of Object.entries(parameters)) {
+          if (strategy.kind === "path") continue;
+          // Header names ignore case, query names do not.
+          const place =
+            strategy.kind === "url"
+              ? "url"
+              : strategy.kind === "header"
+                ? `header ${strategy.name.toLowerCase()}`
+                : `query ${strategy.name}`;
+          const twin = taken.get(place);
+          taken.set(place, name);
+          if (twin === undefined) continue;
+          ctx.issues.push({
+            code: "custom",
+            message: `sets the same ${strategy.kind} as ${twin}`,
+            input: strategy.kind,
+            path: [name, "strategy", strategy.kind === "url" ? "kind" : "name"],
+          });
+        }
+      })
+      .nullish(),
+    services: z
+      .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), serviceSchemaV1)
+      // `services:` with nothing under it parses as null.
+      .nullish()
+      .transform((services) => services ?? {}),
+  })
+  .superRefine((config, ctx) => {
+    const values = Object.values(config.parameters ?? {}).find(
+      ({ strategy }) => strategy.kind === "url",
+    )?.values;
+    for (const [name, { urls }] of Object.entries(config.services)) {
+      for (const value of Object.keys(urls ?? {})) {
+        if (values?.includes(value)) continue;
         ctx.issues.push({
           code: "custom",
-          message: `sets the same ${strategy.kind} as ${twin}`,
-          input: strategy.name,
-          path: [name, "strategy", "name"],
+          message: values
+            ? `expected a value of the parameter: ${values.join(", ")}`
+            : `needs a parameter with \`${URL_STRATEGY}\``,
+          input: value,
+          path: ["services", name, "urls", value],
         });
       }
-    })
-    .nullish(),
-  services: z
-    .record(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED), serviceSchemaV1)
-    // `services:` with nothing under it parses as null.
-    .nullish()
-    .transform((services) => services ?? {}),
-});
+    }
+  });
 
 export type Config = z.infer<typeof configSchemaV1>;
 

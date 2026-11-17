@@ -1,6 +1,6 @@
 import { targetUrl } from "../checkers/http";
 import { ProbeError } from "../errors";
-import type { Config, Parameter, Service } from "./schema";
+import { type Config, DEFAULT_PORTS, type Parameter, type Service } from "./schema";
 
 export type Selection = Readonly<Record<string, string>>;
 
@@ -45,19 +45,29 @@ function chosenValue(name: string, parameter: Parameter, selection: Selection): 
 }
 
 // What a service declares itself wins: it is the way to keep one service out of a parameter.
+// A value without an entry in `urls` keeps the address of the service.
 function rewritten(service: Service, chosen: readonly [Parameter, string][]): Service {
   const headers = { ...service.headers };
   const sent = new Set(Object.keys(headers).map((name) => name.toLowerCase()));
   const segments: string[] = [];
   const queries: [string, string][] = [];
+  let address: string | undefined;
   for (const [{ strategy }, value] of chosen) {
-    if (strategy.kind === "path") segments.push(value);
+    if (strategy.kind === "url") address = service.urls?.[value];
+    else if (strategy.kind === "path") segments.push(value);
     else if (strategy.kind === "query") queries.push([strategy.name, value]);
     else if (!sent.has(strategy.name.toLowerCase())) headers[strategy.name] = value;
   }
   const next: Service = { ...service };
   if (Object.keys(headers).length > 0) next.headers = headers;
-  const target = targetUrl(service);
+  if (address !== undefined && URL.canParse(address)) {
+    const { hostname, port, protocol, pathname, search } = new URL(address);
+    next.url = address;
+    next.host = hostname;
+    next.port = Number(port) || DEFAULT_PORTS[protocol as keyof typeof DEFAULT_PORTS];
+    next.path = pathname + search;
+  }
+  const target = targetUrl(next);
   if (segments.length + queries.length === 0 || !URL.canParse(target)) return next;
 
   const url = new URL(target);
@@ -70,7 +80,7 @@ function rewritten(service: Service, chosen: readonly [Parameter, string][]): Se
     url.search = `${url.search === "" ? "?" : `${url.search}&`}${name}=${value}`;
   }
   next.path = url.pathname + url.search;
-  if (service.url !== undefined) next.url = url.href;
+  if (next.url !== undefined) next.url = url.href;
   return next;
 }
 
