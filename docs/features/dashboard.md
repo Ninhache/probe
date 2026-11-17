@@ -36,7 +36,7 @@ hand.
 
 ## Add, edit, remove
 
-`a` and `e` open a form: name, port, host, path, expected status, method, then one line per
+`a` and `e` open a form: name, address, expected status, method, then one line per
 [header](headers.md) as `Name: value`, with an empty one at the end to add another.
 
 | Key in the form  | What it does                                                         |
@@ -52,17 +52,20 @@ hand.
 - `d` asks first: only `y` removes.
 - All three write `.probe/config.yml` as `probe add` and `probe rm` do: your comments are kept, and the
   [Makefile](makefile.md) block stays up to date.
-- A service declared by `url` is not edited here: change it in `config.yml`.
+- The address takes `3000`, `localhost:3000/health`, `api.example.com` or `https://api.example.com:8443/health`.
+  Without a scheme it is `http://`. A plain `http://` address with a port is written as `port`, `host` and
+  `path`, as before; any other (`https://`, no port, a query) is written as `url:`. An address left unchanged
+  is not rewritten.
 - With a parameter sent by `url`, the form starts with one line per value, `URL dev`, `URL prod`, written under
-  `urls:`. A URL replaces port, host and path for its value: the form says it,
+  `urls:`. A URL replaces the address for its value: the form says it,
   `Overridden by the parameter env for prod`, then `not used` when every value has one. A line left empty uses
-  port, host and path. `localhost:3001` is written `http://localhost:3001`.
+  the address. `localhost:3001` is written `http://localhost:3001`.
 
   ```
   │ › URL local  localhost:3001_                 │
   │   URL prod   https://example.com/health      │
   │ Overridden by the parameter env: not used    │
-  │   Port       3000                            │
+  │   Address    localhost:3000                  │
   ```
 
 A secret typed in a header (`Authorization: Bearer abc123`) is drawn as dots and never reaches `config.yml`.

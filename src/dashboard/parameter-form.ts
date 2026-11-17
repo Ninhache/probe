@@ -2,7 +2,7 @@ import { PARAMETER_KINDS } from "../checkers/registry";
 import type { ParameterKind } from "../checkers/types";
 import type { AddressChanges, ParameterField } from "../commands/parameter-writes";
 import { PARAMETER_VALUE_PATTERN, type Parameter, VALUE_EXPECTED } from "../config/schema";
-import { nameProblem } from "../config/service-input";
+import { nameProblem, withScheme } from "../config/service-input";
 import { choiceHint, nextChoice } from "./choice";
 
 // An address has its own lines, under the fields.
@@ -165,13 +165,7 @@ export function addressRows(
 
 const valuesOf = (values: ParameterFormValues) => listed(values.values);
 
-const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
-
-/** `localhost:3000` is read as a scheme by `new URL`: the text decides, not the parser. */
-export const withScheme = (address: string) => {
-  const trimmed = address.trim();
-  return trimmed === "" || SCHEME.test(trimmed) ? trimmed : `http://${trimmed}`;
-};
+export { withScheme };
 
 export const addressOf = (addresses: Addresses, { service, value }: AddressRow) =>
   addresses[service]?.[value] ?? "";

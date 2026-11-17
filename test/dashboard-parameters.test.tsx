@@ -583,7 +583,7 @@ describe("the service form with a url parameter", () => {
     await waitFor(() => expect(lastFrame()).toContain("URL prod  https://example.com/health"));
     expect(lastFrame()).toContain("Overridden by the parameter env for prod");
     const frame = lastFrame() ?? "";
-    expect(frame.indexOf("URL dev")).toBeLessThan(frame.indexOf("Port"));
+    expect(frame.indexOf("URL dev")).toBeLessThan(frame.indexOf("Address"));
 
     stdin.write("localhost:3001");
     await waitFor(() => expect(lastFrame()).toContain("Overridden by the parameter env: not used"));
