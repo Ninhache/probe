@@ -3,6 +3,8 @@ import { runChecks } from "../src/checkers/run";
 import type { ServiceType } from "../src/checkers/types";
 import { configSchemaV1, type Service } from "../src/config/schema";
 import { serviceActions } from "../src/dashboard/actions";
+import { detailLines, recordLatencies } from "../src/dashboard/detail";
+import { formatCheckResults } from "../src/ui/report";
 
 // A type with no URL, no headers and no command: what the dashboard and `check` know must come from it.
 const socket: ServiceType = {
@@ -53,5 +55,21 @@ describe("a service type", () => {
     expect(await actions.onOpen("db")).toBe("db has no address to open");
     expect(await actions.onCopy("db", undefined)).toBe("db has no command to copy");
     expect(opened).toEqual([]);
+  });
+
+  it("should show an up service without a status by its latency", async () => {
+    const results = await runChecks(config, [], { timeoutMs: 100, types });
+    const history = recordLatencies({}, results).db ?? [];
+
+    const lines = detailLines(results[0] as never, history, {
+      unicode: false,
+      width: 60,
+      room: 20,
+    });
+
+    expect(lines.map(({ text }) => text)).toEqual(["up - 1ms", "1ms over 1 check"]);
+    expect(
+      formatCheckResults(results, { color: false, hyperlinks: false, columns: 80 } as never),
+    ).toContain("socket localhost:5432  up  1ms");
   });
 });

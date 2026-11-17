@@ -28,6 +28,10 @@ export interface CheckResult {
   sent?: string[];
 }
 
+/** What an up service answered: its status, or `up` for a type that has none. */
+export const answer = ({ status }: CheckResult): string =>
+  status === undefined ? "up" : String(status);
+
 export interface Checker {
   type: string;
   check(name: string, service: Service, context: CheckContext): Promise<CheckResult>;

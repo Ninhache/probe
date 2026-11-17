@@ -27,9 +27,10 @@ const TRANSPORT_HEADERS = new Set([
 
 export function recordLatencies(history: LatencyHistory, results: CheckResult[]): LatencyHistory {
   return Object.fromEntries(
-    results.map(({ name, status, skipped, latencyMs }) => {
+    results.map(({ name, status, ok, skipped, latencyMs }) => {
       const before = history[name] ?? [];
-      const answered = status !== undefined && !skipped;
+      // A type without a status answers by being up.
+      const answered = (status !== undefined || ok) && !skipped;
       return [name, answered ? [...before, latencyMs].slice(-DASHBOARD_HISTORY_LENGTH) : before];
     }),
   );
@@ -79,7 +80,10 @@ export function detailLines(
   const { response, status } = result;
   const tone = result.ok ? "good" : "bad";
   const lines: DetailLine[] = [];
-  if (status === undefined) lines.push({ id: "status", text: cut(result.error ?? "down"), tone });
+  if (status === undefined && result.ok)
+    lines.push({ id: "status", text: cut(`up ${dot} ${result.latencyMs}ms`), tone });
+  else if (status === undefined)
+    lines.push({ id: "status", text: cut(result.error ?? "down"), tone });
   else {
     const answer = `${status} ${response?.statusText ?? ""}`.trim();
     lines.push({ id: "status", text: cut(`${answer} ${dot} ${result.latencyMs}ms`), tone });
