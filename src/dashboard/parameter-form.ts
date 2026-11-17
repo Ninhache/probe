@@ -3,6 +3,7 @@ import type { ParameterKind } from "../checkers/types";
 import type { AddressChanges, ParameterField } from "../commands/parameter-writes";
 import { PARAMETER_VALUE_PATTERN, type Parameter, VALUE_EXPECTED } from "../config/schema";
 import { nameProblem } from "../config/service-input";
+import { choiceHint, nextChoice } from "./choice";
 
 // An address has its own lines, under the fields.
 type FormField = Exclude<ParameterField, "address">;
@@ -38,13 +39,10 @@ export const EMPTY_PARAMETER_FORM: ParameterFormValues = {
 };
 
 /** The way of sending next to `current`, or the one a typed letter starts. */
-export function nextKind(current: string, step: 1 | -1 | string): string {
-  if (typeof step === "string") return KINDS.find((kind) => kind.startsWith(step)) ?? current;
-  const at = KINDS.indexOf(current as Kind);
-  return KINDS[(at + step + KINDS.length) % KINDS.length] as string;
-}
+export const nextKind = (current: string, step: 1 | -1 | string) =>
+  nextChoice(KINDS, current, step);
 
-export const KIND_HINT = `←→ or a letter: ${KINDS.join(", ")}`;
+export const KIND_HINT = choiceHint(KINDS);
 
 export function parameterFormRows(adding: boolean, strategy: string): readonly ParameterFormRow[] {
   const named = NAME_ROWS[kindOf(strategy) ?? "query"];

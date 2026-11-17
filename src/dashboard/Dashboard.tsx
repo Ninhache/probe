@@ -23,6 +23,7 @@ import { createColors } from "../ui/colors";
 import { formatCheckResults } from "../ui/report";
 import { type Terminal, truncate } from "../ui/terminal";
 import { changeMessage, type KnownStates, stateChanges } from "./changes";
+import { choiceHint, nextChoice } from "./choice";
 import { detailLines, type LatencyHistory, recordLatencies } from "./detail";
 import {
   emptyForm,
@@ -542,6 +543,7 @@ export function Dashboard({
     const url = urlAt(form, form.row);
     const base = baseRow(form, form.row);
     const field = url === undefined ? rows[base]?.key : undefined;
+    const choices = url === undefined ? rows[base]?.choices : undefined;
     const header = base - rows.length;
     // With headers, the last row is the empty one that adds another.
     const lastRow =
@@ -565,10 +567,13 @@ export function Dashboard({
               problem: undefined,
             },
       );
-    if (key === "escape") setDialog(null);
+    if (choices && (key === "left" || key === "right" || typed))
+      edit(nextChoice(choices, value, typed ?? (key === "right" ? 1 : -1)));
+    else if (key === "escape") setDialog(null);
     else if (key === "up") setDialog({ ...form, row: Math.max(0, form.row - 1) });
     else if (key === "down") setDialog({ ...form, row: Math.min(lastRow, form.row + 1) });
     else if (key === "tab") setDialog({ ...form, row: (form.row + 1) % (lastRow + 1) });
+    else if (choices && key !== "return") return;
     else if (key === "backspace") edit(value.slice(0, -1));
     else if (key === "clear") edit("");
     else if (typed) edit(value + typed);
@@ -1343,6 +1348,17 @@ export function Dashboard({
     );
   };
 
+  const chooserLine = (active: boolean, label: string, value: string) =>
+    truncate(
+      `${active ? marker : "  "}${label.padEnd(formLabelWidth)}  ${unicode ? `‹ ${value} ›` : `< ${value} >`}`,
+      formRoom,
+    );
+  // The field under the cursor, when it is not a URL or header line.
+  const chosenRow = (form: Form) =>
+    urlAt(form, form.row) === undefined
+      ? formRows(form.editing === undefined, form.spec)[baseRow(form, form.row)]
+      : undefined;
+
   return (
     <Box flexDirection="column">
       <Text>{colors.bold(cut(summary))}</Text>
@@ -1494,12 +1510,7 @@ export function Dashboard({
             ({ key, label, placeholder }, index) => (
               <Text key={key}>
                 {key === "strategy"
-                  ? truncate(
-                      `${index === dialog.row ? marker : "  "}${label.padEnd(formLabelWidth)}  ${
-                        unicode ? `‹ ${dialog.values[key]} ›` : `< ${dialog.values[key]} >`
-                      }`,
-                      formRoom,
-                    )
+                  ? chooserLine(index === dialog.row, label, dialog.values[key])
                   : formLine(index === dialog.row, label, dialog.values[key], placeholder)}
               </Text>
             ),
@@ -1533,23 +1544,31 @@ export function Dashboard({
               ),
             )}
           </Text>
-          {formLabels.map(({ key, label, placeholder }, index) => (
-            <Fragment key={key}>
-              {key === firstReplaced(dialog) && serviceUrlLines(dialog)}
-              <Text>
-                {formLine(
-                  shownRow(dialog, index) === dialog.row,
-                  label,
-                  fieldText(dialog.values, key),
-                  placeholder,
-                  formLabelWidth,
-                  dialog.spec.replacedByUrl?.has(key) === true &&
-                    overridden(dialog).length === urlCount(dialog) &&
-                    urlCount(dialog) > 0,
-                )}
-              </Text>
-            </Fragment>
-          ))}
+          {formRows(dialog.editing === undefined, dialog.spec).map(
+            ({ key, label, placeholder, choices }, index) => (
+              <Fragment key={key}>
+                {key === firstReplaced(dialog) && serviceUrlLines(dialog)}
+                <Text>
+                  {choices
+                    ? chooserLine(
+                        shownRow(dialog, index) === dialog.row,
+                        label,
+                        fieldText(dialog.values, key) || (choices[0] ?? ""),
+                      )
+                    : formLine(
+                        shownRow(dialog, index) === dialog.row,
+                        label,
+                        fieldText(dialog.values, key),
+                        placeholder,
+                        formLabelWidth,
+                        dialog.spec.replacedByUrl?.has(key) === true &&
+                          overridden(dialog).length === urlCount(dialog) &&
+                          urlCount(dialog) > 0,
+                      )}
+                </Text>
+              </Fragment>
+            ),
+          )}
           {(dialog.spec.headers ? [...dialog.values.headers, ""] : []).map((line, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a header row is its position, its text changes at each key
             <Text key={`header ${index}`}>
@@ -1567,6 +1586,13 @@ export function Dashboard({
             dialog.problem === undefined && (
               <Text>{colors.dim(truncate("Name: value. Emptied, it is removed.", formRoom))}</Text>
             )}
+          {chosenRow(dialog)?.choices !== undefined && dialog.problem === undefined && (
+            <Text>
+              {colors.dim(
+                truncate(choiceHint(chosenRow(dialog)?.choices ?? [], formRoom), formRoom),
+              )}
+            </Text>
+          )}
           {urlAt(dialog, dialog.row) !== undefined && dialog.problem === undefined && (
             <Text>
               {colors.dim(truncate("Empty: the address below. http:// if none.", formRoom))}

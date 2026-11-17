@@ -1,4 +1,4 @@
-import { DEFAULT_METHOD, type Method } from "../config/schema";
+import { DEFAULT_METHOD, METHODS, type Method } from "../config/schema";
 import {
   expectProblem,
   hostProblem,
@@ -23,7 +23,7 @@ export const httpForm: ServiceForm = {
     { key: "host", label: "Host", placeholder: "localhost" },
     { key: "path", label: "Path", placeholder: "/" },
     { key: "expect", label: "Expect", placeholder: "any 2xx" },
-    { key: "method", label: "Method", placeholder: DEFAULT_METHOD },
+    { key: "method", label: "Method", placeholder: DEFAULT_METHOD, choices: METHODS },
   ],
   headers: true,
   replacedByUrl: new Set(["port", "host", "path"]),
