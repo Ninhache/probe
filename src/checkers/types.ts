@@ -1,6 +1,6 @@
 import type { ServiceFields } from "../commands/service-writes";
 import type { Variables } from "../config/local";
-import type { Service } from "../config/schema";
+import type { Parameter, Service } from "../config/schema";
 import type { ResponseDetail } from "./response";
 
 export interface CheckContext {
@@ -45,6 +45,8 @@ export interface CopiedCommand {
 }
 
 /** A kind of service: how it is checked, and what the lists, `u` and `c` make of it. */
+export type ParameterKind = Parameter["strategy"]["kind"];
+
 export interface ServiceType extends Checker {
   /** The address lists and reports show. */
   target(service: Service): string;
@@ -53,6 +55,10 @@ export interface ServiceType extends Checker {
   /** What `c` and `probe curl` give: a type without one has no command. */
   copy?(service: Service, env: NodeJS.ProcessEnv): CopiedCommand;
   form: ServiceForm;
+  /** The ways of sending a parameter this type understands; the others leave its services as they are. */
+  parameterKinds?: readonly ParameterKind[];
+  /** The service as requested with one value of each parameter of a kind it understands. */
+  withParameters?(service: Service, chosen: readonly (readonly [Parameter, string])[]): Service;
 }
 
 export interface FormField {

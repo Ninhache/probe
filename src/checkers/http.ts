@@ -22,6 +22,7 @@ import {
   unknownIssuerHint,
 } from "./diagnosis";
 import { httpForm } from "./http-form";
+import { withHttpParameters } from "./http-parameters";
 import { describeResponse, type ResponseDetail } from "./response";
 import { type SystemTrust, systemTrust } from "./system-ca";
 import type { CheckContext, CheckResult, ServiceType } from "./types";
@@ -243,6 +244,8 @@ export function createHttpChecker(trust: SystemTrust = systemTrust): ServiceType
     type: "http",
     target: targetUrl,
     form: httpForm,
+    parameterKinds: ["query", "path", "header", "url"],
+    withParameters: withHttpParameters,
     open: targetUrl,
     copy: (service, env) => ({ command: curlCommand(service), note: curlNote(service, env) }),
     async check(name, service, context) {

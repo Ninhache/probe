@@ -1,7 +1,9 @@
 import { render } from "ink-testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { serviceType } from "../src/checkers/registry";
 import { runChecks } from "../src/checkers/run";
 import type { ServiceType } from "../src/checkers/types";
+import { applySelection } from "../src/config/parameters";
 import { configSchemaV1, type Service } from "../src/config/schema";
 import { serviceActions } from "../src/dashboard/actions";
 import { Dashboard, type DashboardProps } from "../src/dashboard/Dashboard";
@@ -79,6 +81,20 @@ describe("a service type", () => {
     expect(
       formatCheckResults(results, { color: false, hyperlinks: false, columns: 80 } as never),
     ).toContain("socket localhost:5432  up  1ms");
+  });
+
+  it("should leave a service alone when its type takes no parameter", () => {
+    const withTenant = configSchemaV1.parse({
+      schemaVersion: 1,
+      parameters: { tenant: { values: ["acme"], strategy: { kind: "path" } } },
+      services: { db: { port: 5432, path: "/health" }, api: { port: 3000, path: "/health" } },
+    });
+    const bySocket = (service: Service) => (service.port === 5432 ? socket : serviceType(service));
+
+    const { services } = applySelection(withTenant, {}, bySocket);
+
+    expect(services.db?.path).toBe("/health");
+    expect(services.api?.path).toBe("/acme/health");
   });
 
   describe("in the dashboard", () => {

@@ -2,9 +2,14 @@ import type { Service } from "../config/schema";
 import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { ProbeError } from "../errors";
 import { httpChecker } from "./http";
-import type { ServiceType, ServiceTypes } from "./types";
+import type { ParameterKind, ServiceType, ServiceTypes } from "./types";
 
 const types = new Map<string, ServiceType>([httpChecker].map((type) => [type.type, type]));
+
+/** Every way of sending a parameter that one type at least understands. */
+export const PARAMETER_KINDS: readonly ParameterKind[] = [
+  ...new Set([...types.values()].flatMap(({ parameterKinds = [] }) => parameterKinds)),
+];
 
 export function getServiceType(type: string): ServiceType {
   const found = types.get(type);
