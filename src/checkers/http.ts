@@ -164,7 +164,8 @@ async function request(
     detail && written.length > 0
       ? { sent: written.map(([header, value]) => hiddenHeaderLine(`${header}: ${value}`, "*")) }
       : {};
-  const base = { name, type: "http", target, ...sent };
+  const asked = detail ? { method: service.method ?? "GET" } : {};
+  const base = { name, type: "http", target, ...asked, ...sent };
   const failed = (diagnosis: Diagnosis, latencyMs = 0) => ({
     result: { ...base, ok: false, latencyMs, ...diagnosis },
     unknownIssuer: false,

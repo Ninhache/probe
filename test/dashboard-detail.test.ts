@@ -179,7 +179,36 @@ describe("detailLines sent headers", () => {
 
     expect(texts(refused, [], { width: 80 })).toEqual([
       "connection refused",
-      `sends X-Tenant: acme · Authorization: Bearer ${reference("API_TOKEN")}`,
+      "Headers sent:",
+      "  X-Tenant: acme",
+      `  Authorization: Bearer ${reference("API_TOKEN")}`,
+    ]);
+  });
+
+  it("should count the headers sent that do not fit", () => {
+    const sent = ["A: 1", "B: 2", "C: 3", "D: 4", "E: 5"];
+
+    expect(texts({ ...base, ok: false, latencyMs: 1, sent })).toEqual([
+      "down",
+      "Headers sent:",
+      "  A: 1",
+      "  B: 2",
+      "  C: 3",
+      "  … 2 more",
+    ]);
+  });
+});
+
+describe("detailLines request", () => {
+  it("should give the method and the whole URL, in pieces when it is long", () => {
+    const target = "http://localhost:3000/acme/health?region=new%20york";
+    const refused: CheckResult = { ...base, target, ok: false, latencyMs: 1, method: "GET" };
+
+    expect(texts(refused, [], { width: 30 })).toEqual([
+      "down",
+      "Request:",
+      "  GET http://localhost:3000/ac",
+      "  me/health?region=new%20york",
     ]);
   });
 });
