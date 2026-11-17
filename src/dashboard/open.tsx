@@ -10,7 +10,7 @@ import { loadConfig } from "../config/loader";
 import { loadVariables, readSkippedServices, type Variables } from "../config/local";
 import { applySelection, parameterChoices, type Selection } from "../config/parameters";
 import type { Config, Service } from "../config/schema";
-import { CONFIG_FILE, ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
+import { ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { type ActionDeps, serviceActions } from "./actions";
 import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
@@ -97,7 +97,16 @@ export function environmentColumn(
   };
 }
 
-const pickFields = ({ host, port, path, expect, method, headers }: Service): ServiceFields => ({
+const pickFields = ({
+  url,
+  host,
+  port,
+  path,
+  expect,
+  method,
+  headers,
+}: Service): ServiceFields => ({
+  url,
   host,
   port,
   path,
@@ -171,9 +180,6 @@ export async function openDashboard(
       }}
       serviceFields={(name) => {
         const service = config.services[name];
-        if (service?.url !== undefined) {
-          return `${name} is declared by \`url\`: edit it in ${PROBE_DIR}/${CONFIG_FILE}`;
-        }
         return service && pickFields(service);
       }}
       onServiceWrite={

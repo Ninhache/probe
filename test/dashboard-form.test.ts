@@ -15,25 +15,12 @@ const SECRET = "s3cr3t-value";
 
 describe("service form", () => {
   it("should ask for the name only when adding", () => {
-    expect(adding.map(({ key }) => key)).toEqual([
-      "name",
-      "port",
-      "host",
-      "path",
-      "expect",
-      "method",
-    ]);
-    expect(formRows(false).map(({ key }) => key)).toEqual([
-      "port",
-      "host",
-      "path",
-      "expect",
-      "method",
-    ]);
+    expect(adding.map(({ key }) => key)).toEqual(["name", "address", "expect", "method"]);
+    expect(formRows(false).map(({ key }) => key)).toEqual(["address", "expect", "method"]);
   });
 
   it("should read empty fields as the defaults", () => {
-    expect(formFields({ ...EMPTY_FORM, name: "api", port: "3000" })).toEqual({
+    expect(formFields({ ...EMPTY_FORM, name: "api", address: "3000" })).toEqual({
       port: 3000,
       host: "localhost",
       path: "/",
@@ -44,12 +31,12 @@ describe("service form", () => {
   });
 
   it("should read the method in capitals, and refuse one that is not a known verb", () => {
-    const values = { ...EMPTY_FORM, name: "api", port: "3000", method: "post" };
+    const values = { ...EMPTY_FORM, name: "api", address: "3000", method: "post" };
 
     expect(formFields(values).method).toBe("POST");
     expect(formProblem(adding, values, [])).toBeUndefined();
     expect(formProblem(adding, { ...values, method: "TRACE" }, [])).toEqual({
-      row: 5,
+      row: 3,
       message: "One of GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
     });
     expect(formValues({ ...formFields(values), method: "POST" }).method).toBe("POST");
@@ -60,9 +47,7 @@ describe("service form", () => {
 
     expect(formValues(fields)).toEqual({
       name: "",
-      port: "8080",
-      host: "127.0.0.1",
-      path: "/health",
+      address: "127.0.0.1:8080/health",
       expect: "200,204",
       method: "",
       headers: [],
@@ -81,7 +66,7 @@ describe("service form", () => {
   });
 
   it("should drop a header whose line was emptied", () => {
-    const values = { ...EMPTY_FORM, port: "3000", headers: ["  ", "Accept: text/plain"] };
+    const values = { ...EMPTY_FORM, address: "3000", headers: ["  ", "Accept: text/plain"] };
 
     expect(formFields(values).headers).toEqual({ Accept: "text/plain" });
     expect(formFields({ ...values, headers: [""] }).headers).toBeUndefined();
@@ -94,7 +79,7 @@ describe("service form", () => {
     ["Authorization:", "Authorization expects a value"],
     ["Accept: \u0007", "Accept expects a value on one line"],
   ])("should refuse the header %j", (line, message) => {
-    const values = { ...EMPTY_FORM, name: "web", port: "3000", headers: ["Accept: a", line] };
+    const values = { ...EMPTY_FORM, name: "web", address: "3000", headers: ["Accept: a", line] };
 
     const problem = formProblem(adding, { ...values, headers: ["X-One: 1", line] }, []);
 
@@ -103,7 +88,7 @@ describe("service form", () => {
   });
 
   it("should refuse the same header twice, whatever the case", () => {
-    const values = { ...EMPTY_FORM, port: "3000", headers: ["Accept: a", "", "accept: b"] };
+    const values = { ...EMPTY_FORM, address: "3000", headers: ["Accept: a", "", "accept: b"] };
 
     expect(formProblem(formRows(false), values, [])).toEqual({
       row: formRows(false).length + 2,
@@ -112,7 +97,7 @@ describe("service form", () => {
   });
 
   it("should never repeat a value in what it refuses", () => {
-    const values = { ...EMPTY_FORM, port: "3000", headers: [`X-Token: ${SECRET}\u0007`] };
+    const values = { ...EMPTY_FORM, address: "3000", headers: [`X-Token: ${SECRET}\u0007`] };
 
     expect(formProblem(formRows(false), values, [])?.message).not.toContain(SECRET);
   });
@@ -123,7 +108,7 @@ describe("service form", () => {
       `Authorization: Bearer ${SECRET}`,
       `X-Api-Key: ${SECRET}`,
     ];
-    const values = { ...EMPTY_FORM, port: "3000", headers };
+    const values = { ...EMPTY_FORM, address: "3000", headers };
 
     expect(formProblem(formRows(false), values, [])).toBeUndefined();
     const found = formSecret(values);
@@ -141,25 +126,27 @@ describe("service form", () => {
   });
 
   it.each([
-    [{ name: "my api", port: "3000" }, 0],
-    [{ name: "api", port: "3000" }, 0],
-    [{ name: "web", port: "" }, 1],
-    [{ name: "web", port: "70000" }, 1],
-    [{ name: "web", port: "3000", host: "a b" }, 2],
-    [{ name: "web", port: "3000", path: "health" }, 3],
-    [{ name: "web", port: "3000", expect: "ok" }, 4],
-    [{ name: "web", port: "3000", expect: "999" }, 4],
+    [{ name: "my api", address: "3000" }, 0],
+    [{ name: "api", address: "3000" }, 0],
+    [{ name: "web", address: "" }, 1],
+    [{ name: "web", address: "70000" }, 1],
+    [{ name: "web", address: "a b:3000" }, 1],
+    [{ name: "web", address: "ftp://example.com" }, 1],
+    [{ name: "web", address: "3000", expect: "ok" }, 2],
+    [{ name: "web", address: "3000", expect: "999" }, 2],
   ])("should refuse %o at row %i", (typed, row) => {
     expect(formProblem(adding, { ...EMPTY_FORM, ...typed }, ["api"])?.row).toBe(row);
   });
 
   it("should accept a name and a port alone", () => {
     expect(
-      formProblem(adding, { ...EMPTY_FORM, name: "web", port: "3000" }, ["api"]),
+      formProblem(adding, { ...EMPTY_FORM, name: "web", address: "3000" }, ["api"]),
     ).toBeUndefined();
   });
 
   it("should not look at the name when editing", () => {
-    expect(formProblem(formRows(false), { ...EMPTY_FORM, port: "3000" }, ["api"])).toBeUndefined();
+    expect(
+      formProblem(formRows(false), { ...EMPTY_FORM, address: "3000" }, ["api"]),
+    ).toBeUndefined();
   });
 });

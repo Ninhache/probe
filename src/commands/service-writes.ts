@@ -7,7 +7,7 @@ import { rawServices, writeServices } from "./shared";
 
 export type ServiceFields = Pick<
   Service,
-  "host" | "port" | "path" | "expect" | "method" | "headers"
+  "url" | "host" | "port" | "path" | "expect" | "method" | "headers"
 >;
 
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */
@@ -35,12 +35,25 @@ const FIELD_KEYS = ["host", "port", "path", "expect", "method", "headers"] as co
 /** `expect: [200]` and `expect: 200` say the same: a form cannot tell which one was written. */
 const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].flat());
 
+const ADDRESS_KEYS: readonly string[] = ["host", "port", "path"];
+
 function withFields(service: RawConfig, fields: ServiceFields, current?: ServiceFields): RawConfig {
   const next = { ...service };
+  // `url` says what host, port and path say: the config refuses both, one goes when the other comes.
+  if (fields.url !== undefined) {
+    if (fields.url !== service.url) next.url = fields.url;
+  } else delete next.url;
   for (const key of FIELD_KEYS) {
+    const address = ADDRESS_KEYS.includes(key);
+    if (address && fields.url !== undefined) {
+      delete next[key];
+      continue;
+    }
+    // Read from a `url`, they are not in the file: there is nothing to leave alone.
+    const was = address && service.url !== undefined ? undefined : current;
     // An edit leaves alone what it did not change, even a default written out by hand.
     const value = fields[key] ?? DEFAULTS[key];
-    if (current && sameValue(value, current[key] ?? DEFAULTS[key])) continue;
+    if (was && sameValue(value, was[key] ?? DEFAULTS[key])) continue;
     if (isDeepStrictEqual(value, DEFAULTS[key])) delete next[key];
     else next[key] = fields[key];
   }
@@ -69,7 +82,6 @@ export async function writeService(
   const exists = Object.hasOwn(services, write.name);
   if (exists === (write.kind === "add")) return null;
   const { [write.name]: previous, ...others } = services;
-  if (write.kind === "edit" && previous?.url !== undefined) return null;
   const next =
     write.kind === "remove"
       ? others
