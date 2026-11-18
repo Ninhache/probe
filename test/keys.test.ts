@@ -1,6 +1,7 @@
 import type { Key } from "ink";
 import { describe, expect, it } from "vitest";
-import { splitKeys, typedCharacter } from "../src/dashboard/keys";
+import { fromEngineKey, splitKeys, typedCharacter } from "../src/dashboard/keys";
+import type { Key as EngineKey } from "../src/tui/input";
 
 const ESCAPE = String.fromCharCode(27);
 const none = {} as Key;
@@ -63,5 +64,35 @@ describe("typedCharacter", () => {
     expect(typedCharacter({ input: "\r", key: "return" })).toBeUndefined();
     expect(typedCharacter({ input: String.fromCharCode(3) })).toBeUndefined();
     expect(typedCharacter({ input: "" })).toBeUndefined();
+  });
+});
+
+describe("fromEngineKey", () => {
+  const press = (name: string, extra: Partial<EngineKey> = {}): EngineKey => ({
+    kind: "key",
+    name,
+    ctrl: false,
+    alt: false,
+    shift: false,
+    raw: name,
+    ...extra,
+  });
+
+  it("maps named keys like the ink screen does", () => {
+    expect(fromEngineKey(press("enter"))).toEqual({ input: "", key: "return" });
+    expect(fromEngineKey(press("up"))).toEqual({ input: "", key: "up" });
+    expect(fromEngineKey(press("escape"))).toEqual({ input: "", key: "escape" });
+    expect(fromEngineKey(press("u", { ctrl: true }))).toEqual({ input: "", key: "clear" });
+  });
+
+  it("keeps the typed character, including space and capitals", () => {
+    expect(fromEngineKey(press("j"))).toEqual({ input: "j" });
+    expect(fromEngineKey(press("z", { raw: "Z", shift: true }))).toEqual({ input: "Z" });
+    expect(fromEngineKey(press("space", { raw: " " }))).toEqual({ input: " " });
+    expect(typedCharacter(fromEngineKey(press("a")))).toBe("a");
+  });
+
+  it("gives nothing for a chord", () => {
+    expect(typedCharacter(fromEngineKey(press("a", { ctrl: true })))).toBeUndefined();
   });
 });
