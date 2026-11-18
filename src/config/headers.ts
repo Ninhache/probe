@@ -143,6 +143,54 @@ export function referenced(text: string, references: readonly [string, string][]
   );
 }
 
+const QUOTE = 34;
+const BACKSLASH = 92;
+
+// A string cut in the middle (a body kept up to its cap) is closed first, without a dangling escape.
+function decoded(token: string, closed: boolean): string | undefined {
+  const text = closed ? token : `${token.replace(/\\(?:u[0-9a-fA-F]{0,3})?$/, "")}"`;
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Puts the `${NAME}` it came from where a JSON body echoes a secret written with escapes
+ * (`\u0068unter2`, `\/`), which `referenced` cannot see. Each string token is decoded only to be
+ * compared: a token that holds a secret is written again with the reference, and no other token
+ * is touched, so what is decoded never reaches the screen or a copy.
+ */
+export function referencedInJson(body: string, references: readonly [string, string][]): string {
+  if (!body.includes("\\") || references.length === 0) return body;
+  const n = body.length;
+  let out = "";
+  let from = 0;
+  let i = 0;
+  while (i < n) {
+    if (body.charCodeAt(i) !== QUOTE) {
+      i++;
+      continue;
+    }
+    const start = i++;
+    while (i < n && body.charCodeAt(i) !== QUOTE) i += body.charCodeAt(i) === BACKSLASH ? 2 : 1;
+    const closed = i < n;
+    const end = Math.min(i + 1, n);
+    i = end;
+    const token = body.slice(start, end);
+    if (!token.includes("\\")) continue;
+    const text = decoded(token, closed);
+    if (text === undefined) continue;
+    const masked = referenced(text, references);
+    if (masked === text) continue;
+    out += body.slice(from, start) + JSON.stringify(masked);
+    from = end;
+  }
+  return from === 0 ? body : out + body.slice(from);
+}
+
 export function templateParts(value: string): { text?: string; variable?: string }[] {
   const parts: { text?: string; variable?: string }[] = [];
   let end = 0;

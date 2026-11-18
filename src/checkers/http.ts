@@ -1,6 +1,7 @@
 import {
   hiddenHeaderLine,
   referenced,
+  referencedInJson,
   resolveHeaders,
   serviceVariables,
   templateParts,
@@ -133,7 +134,9 @@ const maskedDetail = (
     name,
     secretHeaders.has(name.toLowerCase()) ? HIDDEN_VALUE : referenced(value, references),
   ]),
-  ...(detail.body === undefined ? {} : { body: referenced(detail.body, references) }),
+  ...(detail.body === undefined
+    ? {}
+    : { body: referenced(referencedInJson(detail.body, references), references) }),
 });
 
 // A read that fails or times out rejects: the check then reports that, not a missing text.
