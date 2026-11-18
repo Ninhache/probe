@@ -11,6 +11,7 @@ import { NOTIFY_GRACE_SECONDS } from "../../constants";
 import { App } from "../../tui/app";
 import { type ActionDeps, serviceActions } from "../actions";
 import { changeMessage, type KnownStates, stateChanges } from "../changes";
+import { type FocusWatch, watchFocus } from "../focus";
 import type { Saved } from "../saves";
 import type { DashboardSettings } from "../settings";
 import type { EnvironmentSource } from "../sources";
@@ -38,6 +39,8 @@ export interface NativeDashboardOptions {
   onParameterChange?: (name: string, value: string) => Saved | undefined;
   /** The system (browser, clipboard, notifications); replaced in tests. */
   deps?: ActionDeps;
+  /** Says whether the terminal window has the focus; by default asked of the terminal itself. */
+  focus?: FocusWatch;
 }
 
 /** What the next pass runs with: the screen changes it while it runs. */
@@ -110,6 +113,13 @@ export function environmentChecks(
   ];
 }
 
+/** A window in focus shows the change itself: only one out of focus, or unknown, is notified. */
+export const shouldNotify = (
+  enabled: boolean | undefined,
+  changes: number,
+  focused: boolean | undefined,
+) => enabled && changes > 0 && focused !== true;
+
 /** The btop-style dashboard drawn by the zero-dependency engine. Resolves once the terminal is restored. */
 export function openNativeDashboard(options: NativeDashboardOptions): Promise<void> {
   const view = initialView({
@@ -142,6 +152,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   const graceMs = NOTIFY_GRACE_SECONDS * 1000;
   const configOf = async (env: string): Promise<Config | undefined> =>
     env === LOCAL_ENVIRONMENT ? options.config : (await sources.get(env)?.load())?.config;
+  const focus = options.focus ?? watchFocus(process.stdin, process.stdout);
   const track = (saved: Saved | undefined) => void saved?.then((why) => why && say(view, why));
   const system = (cfg: Config) =>
     serviceActions((selection?: Selection) => applySelection(cfg, selection), options.deps);
@@ -154,7 +165,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         graceMs,
       );
       known.set(env, after);
-      if (!view.settings.notify || changes.length === 0) return;
+      if (!shouldNotify(view.settings.notify, changes.length, focus.focused())) return;
       const scope = tracker.environments.length > 1 ? `${env}/` : "";
       const named = changes.map((change) => ({ ...change, name: `${scope}${change.name}` }));
       void system(options.config)
@@ -219,6 +230,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         }),
       onStop: () => {
         monitor.stop();
+        focus.stop();
         resolve();
       },
       tickMs: TICK_MS,

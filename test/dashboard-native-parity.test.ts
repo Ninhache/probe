@@ -4,7 +4,7 @@ import type { CheckResult } from "../src/checkers/types";
 import type { Config } from "../src/config/schema";
 import { helpBarItems, helpColumns } from "../src/dashboard/keymap";
 import { Tracker } from "../src/dashboard/native/history";
-import { environmentChecks } from "../src/dashboard/native/open";
+import { environmentChecks, shouldNotify } from "../src/dashboard/native/open";
 import {
   handleInput,
   initialView,
@@ -303,5 +303,15 @@ describe("environment parameters", () => {
     };
     await (check as NonNullable<typeof check>).run(new AbortController().signal);
     expect(seen).toEqual(["staging:zone", "staging:zone,size"]);
+  });
+});
+
+describe("notifications", () => {
+  it("stay quiet while the terminal has the focus", () => {
+    expect(shouldNotify(true, 1, false)).toBe(true);
+    expect(shouldNotify(true, 1, undefined)).toBe(true);
+    expect(shouldNotify(true, 1, true)).toBe(false);
+    expect(shouldNotify(false, 1, false)).toBe(false);
+    expect(shouldNotify(true, 0, false)).toBe(false);
   });
 });
