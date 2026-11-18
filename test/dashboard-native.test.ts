@@ -79,7 +79,7 @@ describe("history", () => {
     ]);
   });
 
-  it("logs a service that starts down, ignores skipped ones", () => {
+  it("logs a service that starts down, lists skipped ones without events", () => {
     const tracker = new Tracker(["local"]);
     tracker.record(
       "local",
@@ -87,7 +87,7 @@ describe("history", () => {
       1,
     );
     expect(tracker.events.toArray()).toHaveLength(1);
-    expect(tracker.services()).toEqual(["acme"]);
+    expect(tracker.services()).toEqual(["acme", "globex"]);
   });
 
   it("marks an environment that cannot be read as down", () => {
