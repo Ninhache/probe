@@ -16,6 +16,7 @@ export class Monitor {
   private readonly shutdown = new AbortController();
   private readonly inflight = new Set<string>();
   private timers: NodeJS.Timeout[] = [];
+  private generation = 0;
 
   constructor(
     private readonly checks: EnvironmentCheck[],
@@ -49,6 +50,14 @@ export class Monitor {
     this.shutdown.abort();
   }
 
+  /**
+   * What a pass is run with changed (the selection, the config): the passes under way are
+   * dropped when they end, and run again at once.
+   */
+  invalidate(): void {
+    this.generation += 1;
+  }
+
   /** Checks every environment now; one already running is not started twice. */
   refresh(): void {
     for (const check of this.checks) void this.run(check);
@@ -57,14 +66,17 @@ export class Monitor {
   async run(check: EnvironmentCheck): Promise<void> {
     if (this.inflight.has(check.name) || this.shutdown.signal.aborted) return;
     this.inflight.add(check.name);
+    const started = this.generation;
+    const stale = () => started !== this.generation;
     try {
       const results = await check.run(this.shutdown.signal);
-      if (!this.shutdown.signal.aborted) this.options.onResults(check.name, results);
+      if (!this.shutdown.signal.aborted && !stale()) this.options.onResults(check.name, results);
     } catch (error) {
-      if (!this.shutdown.signal.aborted)
+      if (!this.shutdown.signal.aborted && !stale())
         this.options.onFailure(check.name, error instanceof Error ? error.message : String(error));
     } finally {
       this.inflight.delete(check.name);
+      if (stale()) void this.run(check);
     }
   }
 }

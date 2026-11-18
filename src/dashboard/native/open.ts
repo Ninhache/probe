@@ -155,6 +155,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   });
   const editing = liveEditing(options.config, options);
   view.canAdd = editing.writeService !== undefined;
+  view.canEditParameters = editing.writeParameter !== undefined;
   // The writes and the undos replace the config: a pass reads it as it is when it starts.
   const live: NativeDashboardOptions = {
     ...options,
@@ -180,7 +181,11 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   const configOf = async (env: string): Promise<Config | undefined> =>
     env === LOCAL_ENVIRONMENT ? editing.config() : (await sources.get(env)?.load())?.config;
   const focus = options.focus ?? watchFocus(process.stdin, process.stdout);
-  const track = (saved: Saved | undefined) => void saved?.then((why) => why && say(view, why));
+  const track = (saved: Saved | undefined) =>
+    void saved?.then((why) => {
+      view.unsaved = why;
+      if (why) say(view, why);
+    });
   const system = (cfg: Config) =>
     serviceActions((selection?: Selection) => applySelection(cfg, selection), options.deps);
   return new Promise((resolve) => {
@@ -260,6 +265,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         }
         view.choices = merge();
         tracker.retain(LOCAL_ENVIRONMENT, new Set(Object.keys(editing.config().services)));
+        monitor.invalidate();
         monitor.refresh();
         app.requestRender();
       },
@@ -302,6 +308,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             // Another value is another target: the latencies and the states start again.
             tracker.reset();
             known.clear();
+            monitor.invalidate();
             monitor.refresh();
           },
         }),

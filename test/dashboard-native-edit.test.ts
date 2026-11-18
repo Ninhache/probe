@@ -783,3 +783,73 @@ describe("a new environment", () => {
     expect(ran).toEqual(["prod"]);
   });
 });
+
+describe("a pass under old settings", () => {
+  it("drops its results and runs again with the new ones", async () => {
+    const seen: string[] = [];
+    let release: () => void = () => {};
+    let runs = 0;
+    const monitor = new Monitor(
+      [
+        {
+          name: "local",
+          run: async () => {
+            runs += 1;
+            const mine = runs;
+            if (mine === 1) await new Promise<void>((resolve) => (release = resolve));
+            return [answered(`pass${mine}`)];
+          },
+        },
+      ],
+      {
+        intervalMs: 60_000,
+        onResults: (_env, results) => void seen.push(...results.map(({ name }) => name)),
+        onFailure: () => {},
+      },
+    );
+    monitor.refresh();
+    await tick();
+    monitor.invalidate();
+    monitor.refresh();
+    release();
+    await settle();
+    monitor.stop();
+    expect(seen).toEqual(["pass2"]);
+  });
+});
+
+describe("a failed save", () => {
+  const DOWN = `${ESC}[B`;
+
+  it("stays on the header until a save succeeds", async () => {
+    let failing = true;
+    const { press, draw } = setup({
+      edits: {
+        onServiceWrite: async (write) => {
+          if (failing) return { failure: "disk is full" };
+          return {
+            config: { ...initial, services: { ...initial.services, [write.name]: {} } } as Config,
+          };
+        },
+      },
+    });
+    press("dy");
+    await tick();
+    expect(draw().split("\n")[0]).toContain("not saved: disk is full");
+    press(DOWN);
+    expect(draw(110, 32).split("\n")[0]).toContain("not saved: disk is full");
+    failing = false;
+    press("dy");
+    await tick();
+    expect(draw().split("\n")[0]).not.toContain("not saved");
+  });
+});
+
+describe("the bar", () => {
+  it("offers the parameter panel when a writer exists, even with none declared", () => {
+    const { view, draw } = setup();
+    expect(draw().split("\n").at(-1)).not.toContain("p parameters");
+    view.canEditParameters = true;
+    expect(draw().split("\n").at(-1)).toContain("p parameters");
+  });
+});

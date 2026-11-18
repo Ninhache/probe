@@ -67,6 +67,10 @@ export interface ViewState {
   parameterAt?: string;
   /** Services can be added from here: the empty list says how. */
   canAdd?: boolean;
+  /** Parameters can be written from here: the bar offers the panel even when none is declared. */
+  canEditParameters?: boolean;
+  /** Why the last save failed; stays on the header until a save succeeds. */
+  unsaved?: string;
   /** A line that replaces the help bar for a few seconds: the outcome of an action. */
   status?: { text: string; at: number };
   /** The bar of the keymap that fits the modal on top. */
@@ -176,6 +180,11 @@ export function renderDashboard(
   }
   const status = `${spinner(view.frame)} ${clock(now)}`;
   screen.text(area.w - status.length - 1, header.y, status, { fg: t.muted });
+  if (view.unsaved) {
+    const room = area.w - status.length - 3 - x;
+    if (room > 0)
+      screen.text(x, header.y, `not saved: ${view.unsaved}`, { fg: t.warn, bold: true }, room);
+  }
 
   const shown = env === undefined ? tracker.environments : [env];
   const statusWidth = (name: string) => Math.min(STATUS_MAX_WIDTH, Math.max(9, name.length));
@@ -257,7 +266,7 @@ export function renderDashboard(
     drawHelpBar(screen, footer, {
       screen: barScreen,
       grid: tracker.environments.length > 1,
-      parameters: Object.keys(view.choices).length > 0,
+      parameters: Object.keys(view.choices).length > 0 || view.canEditParameters === true,
     });
   }
   view.modals.draw(screen, area);

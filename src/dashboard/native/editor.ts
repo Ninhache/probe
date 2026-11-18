@@ -70,6 +70,7 @@ export function createEditor({
   const write = async (change: ServiceWrite, done: string, secrets?: Secrets) => {
     const outcome = await writeService?.(change, secrets);
     if (!outcome) return;
+    view.unsaved = outcome.failure;
     if (outcome.saved) {
       const kept = Object.keys(secrets ?? {});
       const told =
@@ -103,6 +104,7 @@ export function createEditor({
     async write(change: ParameterWrite, done: string) {
       const outcome = await writeParameter?.(change);
       if (!outcome || outcome.drops || outcome.problem) return outcome;
+      view.unsaved = outcome.failure;
       if (outcome.failure) say(view, `not saved: ${outcome.failure}`);
       if (outcome.saved) parameterWritten(change.name, done);
       return outcome;
@@ -181,6 +183,7 @@ export function createEditor({
             `Remove the parameter ${name} from the config?`,
             () =>
               void writeParameter({ kind: "remove", name }).then((outcome) => {
+                view.unsaved = outcome.failure;
                 if (outcome.failure) say(view, `not saved: ${outcome.failure}`);
                 if (outcome.problem) say(view, outcome.problem.message);
                 else if (outcome.saved) parameterWritten(name, `Removed ${name}`);
@@ -199,6 +202,7 @@ export function createEditor({
         view.modals.push(
           variableModal(name, (value) => {
             void writeVariable(name, value).then((failure) => {
+              view.unsaved = failure;
               say(
                 view,
                 failure
