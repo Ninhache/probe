@@ -1,24 +1,20 @@
 import { render } from "ink";
-import { defaultType, serviceType } from "../checkers/registry";
 import { runChecks } from "../checkers/run";
-import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
-import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
-import { serviceVariables } from "../config/headers";
 import type { Variables } from "../config/local";
 import { applySelection, parameterChoices, type Selection } from "../config/parameters";
-import { type Config, declaresAddress, type Service } from "../config/schema";
+import type { Config } from "../config/schema";
 import type { Terminal } from "../ui/terminal";
 import { type ActionDeps, serviceActions } from "./actions";
-import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
+import { Dashboard, type DashboardProps, type EnvironmentColumn } from "./Dashboard";
+import { type EditCallbacks, liveEditing, timeoutsOf } from "./editing";
 import { watchFocus } from "./focus";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
 import { type EnvironmentSource, environmentSource } from "./sources";
-import { type VariableSources, variableTools } from "./variables";
 
 export { type EnvironmentSource, environmentSource };
 
-export interface DashboardState {
+export interface DashboardState extends EditCallbacks {
   settings: DashboardSettings;
   skipped: ReadonlySet<string>;
   /** Reads the variables the headers refer to, before each pass: one set meanwhile is then seen. */
@@ -28,19 +24,6 @@ export interface DashboardState {
   onSkipChange?: (name: string, skip: boolean) => Saved | undefined;
   selection?: Selection;
   onParameterChange?: (name: string, value: string) => Saved | undefined;
-  onServiceWrite?: (
-    write: ServiceWrite,
-    secrets?: Secrets,
-  ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
-  onParameterWrite?: (
-    write: ParameterWrite,
-  ) => Promise<{ config?: Config; problem?: ParameterProblem; failure?: string }>;
-  /** Puts back the config as it was before the last write: `config` once it is done. */
-  onUndo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
-  /** Writes again what the last undo took back. */
-  onRedo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
-  variableSources?: VariableSources;
-  onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentSource[];
 }
 
@@ -72,13 +55,6 @@ export function environmentColumn(
   };
 }
 
-const pickFields = (service: Service): ServiceFields => {
-  const { url, host, port, path, expect, method, headers } = service;
-  // Read from `urls:`, the address is not the service's: the form shows none, and writes none back.
-  const address = declaresAddress(service) ? { url, host, port, path } : {};
-  return { ...address, expect, method, headers };
-};
-
 export async function openDashboard(
   initial: Config,
   terminal: Terminal,
@@ -87,6 +63,7 @@ export async function openDashboard(
     onParameterWrite,
     variables: readVariables,
     variableSources,
+    onVariableWrite,
     environments = [],
     onUndo,
     onRedo,
@@ -94,7 +71,14 @@ export async function openDashboard(
   }: DashboardState,
 ): Promise<void> {
   // The dashboard adds, edits and removes services: everything reads the config as it is now.
-  let config = initial;
+  const editing = liveEditing(initial, {
+    onServiceWrite,
+    onParameterWrite,
+    onUndo,
+    onRedo,
+    variableSources,
+    onVariableWrite,
+  });
   const check: DashboardProps["check"] = async (
     signal,
     timeoutMs,
@@ -102,6 +86,7 @@ export async function openDashboard(
     timeouts,
     selection,
   ) => {
+    const config = editing.config();
     const services = Object.fromEntries(
       Object.entries(config.services).map(([name, service]) => [
         name,
@@ -116,78 +101,29 @@ export async function openDashboard(
       skipped,
     );
   };
-  const timeoutsOf = ({ services }: Config) =>
-    Object.fromEntries(
-      Object.entries(services).flatMap(([name, { timeout }]) =>
-        timeout === undefined ? [] : [[name, timeout]],
-      ),
-    );
-  const timeouts = timeoutsOf(config);
-  const revert = async (way: NonNullable<DashboardState["onUndo"]>) => {
-    const { config: restored, ...outcome } = await way();
-    if (restored) config = restored;
-    return { ...outcome, timeouts: restored && timeoutsOf(restored) };
-  };
-  const tools = variableSources && variableTools(() => config, variableSources);
-  const unsetNote = async (name: string) => {
-    const sent = serviceVariables(config.services[name]?.headers);
-    const found = (await variableSources?.(sent)) ?? {};
-    const unset = sent.filter((variable) => !found[variable]);
-    if (!variableSources || unset.length === 0) return undefined;
-    return `${unset.join(", ")} not set: open ${name} with enter, then enter on the variable`;
-  };
+  const timeouts = timeoutsOf(initial);
   const focus = watchFocus(process.stdin, process.stdout);
   const app = render(
     <Dashboard
       terminal={terminal}
       check={check}
       timeouts={timeouts}
-      {...serviceActions((selection) => applySelection(config, selection))}
-      parameters={() => parameterChoices(config)}
+      {...serviceActions((selection) => applySelection(editing.config(), selection))}
+      parameters={() => parameterChoices(editing.config())}
       {...state}
       terminalFocused={focus.focused}
       onClose={focus.stop}
-      serviceForm={(name) => {
-        const service = name === undefined ? undefined : config.services[name];
-        return (service ? serviceType(service) : defaultType()).form;
-      }}
-      serviceFields={(name) => {
-        const service = config.services[name];
-        return service && pickFields(service);
-      }}
-      onServiceWrite={
-        onServiceWrite &&
-        (async (write, secrets) => {
-          const { config: written, ...outcome } = await onServiceWrite(write, secrets);
-          if (written) config = written;
-          const notes = [outcome.warning, written && (await unsetNote(write.name))];
-          const warning = notes.filter(Boolean).join("\n") || undefined;
-          return { ...outcome, warning, saved: written !== undefined };
-        })
-      }
-      onUndo={onUndo && (() => revert(onUndo))}
-      onRedo={onRedo && (() => revert(onRedo))}
-      parameterFields={(name) => config.parameters?.[name]}
-      addresses={() =>
-        Object.fromEntries(
-          Object.entries(config.services).map(([name, service]) => [name, { ...service.urls }]),
-        )
-      }
-      urlParameter={() => {
-        const found = Object.entries(config.parameters ?? {}).find(
-          ([, { strategy }]) => strategy.kind === "url",
-        );
-        return found && { name: found[0], values: found[1].values };
-      }}
-      onParameterWrite={
-        onParameterWrite &&
-        (async (write) => {
-          const { config: written, ...outcome } = await onParameterWrite(write);
-          if (written) config = written;
-          return { ...outcome, saved: written !== undefined };
-        })
-      }
-      variables={tools}
+      serviceForm={editing.serviceForm}
+      serviceFields={editing.serviceFields}
+      onServiceWrite={editing.writeService}
+      onUndo={editing.undo}
+      onRedo={editing.redo}
+      parameterFields={editing.parameterFields}
+      addresses={editing.addresses}
+      urlParameter={editing.urlParameter}
+      onParameterWrite={editing.writeParameter}
+      onVariableWrite={editing.writeVariable}
+      variables={editing.variables}
       environments={environments.map((source) => environmentColumn(source))}
     />,
     // Rewrites only the lines that changed: a key press sends ~0.5 kB instead of the whole screen.

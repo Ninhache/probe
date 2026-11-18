@@ -1,0 +1,127 @@
+import { defaultType, serviceType } from "../checkers/registry";
+import type { ServiceForm } from "../checkers/types";
+import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
+import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
+import { serviceVariables } from "../config/headers";
+import { type Config, declaresAddress, type Parameter, type Service } from "../config/schema";
+import type {
+  ParameterWriteOutcome,
+  Secrets,
+  ServiceTimeouts,
+  ServiceWriteOutcome,
+} from "./Dashboard";
+import type { UrlParameter } from "./form";
+import type { Addresses } from "./parameter-form";
+import type { Saved } from "./saves";
+import { type VariableSources, type VariableTools, variableTools } from "./variables";
+
+/** What writes the files, given by the command line: each resolves to the config as written, or to why not. */
+export interface EditCallbacks {
+  onServiceWrite?: (
+    write: ServiceWrite,
+    secrets?: Secrets,
+  ) => Promise<{ config?: Config; failure?: string; warning?: string }>;
+  onParameterWrite?: (write: ParameterWrite) => Promise<{
+    config?: Config;
+    problem?: ParameterProblem;
+    failure?: string;
+    drops?: string[];
+  }>;
+  /** Puts back the config as it was before the last write: `config` once it is done. */
+  onUndo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
+  /** Writes again what the last undo took back. */
+  onRedo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
+  variableSources?: VariableSources;
+  onVariableWrite?: (name: string, value: string) => Saved;
+}
+
+const pickFields = (service: Service): ServiceFields => {
+  const { url, host, port, path, expect, method, headers } = service;
+  // Read from `urls:`, the address is not the service's: the form shows none, and writes none back.
+  const address = declaresAddress(service) ? { url, host, port, path } : {};
+  return { ...address, expect, method, headers };
+};
+
+export const timeoutsOf = ({ services }: Config): Record<string, number> =>
+  Object.fromEntries(
+    Object.entries(services).flatMap(([name, { timeout }]) =>
+      timeout === undefined ? [] : [[name, timeout]],
+    ),
+  );
+
+export interface Editing {
+  /** The local config as it is now: every write and undo replaces it. */
+  config(): Config;
+  serviceForm(name?: string): ServiceForm;
+  serviceFields(name: string): ServiceFields | undefined;
+  parameterFields(name: string): Parameter | undefined;
+  addresses(): Addresses;
+  urlParameter(): UrlParameter | undefined;
+  writeService?: (write: ServiceWrite, secrets?: Secrets) => Promise<ServiceWriteOutcome>;
+  writeParameter?: (write: ParameterWrite) => Promise<ParameterWriteOutcome>;
+  undo?: () => Promise<{ undone?: string; failure?: string; timeouts?: ServiceTimeouts }>;
+  redo?: () => Promise<{ undone?: string; failure?: string; timeouts?: ServiceTimeouts }>;
+  variables?: VariableTools;
+  writeVariable?: (name: string, value: string) => Saved;
+}
+
+/** The local config the dashboard edits, kept in step with what the writes and undos leave. */
+export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing {
+  let config = initial;
+  const revert = async (way: NonNullable<EditCallbacks["onUndo"]>) => {
+    const { config: restored, ...outcome } = await way();
+    if (restored) config = restored;
+    return { ...outcome, timeouts: restored && timeoutsOf(restored) };
+  };
+  const variables = edits.variableSources && variableTools(() => config, edits.variableSources);
+  const unsetNote = async (name: string) => {
+    const sent = serviceVariables(config.services[name]?.headers);
+    const found = (await edits.variableSources?.(sent)) ?? {};
+    const unset = sent.filter((variable) => !found[variable]);
+    if (!edits.variableSources || unset.length === 0) return undefined;
+    return `${unset.join(", ")} not set: open ${name} with enter, then enter on the variable`;
+  };
+  const { onServiceWrite, onParameterWrite, onUndo, onRedo } = edits;
+  return {
+    config: () => config,
+    serviceForm(name) {
+      const service = name === undefined ? undefined : config.services[name];
+      return (service ? serviceType(service) : defaultType()).form;
+    },
+    serviceFields(name) {
+      const service = config.services[name];
+      return service && pickFields(service);
+    },
+    parameterFields: (name) => config.parameters?.[name],
+    addresses: () =>
+      Object.fromEntries(
+        Object.entries(config.services).map(([name, service]) => [name, { ...service.urls }]),
+      ),
+    urlParameter() {
+      const found = Object.entries(config.parameters ?? {}).find(
+        ([, { strategy }]) => strategy.kind === "url",
+      );
+      return found && { name: found[0], values: found[1].values };
+    },
+    writeService:
+      onServiceWrite &&
+      (async (write, secrets) => {
+        const { config: written, ...outcome } = await onServiceWrite(write, secrets);
+        if (written) config = written;
+        const notes = [outcome.warning, written && (await unsetNote(write.name))];
+        const warning = notes.filter(Boolean).join("\n") || undefined;
+        return { ...outcome, warning, saved: written !== undefined };
+      }),
+    writeParameter:
+      onParameterWrite &&
+      (async (write) => {
+        const { config: written, ...outcome } = await onParameterWrite(write);
+        if (written) config = written;
+        return { ...outcome, saved: written !== undefined };
+      }),
+    undo: onUndo && (() => revert(onUndo)),
+    redo: onRedo && (() => revert(onRedo)),
+    variables,
+    writeVariable: edits.onVariableWrite,
+  };
+}
