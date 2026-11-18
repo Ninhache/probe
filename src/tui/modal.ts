@@ -10,8 +10,8 @@ export interface Modal {
   size: { w: number; h: number };
   /** Paint the content in the inner rect (the border and the title are already drawn). */
   draw(screen: Screen, inner: Rect): void;
-  /** First look at an event. Return true when handled; Esc then still closes if it returns false. */
-  onEvent?(event: InputEvent, inner: Rect): boolean;
+  /** First look at an event. true = handled, "close" = handled and close, false = Esc closes, the rest is ignored. */
+  onEvent?(event: InputEvent, inner: Rect): boolean | "close";
   footer?: string;
 }
 
@@ -71,7 +71,9 @@ export class ModalStack {
     const modal = this.top;
     if (!modal) return false;
     const inner = innerOf(modalRect(this.lastArea, modal.size));
-    if (modal.onEvent?.(event, inner)) return true;
+    const handled = modal.onEvent?.(event, inner);
+    if (handled === "close") this.pop();
+    if (handled) return true;
     if (event.kind === "key" && isEscape(event)) this.pop();
     return true;
   }
