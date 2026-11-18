@@ -28,7 +28,14 @@ export function drawHelpBar(
   row: Rect,
   { screen: name, grid, parameters }: BarContext,
 ): void {
-  const items = helpBarItems(name, UNICODE, Math.max(0, row.w - 2 * BAR_MARGIN), grid, parameters);
+  const items = helpBarItems(
+    name,
+    UNICODE,
+    Math.max(0, row.w - 2 * BAR_MARGIN),
+    grid,
+    parameters,
+    true,
+  );
   let x = row.x + BAR_MARGIN;
   const end = row.x + row.w;
   items.forEach(({ keys, action }, i) => {
@@ -46,7 +53,7 @@ interface HelpCell {
 
 /** The help sections side by side when they fit, stacked otherwise: one list of cells per row. */
 export function helpRows(width: number, grid: boolean): { cells: HelpCell[]; width: number }[] {
-  const columns = helpColumns(UNICODE, width, grid);
+  const columns = helpColumns(UNICODE, width, grid, true);
   const starts: number[] = [];
   let x = 0;
   for (const column of columns) {

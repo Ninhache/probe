@@ -8,6 +8,7 @@ export type Screen =
   | "form"
   | "input"
   | "confirm"
+  | "detail"
   | "help";
 
 export type Command =
@@ -29,6 +30,7 @@ export type Command =
 type Section =
   | "List"
   | "Panels"
+  | "Service detail"
   | "Parameters"
   | "Filter"
   | "Add and edit"
@@ -49,6 +51,8 @@ interface Binding {
   grid?: true;
   /** In the bar only when the selected config declares parameters. */
   parameters?: true;
+  /** Only on the native screen: the ink screen's bar and help leave it out. */
+  native?: true;
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
@@ -56,6 +60,21 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
   section: "List",
   ...binding,
 });
+
+const detail = (binding: Omit<Binding, "screens" | "section" | "native">): Binding => ({
+  screens: ["detail"],
+  section: "Service detail",
+  native: true,
+  ...binding,
+});
+
+const DETAIL_BINDINGS: readonly Binding[] = [
+  detail({ keys: "←→", ascii: "arrows", action: "timeout", help: "Service timeout", drop: 3 }),
+  detail({ keys: "s", action: "skip", help: "Skip the service", drop: 2 }),
+  detail({ keys: "u", action: "open", help: "Open its URL", drop: 1 }),
+  detail({ keys: "c", action: "copy", help: "Copy curl command", drop: 1 }),
+  detail({ keys: "esc", action: "close", help: "Close" }),
+];
 
 const BINDINGS: readonly Binding[] = [
   list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 2 }),
@@ -236,6 +255,7 @@ const BINDINGS: readonly Binding[] = [
   { screens: ["confirm"], keys: "y", action: "remove" },
   { screens: ["confirm"], keys: "n esc", action: "keep" },
   { screens: ["help"], keys: "? esc", action: "close" },
+  ...DETAIL_BINDINGS,
   {
     screens: ["list", "panel", "readonly", "choose"],
     section: "Outside a text field",
@@ -258,6 +278,7 @@ const SECTIONS: readonly Section[] = [
   "List",
   "Parameters",
   "Panels",
+  "Service detail",
   "Filter",
   "Add and edit",
   "Outside a text field",
@@ -266,7 +287,8 @@ const SECTIONS: readonly Section[] = [
 const written = (binding: Binding, unicode: boolean) =>
   unicode ? binding.keys : (binding.ascii ?? binding.keys);
 
-const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
+const offered = (grid: boolean, native = false) =>
+  BINDINGS.filter((binding) => (grid || !binding.grid) && (native || !binding.native));
 
 export interface BarItem {
   keys: string;
@@ -280,8 +302,9 @@ export function helpBarItems(
   columns: number,
   grid = false,
   parameters = false,
+  native = false,
 ): BarItem[] {
-  const shown = offered(grid).filter(
+  const shown = offered(grid, native).filter(
     (binding) =>
       binding.screens.includes(screen) && !binding.barless && (parameters || !binding.parameters),
   );
@@ -343,10 +366,16 @@ export interface HelpLine {
 const HELP_GAP = 3;
 const LEFT_SECTIONS = 2;
 
-function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
-  const described = offered(grid).filter(({ help }) => help !== undefined);
+function sectionLines(
+  sections: readonly Section[],
+  unicode: boolean,
+  grid: boolean,
+  native: boolean,
+): HelpLine[] {
+  const described = offered(grid, native).filter(({ help }) => help !== undefined);
   const width = Math.max(...described.map((binding) => written(binding, unicode).length));
-  return sections.flatMap((title) => [
+  const present = sections.filter((title) => described.some(({ section }) => section === title));
+  return present.flatMap((title) => [
     { id: title, text: title, heading: true },
     ...described
       .filter(({ section }) => section === title)
@@ -358,19 +387,24 @@ function sectionLines(sections: readonly Section[], unicode: boolean, grid: bool
   ]);
 }
 
-export function helpLines(unicode: boolean, grid = false): HelpLine[] {
-  return sectionLines(SECTIONS, unicode, grid);
+export function helpLines(unicode: boolean, grid = false, native = false): HelpLine[] {
+  return sectionLines(SECTIONS, unicode, grid, native);
 }
 
-export function helpColumns(unicode: boolean, columns: number, grid = false): HelpLine[][] {
+export function helpColumns(
+  unicode: boolean,
+  columns: number,
+  grid = false,
+  native = false,
+): HelpLine[][] {
   // The list and the parameters it opens on the left: both columns then fit 24 lines.
   const sides = [
-    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid),
-    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid),
+    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid, native),
+    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid, native),
   ];
   const widths = sides.map((side) => Math.max(...side.map(({ text }) => text.length)));
   const fits = (widths[0] as number) + HELP_GAP + (widths[1] as number) <= columns;
-  return fits ? sides : [helpLines(unicode, grid)];
+  return fits ? sides : [helpLines(unicode, grid, native)];
 }
 
 export { HELP_GAP };

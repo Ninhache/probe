@@ -50,7 +50,7 @@ export function detailPanel(
   };
   return {
     title: `${service}@${env}`,
-    bar: writable ? "panel" : "readonly",
+    bar: writable ? "detail" : "readonly",
     footer: writable ? "←→ timeout · s skip · u open · c copy · esc" : "u open · c copy · esc",
     size: { w: width, h: Math.min(area.h - 2, lines().length + extra + 3) },
     draw(screen, inner) {

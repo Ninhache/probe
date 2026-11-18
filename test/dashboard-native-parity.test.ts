@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
-import { helpBarItems } from "../src/dashboard/keymap";
+import { helpBarItems, helpColumns } from "../src/dashboard/keymap";
 import { Tracker } from "../src/dashboard/native/history";
 import { environmentChecks } from "../src/dashboard/native/open";
 import {
@@ -71,6 +71,21 @@ describe("help bar keys", () => {
     const narrow = helpBarItems("list", true, 40);
     expect(narrow.length).toBeLessThan(wide.length);
     expect(narrow.at(-1)).toEqual({ keys: "q", action: "quit" });
+  });
+});
+
+describe("native-only bindings", () => {
+  it("advertises skip and timeout on the native detail bar and help, not on ink's", () => {
+    const native = helpBarItems("detail", true, 200, false, false, true);
+    expect(native.map(({ action }) => action)).toEqual(expect.arrayContaining(["timeout", "skip"]));
+    expect(helpBarItems("detail", true, 200).map(({ action }) => action)).not.toContain("skip");
+    const inHelp = (native: boolean) =>
+      helpColumns(true, 200, false, native)
+        .flat()
+        .map((line) => JSON.stringify(line))
+        .join("");
+    expect(inHelp(true)).toContain("Skip the service");
+    expect(inHelp(false)).not.toContain("Skip the service");
   });
 });
 
