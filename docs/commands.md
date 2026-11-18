@@ -16,11 +16,13 @@
 
 ## probe
 
-Opens the [dashboard](features/dashboard.md), on a terminal.
+Opens the [dashboard](features/dashboard.md), on a terminal. Off a terminal, or with `--once`, it checks once,
+prints the table and exits: `0` all up, `1` a service is down.
 
 | Option                 | Default | Meaning                       |
 | ---------------------- | ------- | ----------------------------- |
 | `--interval <seconds>` | 2       | Seconds between two refreshes |
+| `--once`               | off     | Check once, print the table   |
 
 ## probe init
 
