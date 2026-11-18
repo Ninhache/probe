@@ -112,6 +112,10 @@ const main = defineCommand({
       description: "Seconds between two refreshes of the dashboard (probe alone, on a terminal)",
       default: String(DASHBOARD_INTERVAL_SECONDS),
     },
+    once: {
+      type: "boolean",
+      description: "Check once, print the table and exit with 1 if a service is down (probe alone)",
+    },
   },
   subCommands: { ...commands, completion: completionCommand(commands) },
 });
@@ -159,9 +163,7 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
 
 // The interactive libraries are imported here only: every other path starts without them.
 async function openedDashboard(allArgs: string[]): Promise<boolean> {
-  const native = process.env.PROBE_TUI === "native";
-  // `--once` belongs to the native screen and is not declared in the usage yet: the ink one does not know it.
-  const once = native && allArgs.includes(ONCE_OPTION);
+  const once = allArgs.includes(ONCE_OPTION);
   const rawArgs = once ? allArgs.filter((arg) => arg !== ONCE_OPTION) : allArgs;
   const interval = dashboardInterval(rawArgs);
   if (interval === null) return false;
@@ -169,14 +171,12 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
   const askedMs = asked ? secondsToMs(INTERVAL_OPTION, interval) : undefined;
   const interactive = isInteractive(process.stdin, process.stdout, process.env);
   // Nobody to draw for, or one pass asked for: a table, then the exit code.
-  const plain = native && (once || !interactive);
-  if (!interactive && !plain) {
-    if (!asked) return false;
+  if (!interactive && asked)
     throw new ProbeError(
       "USAGE",
       `${INTERVAL_OPTION} sets the refresh of the dashboard, which needs an interactive terminal.`,
     );
-  }
+  const plain = once || !interactive;
   const paths = asked || once ? requireProbeDir(process.cwd()) : findProbeDir(process.cwd());
   if (!paths) return false;
   const { config } = await loadConfig(paths);
@@ -205,42 +205,31 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
   }
   const settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
   const { saves, writes } = dashboardWrites(paths, settings);
-  if (process.env.PROBE_TUI === "native") {
-    const { environmentSource: source } = await import("./dashboard/sources");
-    const { openNativeDashboard } = await import("./dashboard/native/open");
-    await openNativeDashboard({
-      config,
-      environments: environments.map((name) => source(paths, name)),
-      settings,
-      selection: await readDashboardSelection(paths),
-      skipped: await readSkippedServices(paths),
-      onEnvironmentCreate: async (name, from) => {
-        const { variables } = await createEnvironment(paths, name, from);
-        const sends = variables.map(
-          (variable) => `It sends ${variable}: probe var ${variable} --env ${name} (or export it).`,
-        );
-        const told = `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
-        return { source: source(paths, name), message: [told, ...sends].join("\n") };
-      },
-      ...writes,
-    });
-  } else {
-    const { openDashboard, environmentSource } = await import("./dashboard/open");
-    await openDashboard(config, stdoutTerminal(), {
-      environments: environments.map((name) => environmentSource(paths, name)),
-      settings,
-      skipped: await readSkippedServices(paths),
-      selection: await readDashboardSelection(paths),
-      ...writes,
-    });
-  }
+  const { environmentSource: source } = await import("./dashboard/sources");
+  const { openNativeDashboard } = await import("./dashboard/native/open");
+  await openNativeDashboard({
+    config,
+    environments: environments.map((name) => source(paths, name)),
+    settings,
+    selection: await readDashboardSelection(paths),
+    skipped: await readSkippedServices(paths),
+    onEnvironmentCreate: async (name, from) => {
+      const { variables } = await createEnvironment(paths, name, from);
+      const sends = variables.map(
+        (variable) => `It sends ${variable}: probe var ${variable} --env ${name} (or export it).`,
+      );
+      const told = `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
+      return { source: source(paths, name), message: [told, ...sends].join("\n") };
+    },
+    ...writes,
+  });
   await saves.idle();
   // The dashboard said so too, but its screen is gone once it closes.
   for (const failure of saves.failures()) console.error(`probe: not saved: ${failure}`);
   return true;
 }
 
-/** What the dashboard writes, the same for both screens: every save goes through one queue and one undo journal. */
+/** What the dashboard writes: every save goes through one queue and one undo journal. */
 function dashboardWrites(paths: ProbePaths, initial: DashboardSettings) {
   let settings = initial;
   const saves = createSaveQueue();

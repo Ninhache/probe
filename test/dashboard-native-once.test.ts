@@ -82,7 +82,7 @@ describe("one pass", () => {
   });
 });
 
-describe("probe with PROBE_TUI=native, off a terminal and with --once", () => {
+describe("probe off a terminal and with --once", () => {
   let server: Server;
   let port: number;
 
@@ -98,7 +98,7 @@ describe("probe with PROBE_TUI=native, off a terminal and with --once", () => {
       execFile(
         process.execPath,
         [CLI, ...args],
-        { cwd, env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", PROBE_TUI: "native", ...env } },
+        { cwd, env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", ...env } },
         (error, stdout) => {
           done({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout });
         },
@@ -141,12 +141,5 @@ describe("probe with PROBE_TUI=native, off a terminal and with --once", () => {
     });
 
     expect(run.stdout).not.toContain(ANSI);
-  });
-
-  it("leaves the ink screen alone: no --once there", async () => {
-    const { dir } = await project(port);
-    const run = await probe(dir.replace(/\/\.probe$/, ""), ["--once"], { PROBE_TUI: "" });
-
-    expect(run.stdout).not.toContain("api");
   });
 });
