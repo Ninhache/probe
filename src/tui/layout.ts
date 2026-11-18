@@ -26,16 +26,16 @@ export function resolveSizes(total: number, sizes: Size[], gap = 0): number[] {
     sizes.forEach((s, i) => {
       if (typeof s !== "object") return;
       out[i] = Math.floor((remaining * s.fill) / weights);
-      left -= out[i];
+      left -= out[i] ?? 0;
       lastFill = i;
     });
-    out[lastFill] += left; // rounding leftovers go to the last fill
+    out[lastFill] = (out[lastFill] ?? 0) + left; // rounding leftovers go to the last fill
   }
   // Too small? Take the overflow back from the end so nothing draws outside the parent.
   let over = out.reduce((a, b) => a + b, 0) - avail;
   for (let i = out.length - 1; over > 0 && i >= 0; i--) {
-    const cut = Math.min(out[i], over);
-    out[i] -= cut;
+    const cut = Math.min(out[i] ?? 0, over);
+    out[i] = (out[i] ?? 0) - cut;
     over -= cut;
   }
   return out;

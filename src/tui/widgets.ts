@@ -90,7 +90,7 @@ export function meter(
   const eighths = Math.round(r * width * 8);
   for (let i = 0; i < width; i++) {
     const n = Math.min(8, Math.max(0, eighths - i * 8));
-    const ch = n === 8 ? "█" : n > 0 ? EIGHTHS[n] : " ";
+    const ch = n === 8 ? "█" : n > 0 ? (EIGHTHS[n] ?? " ") : " ";
     screen.set(x + i, y, ch, { fg: colorAt(i), bg: o.bg });
   }
 }
@@ -133,8 +133,8 @@ export function graph(screen: Screen, r: Rect, data: readonly number[], o: Graph
       const base = fromBottom * 4;
       let bits = 0;
       for (let d = 0; d < 4; d++) {
-        if (la > base + d) bits |= LEFT_DOTS[d];
-        if (lb > base + d) bits |= RIGHT_DOTS[d];
+        if (la > base + d) bits |= LEFT_DOTS[d] ?? 0;
+        if (lb > base + d) bits |= RIGHT_DOTS[d] ?? 0;
       }
       const ch = bits ? String.fromCharCode(BRAILLE_BASE + bits) : " ";
       screen.set(r.x + col, r.y + row, ch, { fg: at(o.gradient, (fromBottom + 1) / r.h) });
@@ -190,11 +190,12 @@ export function table(
   const drawRow = (y: number, cells: Cell[], base: Style | undefined): void => {
     let x = r.x;
     cols.forEach((c, i) => {
+      const width = widths[i] ?? 0;
       const cell = cells[i] ?? "";
       const text = typeof cell === "string" ? cell : cell.text;
       const style = { ...base, ...(typeof cell === "string" ? {} : cell.style), bg: base?.bg };
-      screen.text(x, y, pad(text, widths[i], c.align), style, widths[i]);
-      x += widths[i] + gap;
+      screen.text(x, y, pad(text, width, c.align), style, width);
+      x += width + gap;
     });
   };
   if (r.h < 1) return { ...r, h: 0 };
@@ -228,7 +229,7 @@ export function scrollTo(selected: number, offset: number, visible: number): num
 // ── Small pieces ─────────────────────────────────────────────────────────────────────────
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-export const spinner = (frame: number): string => SPINNER[frame % SPINNER.length];
+export const spinner = (frame: number): string => SPINNER[frame % SPINNER.length] ?? "";
 
 /** A row of "label" tabs; the active one is highlighted. Returns columns used. */
 export function tabs(

@@ -54,12 +54,14 @@ export function gradient(stops: RGB[], steps = 101): RGB[] {
     const t = (i / (steps - 1)) * (stops.length - 1);
     const seg = Math.min(Math.floor(t), stops.length - 2);
     const f = t - seg;
-    const [a, b] = [stops[seg], stops[seg + 1]];
-    return [0, 1, 2].map((k) => Math.round(a[k] + (b[k] - a[k]) * f)) as unknown as RGB;
+    const a = stops[seg] ?? [0, 0, 0];
+    const b = stops[seg + 1] ?? a;
+    const mix = (k: 0 | 1 | 2) => Math.round(a[k] + (b[k] - a[k]) * f);
+    return [mix(0), mix(1), mix(2)] as const;
   });
 }
 
 /** Pick the gradient color for a ratio in [0, 1]. */
 export function at(g: RGB[], ratio: number): RGB {
-  return g[Math.round(Math.min(1, Math.max(0, ratio)) * (g.length - 1))];
+  return g[Math.round(Math.min(1, Math.max(0, ratio)) * (g.length - 1))] ?? [0, 0, 0];
 }

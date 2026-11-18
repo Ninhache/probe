@@ -133,7 +133,7 @@ export class Screen {
     let cursor = -1; // linear index where the terminal cursor is, -1 = unknown
     for (let i = 0; i < this.chars.length; i++) {
       const ch = this.chars[i];
-      const s = this.sgrs[i];
+      const s = this.sgrs[i] ?? PLAIN;
       if (ch === this.prevChars[i] && s === this.prevSgrs[i]) continue;
       if (ch === CONT) continue; // drawn together with its first half
       if (cursor !== i) out += ansi.moveTo(Math.floor(i / this.width), i % this.width);

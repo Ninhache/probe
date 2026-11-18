@@ -48,7 +48,10 @@ export class App {
       for (const ev of parseInput(data)) {
         if (ev.kind === "key" && ev.ctrl && ev.name === "c") return this.stop();
         if (ev.kind === "key" && ev.ctrl && ev.name === "z") {
-          this.terminal.suspend(() => this.redraw());
+          this.terminal.suspend(() => {
+            this.screen.resize(this.terminal.cols, this.terminal.rows);
+            this.redraw();
+          });
           return;
         }
         this.opts.onInput?.(ev, this);

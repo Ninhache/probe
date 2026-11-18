@@ -47,6 +47,7 @@ export class Terminal {
         (this.mouse ? ansi.mouseOn : ""),
     );
     process.on("exit", this.leave);
+    process.on("SIGINT", this.onSignal);
     process.on("SIGTERM", this.onSignal);
     process.on("SIGHUP", this.onSignal);
     process.on("uncaughtException", this.onCrash);
@@ -67,6 +68,7 @@ export class Terminal {
     if (this.inp.isTTY) this.inp.setRawMode(false);
     this.inp.pause();
     process.off("exit", this.leave);
+    process.off("SIGINT", this.onSignal);
     process.off("SIGTERM", this.onSignal);
     process.off("SIGHUP", this.onSignal);
     process.off("uncaughtException", this.onCrash);

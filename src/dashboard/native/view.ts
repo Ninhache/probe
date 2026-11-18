@@ -73,9 +73,13 @@ export function renderDashboard(
   view: ViewState,
   now = Date.now(),
 ): void {
-  const [header, body, footer] = rows(area, [1, fill(), 1]);
-  const [left, right] = columns(body, ["55%", fill()]);
-  const [graphArea, gaugeArea, logArea] = rows(right, [fill(2), 4, fill(2)]);
+  const [header = area, body = area, footer = area] = rows(area, [1, fill(), 1]);
+  const [left = body, right = body] = columns(body, ["55%", fill()]);
+  const [graphArea = right, gaugeArea = right, logArea = right] = rows(right, [
+    fill(2),
+    4,
+    fill(2),
+  ]);
   const env = activeEnv(tracker, view);
   const list = visibleServices(tracker, view);
   const index = selectedIndex(tracker, view);

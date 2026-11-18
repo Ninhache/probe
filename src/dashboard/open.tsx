@@ -3,7 +3,6 @@ import { defaultType, serviceType } from "../checkers/registry";
 import { runChecks } from "../checkers/run";
 import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
-import type { ProbePaths } from "../config/discovery";
 import { serviceVariables } from "../config/headers";
 import type { Variables } from "../config/local";
 import { applySelection, parameterChoices, type Selection } from "../config/parameters";

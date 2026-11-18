@@ -51,8 +51,11 @@ const TILDE: Record<string, string> = {
   "24": "f12",
 };
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: parsing escape sequences
 const MOUSE_RE = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])/; // SGR mouse: ESC [ < button ; x ; y M|m
+// biome-ignore lint/suspicious/noControlCharactersInRegex: parsing escape sequences
 const CSI_RE = /^\x1b\[([0-9;]*)([A-Za-z~])/; // ESC [ params final
+// biome-ignore lint/suspicious/noControlCharactersInRegex: parsing escape sequences
 const SS3_RE = /^\x1bO([A-Za-z])/; // ESC O final (some terminals' arrows / F1-F4)
 
 const key = (name: string, raw: string, mods: Partial<Key> = {}): Key => ({
@@ -77,9 +80,9 @@ function plain(g: string): Key {
 }
 
 function csi(m: RegExpExecArray): Key {
-  const params = m[1].split(";");
+  const params = (m[1] ?? "").split(";");
   const mod = Math.max(0, Number(params[1] ?? 1) - 1); // xterm: 1 + (shift 1 | alt 2 | ctrl 4)
-  const name = m[2] === "~" ? TILDE[params[0]] : FINAL[m[2]];
+  const name = m[2] === "~" ? TILDE[params[0] ?? ""] : FINAL[m[2] ?? ""];
   return key(name ?? "unknown", m[0], {
     shift: Boolean(mod & 1) || m[2] === "Z",
     alt: Boolean(mod & 2),
@@ -99,7 +102,8 @@ function mouse(m: RegExpExecArray): Mouse {
         : m[4] === "m"
           ? "release"
           : "press";
-  const button = b & 64 ? "none" : (["left", "middle", "right", "none"] as const)[b & 3];
+  const button =
+    b & 64 ? "none" : ((["left", "middle", "right", "none"] as const)[b & 3] ?? "none");
   return { kind: "mouse", action, button, x: Number(m[2]) - 1, y: Number(m[3]) - 1, raw: m[0] };
 }
 
@@ -120,13 +124,13 @@ export function parseInput(data: string): InputEvent[] {
     }
     const s = SS3_RE.exec(rest);
     if (s) {
-      events.push(key(FINAL[s[1]] ?? "unknown", s[0]));
+      events.push(key(FINAL[s[1] ?? ""] ?? "unknown", s[0]));
       i += s[0].length;
       continue;
     }
     if (rest[0] === "\x1b") {
       if (rest.length > 1 && rest[1] !== "\x1b") {
-        const g = graphemes(rest.slice(1))[0];
+        const g = graphemes(rest.slice(1))[0] ?? "";
         events.push({ ...plain(g), alt: true, raw: `\x1b${g}` });
         i += 1 + g.length;
       } else {
@@ -135,7 +139,7 @@ export function parseInput(data: string): InputEvent[] {
       }
       continue;
     }
-    const g = graphemes(rest)[0];
+    const g = graphemes(rest)[0] ?? "";
     events.push(plain(g));
     i += g.length;
   }
