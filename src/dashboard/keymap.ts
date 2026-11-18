@@ -268,6 +268,39 @@ const written = (binding: Binding, unicode: boolean) =>
 
 const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
 
+export interface BarItem {
+  keys: string;
+  action: string;
+}
+
+/** The bindings the bar shows, dropping the lowest ranked ones until `columns` is enough. */
+export function helpBarItems(
+  screen: Screen,
+  unicode: boolean,
+  columns: number,
+  grid = false,
+  parameters = false,
+): BarItem[] {
+  const shown = offered(grid).filter(
+    (binding) =>
+      binding.screens.includes(screen) && !binding.barless && (parameters || !binding.parameters),
+  );
+  const separator = unicode ? " · " : " - ";
+  const width = () =>
+    shown.reduce(
+      (sum, binding, i) =>
+        sum + (i ? separator.length : 0) + `${written(binding, unicode)} ${binding.action}`.length,
+      0,
+    );
+  while (width() > columns) {
+    const droppable = shown.filter(({ drop }) => drop !== undefined);
+    if (droppable.length === 0) break;
+    const first = droppable.reduce((a, b) => ((a.drop as number) <= (b.drop as number) ? a : b));
+    shown.splice(shown.indexOf(first), 1);
+  }
+  return shown.map((binding) => ({ keys: written(binding, unicode), action: binding.action }));
+}
+
 export function helpBar(
   screen: Screen,
   unicode: boolean,
@@ -275,21 +308,9 @@ export function helpBar(
   grid = false,
   parameters = false,
 ): string {
-  const shown = offered(grid).filter(
-    (binding) =>
-      binding.screens.includes(screen) && !binding.barless && (parameters || !binding.parameters),
-  );
-  const line = () =>
-    shown
-      .map((binding) => `${written(binding, unicode)} ${binding.action}`)
-      .join(unicode ? " · " : " - ");
-  while (line().length > columns) {
-    const droppable = shown.filter(({ drop }) => drop !== undefined);
-    if (droppable.length === 0) break;
-    const first = droppable.reduce((a, b) => ((a.drop as number) <= (b.drop as number) ? a : b));
-    shown.splice(shown.indexOf(first), 1);
-  }
-  return line();
+  return helpBarItems(screen, unicode, columns, grid, parameters)
+    .map(({ keys, action }) => `${keys} ${action}`)
+    .join(unicode ? " · " : " - ");
 }
 
 export function keyCommand(input: string, enter: boolean): Command | undefined {

@@ -4,7 +4,7 @@ import type { Modal } from "../../tui/modal";
 import type { Screen } from "../../tui/screen";
 import { defaultTheme as t } from "../../tui/theme";
 import { strWidth } from "../../tui/width";
-import { HELP_GAP, helpBar, helpColumns, type Screen as KeymapScreen } from "../keymap";
+import { HELP_GAP, helpBarItems, helpColumns, type Screen as KeymapScreen } from "../keymap";
 
 /** The terminal draws every symbol the keymap can show; the ascii fallback is for the ink screen. */
 const UNICODE = true;
@@ -16,12 +16,26 @@ const WHEEL_LINES = 3;
 export interface BarContext {
   screen: KeymapScreen;
   grid: boolean;
+  /** The selected config declares parameters: the bar then offers to change them. */
+  parameters?: boolean;
 }
 
-/** The hint line: what the keymap offers on this screen, dropping the least useful when it is short. */
-export function drawHelpBar(screen: Screen, row: Rect, { screen: name, grid }: BarContext): void {
-  const text = helpBar(name, UNICODE, Math.max(0, row.w - 2 * BAR_MARGIN), grid);
-  screen.text(row.x + BAR_MARGIN, row.y, text, { fg: t.muted }, row.w - BAR_MARGIN);
+const BAR_SEPARATOR = " · ";
+
+/** The hint line: what the keymap offers on this screen, the key of each binding highlighted. */
+export function drawHelpBar(
+  screen: Screen,
+  row: Rect,
+  { screen: name, grid, parameters }: BarContext,
+): void {
+  const items = helpBarItems(name, UNICODE, Math.max(0, row.w - 2 * BAR_MARGIN), grid, parameters);
+  let x = row.x + BAR_MARGIN;
+  const end = row.x + row.w;
+  items.forEach(({ keys, action }, i) => {
+    if (i > 0) x += screen.text(x, row.y, BAR_SEPARATOR, { fg: t.muted }, end - x);
+    x += screen.text(x, row.y, keys, { fg: t.accent, bold: true }, end - x);
+    x += screen.text(x, row.y, ` ${action}`, { fg: t.muted }, end - x);
+  });
 }
 
 interface HelpCell {
