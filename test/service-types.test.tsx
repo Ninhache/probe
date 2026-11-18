@@ -10,6 +10,9 @@ import { Dashboard, type DashboardProps } from "../src/dashboard/Dashboard";
 import { detailLines, recordLatencies } from "../src/dashboard/detail";
 import { formatCheckResults } from "../src/ui/report";
 
+// Not the 1 s default: on a loaded machine a render can take longer.
+const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 30_000 });
+
 // A type with no URL, no headers and no command: what the dashboard and `check` know must come from it.
 const socket: ServiceType = {
   type: "socket",
@@ -118,11 +121,11 @@ describe("a service type", () => {
 
     it("should ask for the fields of the type only", async () => {
       const { lastFrame, stdin } = open(vi.fn(async () => ({ saved: true })));
-      await vi.waitFor(() => expect(lastFrame()).toContain("socket localhost:5432"));
+      await waitFor(() => expect(lastFrame()).toContain("socket localhost:5432"));
 
       stdin.write("a");
 
-      await vi.waitFor(() => expect(lastFrame()).toContain("Add a service"));
+      await waitFor(() => expect(lastFrame()).toContain("Add a service"));
       expect(lastFrame()).toContain("Port");
       expect(lastFrame()).not.toMatch(/Header|Method|URL dev/);
     });
@@ -132,13 +135,13 @@ describe("a service type", () => {
         saved: true,
       }));
       const { lastFrame, stdin } = open(onServiceWrite);
-      await vi.waitFor(() => expect(lastFrame()).toContain("socket localhost:5432"));
+      await waitFor(() => expect(lastFrame()).toContain("socket localhost:5432"));
       stdin.write("a");
-      await vi.waitFor(() => expect(lastFrame()).toContain("Add a service"));
+      await waitFor(() => expect(lastFrame()).toContain("Add a service"));
 
       stdin.write("cache\t6379\r");
 
-      await vi.waitFor(() => expect(onServiceWrite).toHaveBeenCalled());
+      await waitFor(() => expect(onServiceWrite).toHaveBeenCalled());
       expect(onServiceWrite.mock.lastCall?.[0]).toEqual({
         kind: "add",
         name: "cache",

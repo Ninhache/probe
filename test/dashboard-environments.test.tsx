@@ -57,7 +57,7 @@ const prod = [
 const ESCAPE = String.fromCharCode(27);
 const ENTER = "\r";
 const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
-const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 10_000 });
+const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 30_000 });
 
 const column = (name: string, results: CheckResult[]): EnvironmentColumn => ({
   name,

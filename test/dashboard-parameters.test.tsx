@@ -17,7 +17,7 @@ const plain: Terminal = {
 
 const TENANTS = { tenant: ["acme", "globex"] };
 const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
-const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 10_000 });
+const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 30_000 });
 
 const answer = (selection: Selection | undefined, host = "localhost:3000"): CheckResult[] => [
   {

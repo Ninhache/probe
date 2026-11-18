@@ -14,11 +14,11 @@ export function detectPorts(env: NodeJS.ProcessEnv): number[] {
 }
 
 // The first response is the answer: following a redirect could send a request outside the machine.
-export async function answersHttp(port: number): Promise<boolean> {
+export async function answersHttp(port: number, timeoutMs = DETECT_TIMEOUT_MS): Promise<boolean> {
   const url = targetOf(serviceSchemaV1.parse({ port }));
   try {
     const response = await fetch(url, {
-      signal: AbortSignal.timeout(DETECT_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       redirect: "manual",
     });
     await response.body?.cancel();
