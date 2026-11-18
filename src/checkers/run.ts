@@ -12,6 +12,7 @@ export interface RunOptions {
   maxTimeoutMs?: number;
   signal?: AbortSignal;
   detail?: boolean;
+  bodyBytes?: number;
   variables?: Variables;
   configFile?: string;
   tags?: readonly string[];
@@ -52,6 +53,7 @@ export async function runChecks(
         timeoutMs: resolveTimeoutMs(service, options),
         signal: options.signal,
         detail: options.detail,
+        bodyBytes: options.bodyBytes,
         variables: options.variables,
       });
     }),

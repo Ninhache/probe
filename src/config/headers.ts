@@ -91,7 +91,12 @@ export function parseHeaderLine(line: string): [name: string, value: string] | u
 }
 
 export type ResolvedHeaders =
-  | { headers: [name: string, value: string][]; secrets: string[] }
+  | {
+      headers: [name: string, value: string][];
+      secrets: string[];
+      /** Each secret value with the variable it came from. */
+      references: [secret: string, variable: string][];
+    }
   | { unset: string[] }
   | { unsendable: string[] };
 
@@ -113,6 +118,9 @@ export function resolveHeaders(
     secrets: [...values.values()].filter(
       (value): value is string => value !== undefined && value.length >= MASKED_MIN_LENGTH,
     ),
+    references: [...values]
+      .filter((pair): pair is [string, string] => (pair[1]?.length ?? 0) >= MASKED_MIN_LENGTH)
+      .map(([variable, value]) => [value, variable]),
   };
 }
 
@@ -121,6 +129,18 @@ export function masked(text: string, secrets: readonly string[]): string {
   return [...secrets]
     .sort((a, b) => b.length - a.length)
     .reduce((hidden, secret) => hidden.replaceAll(secret, MASK), text);
+}
+
+/** Puts the `${NAME}` it came from where a secret is echoed, longest secret first. */
+export function referenced(text: string, references: readonly [string, string][]): string {
+  const known = new Map(references);
+  const found = [...known.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (found.length === 0) return text;
+  return text.replace(new RegExp(found.join("|"), "g"), (secret) =>
+    reference(known.get(secret) as string),
+  );
 }
 
 export function templateParts(value: string): { text?: string; variable?: string }[] {

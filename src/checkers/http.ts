@@ -1,6 +1,6 @@
 import {
   hiddenHeaderLine,
-  masked,
+  referenced,
   resolveHeaders,
   serviceVariables,
   templateParts,
@@ -23,7 +23,7 @@ import {
 } from "./diagnosis";
 import { httpForm } from "./http-form";
 import { withHttpParameters } from "./http-parameters";
-import { describeResponse, type ResponseDetail } from "./response";
+import { describeResponse, HIDDEN_VALUE, type ResponseDetail } from "./response";
 import { type SystemTrust, systemTrust } from "./system-ca";
 import type { CheckContext, CheckResult, ServiceType } from "./types";
 
@@ -120,11 +120,20 @@ async function fetchWithHeaders(
   return undefined;
 }
 
-const maskedDetail = (detail: ResponseDetail, secrets: readonly string[]): ResponseDetail => ({
+// A secret echoed back shows the `${NAME}` it came from; a header the service sends a variable in
+// keeps its value hidden when the server answers with it too.
+const maskedDetail = (
+  detail: ResponseDetail,
+  references: readonly [string, string][],
+  secretHeaders: ReadonlySet<string>,
+): ResponseDetail => ({
   ...detail,
-  statusText: masked(detail.statusText, secrets),
-  headers: detail.headers.map(([name, value]) => [name, masked(value, secrets)]),
-  ...(detail.body === undefined ? {} : { body: masked(detail.body, secrets) }),
+  statusText: referenced(detail.statusText, references),
+  headers: detail.headers.map(([name, value]) => [
+    name,
+    secretHeaders.has(name.toLowerCase()) ? HIDDEN_VALUE : referenced(value, references),
+  ]),
+  ...(detail.body === undefined ? {} : { body: referenced(detail.body, references) }),
 });
 
 // A read that fails or times out rejects: the check then reports that, not a missing text.
@@ -157,7 +166,7 @@ async function searchBody(
 async function request(
   name: string,
   service: Service,
-  { timeoutMs, signal, detail, variables }: CheckContext,
+  { timeoutMs, signal, detail, bodyBytes, variables }: CheckContext,
 ): Promise<{ result: CheckResult; unknownIssuer: boolean }> {
   const target = targetUrl(service);
   const written = Object.entries(service.headers ?? {});
@@ -173,7 +182,8 @@ async function request(
     unknownIssuer: false,
   });
   let headers: Headers | undefined;
-  let secrets: string[] = [];
+  let references: [string, string][] = [];
+  const secretHeaders = new Set<string>();
   if (service.headers) {
     const resolved = resolveHeaders(service.headers, variables?.lookup ?? (() => undefined));
     // Nothing is sent: a request without its credentials would only say 401.
@@ -188,7 +198,9 @@ async function request(
       // The message of `fetch` would repeat the value it refuses.
       return failed(HEADERS_REFUSED);
     }
-    secrets = resolved.secrets;
+    references = resolved.references;
+    for (const [header, value] of written)
+      if (value.includes("${")) secretHeaders.add(header.toLowerCase());
   }
   const started = performance.now();
   const elapsed = () => Math.round(performance.now() - started);
@@ -217,9 +229,13 @@ async function request(
     const searched = contains !== undefined && expected && leftFor === undefined;
     // The latency is taken before the body is read: `contains` does not change it.
     // A body is read once: the detail gets its own copy when the text is searched too.
-    const shown = detail ? describeResponse(searched ? response.clone() : response) : undefined;
+    const shown = detail
+      ? describeResponse(searched ? response.clone() : response, bodyBytes)
+      : undefined;
     const body = searched ? await searchBody(response.body, contains) : "found";
-    const described = shown ? { response: maskedDetail(await shown, secrets) } : {};
+    const described = shown
+      ? { response: maskedDetail(await shown, references, secretHeaders) }
+      : {};
     if (!detail && !searched) await response.body?.cancel();
     let diagnosis: Diagnosis | undefined;
     if (leftFor !== undefined) diagnosis = diagnoseForeignRedirect(service, leftFor);

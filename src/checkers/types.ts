@@ -7,6 +7,8 @@ export interface CheckContext {
   timeoutMs: number;
   signal?: AbortSignal;
   detail?: boolean;
+  /** How much of a body the detail keeps: the short default when absent. */
+  bodyBytes?: number;
   variables?: Variables;
 }
 

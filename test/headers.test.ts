@@ -10,6 +10,7 @@ import {
   MASK,
   masked,
   parseHeaderLine,
+  reference,
   resolveHeaders,
   serviceVariables,
   splitSecret,
@@ -87,6 +88,10 @@ describe("resolveHeaders", () => {
         ["X-Tenant", "acme-acme"],
       ],
       secrets: [SECRET, "acme"],
+      references: [
+        [SECRET, "API_TOKEN"],
+        ["acme", "TENANT"],
+      ],
     });
   });
 
@@ -318,6 +323,18 @@ describe("http checker with headers", () => {
         case "/echo":
           response.writeHead(200, "OK", { "x-seen": `key ${key}` }).end(`you sent ${key}`);
           break;
+        case "/full":
+          response
+            .writeHead(200, "OK", {
+              "set-cookie": "id=abc123",
+              authorization: "Bearer other",
+              "proxy-authorization": "Basic other",
+              "x-trace": "trace-4242",
+              "x-seen": `key ${key}`,
+              "content-type": "text/plain",
+            })
+            .end(`${"line\n".repeat(1_000)}you sent ${key}`);
+          break;
         default:
           response.writeHead(key === SECRET ? 200 : 401).end();
       }
@@ -422,8 +439,56 @@ describe("http checker with headers", () => {
     const { response } = await check("/echo", { variables, detail: true });
 
     expect(JSON.stringify(response)).not.toContain(SECRET);
-    expect(response?.body).toBe(`you sent ${MASK}`);
-    expect(response?.headers).toContainEqual(["x-seen", `key ${MASK}`]);
+    expect(response?.body).toBe(`you sent ${reference("API_KEY")}`);
+    expect(response?.headers).toContainEqual(["x-seen", `key ${reference("API_KEY")}`]);
+  });
+
+  describe("the whole response", () => {
+    const full = (context: object = {}, more: Partial<Service> = {}) =>
+      check(
+        "/full",
+        {
+          variables: { lookup: lookup({ API_KEY: SECRET, TRACE: "trace-4242" }) },
+          detail: true,
+          ...context,
+        },
+        { headers: { "X-Api-Key": "${API_KEY}", "X-Trace": "${TRACE}" }, ...more },
+      );
+
+    it("keeps a body longer than the short default when asked for more", async () => {
+      const { response } = await full({ bodyBytes: 1_048_576 });
+
+      expect(response?.bodyCut).toBeUndefined();
+      expect(response?.body?.split("\n")).toHaveLength(1_001);
+      expect((await full()).response?.bodyCut).toBe(true);
+    });
+
+    it("marks the body cut at the cap", async () => {
+      const { response } = await full({ bodyBytes: 100 });
+
+      expect(response?.bodyCut).toBe(true);
+      expect(response?.body?.length).toBeLessThanOrEqual(100);
+    });
+
+    it.each(["set-cookie", "authorization", "proxy-authorization"])("hides %s", async (name) => {
+      const { response } = await full({ bodyBytes: 1_048_576 });
+
+      expect(response?.headers).toContainEqual([name, "(hidden)"]);
+    });
+
+    it("hides a header the service sends a variable in, whatever its name", async () => {
+      const { response } = await full();
+
+      expect(response?.headers).toContainEqual(["x-trace", "(hidden)"]);
+    });
+
+    it("puts the reference where a secret is echoed", async () => {
+      const { response } = await full({ bodyBytes: 1_048_576 });
+
+      expect(response?.body?.endsWith(`you sent ${reference("API_KEY")}`)).toBe(true);
+      expect(response?.headers).toContainEqual(["x-seen", `key ${reference("API_KEY")}`]);
+      expect(JSON.stringify(response)).not.toContain(SECRET);
+    });
   });
 
   it("should give the detail the headers as written, a secret typed in clear starred", async () => {
