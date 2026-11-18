@@ -169,8 +169,20 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     if (!asked) return false;
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
   }
-  const { openDashboard, environmentSource } = await import("./dashboard/open");
   let settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
+  if (process.env.PROBE_TUI === "native") {
+    const { environmentSource: source } = await import("./dashboard/sources");
+    const { openNativeDashboard } = await import("./dashboard/native/open");
+    await openNativeDashboard({
+      config,
+      environments: environments.map((name) => source(paths, name)),
+      settings,
+      selection: await readDashboardSelection(paths),
+      variables: () => loadVariables(paths),
+    });
+    return true;
+  }
+  const { openDashboard, environmentSource } = await import("./dashboard/open");
   const saves = createSaveQueue();
   const local = `${PROBE_DIR}/${LOCAL_FILE}`;
   const saveLocal = (write: () => Promise<boolean>) =>

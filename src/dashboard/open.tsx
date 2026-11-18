@@ -4,20 +4,20 @@ import { runChecks } from "../checkers/run";
 import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import type { ProbePaths } from "../config/discovery";
-import { environmentPaths } from "../config/environments";
 import { serviceVariables } from "../config/headers";
-import { loadConfig } from "../config/loader";
-import { loadVariables, readSkippedServices, type Variables } from "../config/local";
+import type { Variables } from "../config/local";
 import { applySelection, parameterChoices, type Selection } from "../config/parameters";
 import { type Config, declaresAddress, type Service } from "../config/schema";
-import { ENVIRONMENTS_DIR, PROBE_DIR } from "../constants";
 import type { Terminal } from "../ui/terminal";
 import { type ActionDeps, serviceActions } from "./actions";
 import { Dashboard, type DashboardProps, type EnvironmentColumn, type Secrets } from "./Dashboard";
 import { watchFocus } from "./focus";
 import type { Saved } from "./saves";
 import type { DashboardSettings } from "./settings";
+import { type EnvironmentSource, environmentSource } from "./sources";
 import { type VariableSources, variableTools } from "./variables";
+
+export { type EnvironmentSource, environmentSource };
 
 export interface DashboardState {
   settings: DashboardSettings;
@@ -43,34 +43,6 @@ export interface DashboardState {
   variableSources?: VariableSources;
   onVariableWrite?: (name: string, value: string) => Saved;
   environments?: readonly EnvironmentSource[];
-}
-
-export interface EnvironmentSource {
-  name: string;
-  file: string;
-  /** Read before each pass: the file is edited by hand while the dashboard runs. */
-  load: () => Promise<{ config: Config; variables: Variables; skipped: ReadonlySet<string> }>;
-}
-
-export function environmentSource(
-  paths: ProbePaths,
-  name: string,
-  env: NodeJS.ProcessEnv = process.env,
-): EnvironmentSource {
-  return {
-    name,
-    file: `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${name}.yml`,
-    async load() {
-      const found = await environmentPaths(paths, name);
-      // Not on stderr: a line printed there would land in the middle of the screen.
-      const loaded = await loadConfig(found, { log: () => {} });
-      return {
-        config: loaded.config,
-        variables: await loadVariables(found, env),
-        skipped: await readSkippedServices(found),
-      };
-    },
-  };
 }
 
 export function environmentColumn(
