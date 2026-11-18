@@ -270,20 +270,33 @@ describe("the cost of a JSON body", () => {
     expect(responseRows(one, 80)).toBe(responseRows(one, 80));
   });
 
-  it("should redraw the response tab cheaply once the rows are kept", () => {
-    const { press, draw } = setup(
-      response(bigJson(JSON_FORMAT_MAX_BYTES - 100), "application/json"),
-    );
-    press("2");
-    draw();
-    const start = performance.now();
+  it("should redraw the response tab at a cost that does not depend on the body size", () => {
+    const warm = (bytes: number) => {
+      const { press, draw } = setup(response(bigJson(bytes), "application/json"));
+      press("2");
+      draw();
+      return () => {
+        const start = performance.now();
+        for (let i = 0; i < 100; i++) draw();
+        return performance.now() - start;
+      };
+    };
+    const small = warm(2 * 1024);
+    const big = warm(JSON_FORMAT_MAX_BYTES - 100);
 
-    for (let i = 0; i < 100; i++) draw();
-    const ms = performance.now() - start;
+    // The fastest of a few rounds, interleaved: a load spike hits both sizes, not one of them.
+    let smallMs = Number.POSITIVE_INFINITY;
+    let bigMs = Number.POSITIVE_INFINITY;
+    for (let round = 0; round < 5; round++) {
+      smallMs = Math.min(smallMs, small());
+      bigMs = Math.min(bigMs, big());
+    }
 
-    expect(ms).toBeLessThan(1500);
+    expect(bigMs / smallMs).toBeLessThan(3);
+    // A very loose safety net, far above any machine's load.
+    expect(bigMs).toBeLessThan(10_000);
     console.info(
-      `100 warm redraws of a ${JSON_FORMAT_MAX_BYTES / 1024} KiB body: ${ms.toFixed(1)} ms`,
+      `100 warm redraws: ${smallMs.toFixed(1)} ms for 2 KiB, ${bigMs.toFixed(1)} ms for ${JSON_FORMAT_MAX_BYTES / 1024} KiB`,
     );
   });
 });
