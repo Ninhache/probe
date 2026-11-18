@@ -53,8 +53,9 @@ export const EXIT_ERROR = 2;
 // Not 5000 nor 7000: on macOS, AirPlay Receiver answers there.
 export const DETECT_PORTS = [3000, 3001, 4200, 4321, 5173, 8000, 8080];
 export const DETECT_PORTS_ENV = "PROBE_DETECT_PORTS";
-// A local server answers in a few ms: a short limit keeps `init` and `add` instant.
-export const DETECT_TIMEOUT_MS = 300;
+// A closed port refuses at once: the limit only costs on a port that accepts and stays silent.
+// Not shorter: it also covers Node loading its HTTP client on the first request of a busy machine.
+export const DETECT_TIMEOUT_MS = 1_000;
 
 export const NOTIFY_WAIT_MS = 5_000;
 // Longer than a restart: a service that comes back by itself is not worth a notification.

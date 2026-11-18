@@ -53,8 +53,8 @@ const checkUnlessSkipped: DashboardProps["check"] = async (_signal, _timeoutMs, 
   );
 const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// A long value is some fifty keys, one per render: over a second on a slow CI runner.
-const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 10_000 });
+// A long value is some fifty keys, one per render: over ten seconds on a loaded machine.
+const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 30_000 });
 const shows = (lastFrame: () => string | undefined, text: string) =>
   waitFor(() => expect(lastFrame()).toContain(text));
 const hides = (lastFrame: () => string | undefined, text: string) =>

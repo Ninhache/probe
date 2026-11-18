@@ -5,6 +5,7 @@ export default defineConfig({
     include: ["test/**/*.test.{ts,tsx}"],
     globalSetup: ["test/global-setup.ts"],
     // The CLI tests spawn several node processes each: 5 s is too short on a busy machine.
-    testTimeout: 20_000,
+    // Room for a loaded machine: a test that passes is no slower, one that hangs fails later.
+    testTimeout: 60_000,
   },
 });

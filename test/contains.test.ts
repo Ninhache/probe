@@ -80,8 +80,10 @@ describe("a check with contains", () => {
     schemaVersion: 1,
     services: { api: { host: "127.0.0.1", port, path, contains: HEALTHY, ...more } },
   });
-  const check = async (path: string, more: object = {}, detail = false) => {
-    const [result] = await runChecks(config(path, more), [], { timeoutMs: 300, detail });
+  // Long by default, so a loaded machine still answers in time; short where the timeout is the subject.
+  const SHORT_MS = 300;
+  const check = async (path: string, more: object = {}, detail = false, timeoutMs = 10_000) => {
+    const [result] = await runChecks(config(path, more), [], { timeoutMs, detail });
     return result;
   };
 
@@ -110,7 +112,7 @@ describe("a check with contains", () => {
   });
 
   it("does not wait for the end of a body that already holds the text", async () => {
-    expect(await check("/early")).toMatchObject({ ok: true });
+    expect(await check("/early", {}, false, SHORT_MS)).toMatchObject({ ok: true });
   });
 
   it("says so when the body is empty", async () => {
@@ -121,11 +123,14 @@ describe("a check with contains", () => {
   });
 
   it("reports a timeout when the body never ends", async () => {
-    expect(await check("/stalled")).toMatchObject({ ok: false, error: "timeout after 0.3s" });
+    expect(await check("/stalled", {}, false, SHORT_MS)).toMatchObject({
+      ok: false,
+      error: "timeout after 0.3s",
+    });
   });
 
   it("reports the same timeout when the detail is asked", async () => {
-    const result = await check("/stalled", {}, true);
+    const result = await check("/stalled", {}, true, SHORT_MS);
 
     expect(result).toMatchObject({ ok: false, error: "timeout after 0.3s" });
   });

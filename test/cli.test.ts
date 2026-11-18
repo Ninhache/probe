@@ -320,7 +320,8 @@ describe("probe check", () => {
   it("accepts a fractional --timeout", async () => {
     const root = await project();
     await addApi(root);
-    expect((await probe(root, "check", "--timeout", "0.1234")).code).toBe(0);
+    // Wide enough that a loaded machine still answers in time: the exact milliseconds are unit-tested.
+    expect((await probe(root, "check", "--timeout", "2.5")).code).toBe(0);
   });
 
   it("works from a sub-directory", async () => {
@@ -372,7 +373,10 @@ describe("a service with its own timeout", () => {
     const result = await probe(root, "wait", "--timeout", "1.5", "--interval", "0.2");
 
     expect(result.code).toBe(1);
-    expect(result.stdout).toContain("timeout after 0.1s");
+    // The last check gets what is left of the wait when that is less: never more than its own 0.1 s.
+    const seconds = Number(/timeout after ([\d.]+)s/.exec(result.stdout)?.[1]);
+    expect(seconds).toBeGreaterThan(0);
+    expect(seconds).toBeLessThanOrEqual(0.1);
   });
 
   it.each(["0", "-2", "soon"])("exits 2 with a readable message on timeout: %s", async (value) => {
@@ -601,7 +605,9 @@ describe("probe open / curl", () => {
     const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: bin });
 
     expect(run).toEqual({ code: 0, stdout: `Opened ${url}\n`, stderr: "" });
-    await vi.waitFor(async () => expect(await readFile(opened, "utf8")).toBe(url));
+    await vi.waitFor(async () => expect(await readFile(opened, "utf8")).toBe(url), {
+      timeout: 10_000,
+    });
   });
 
   it("prints the URL and exits 1 when the opener is not installed", async () => {

@@ -253,8 +253,11 @@ describe("detectServices on local ports", () => {
 
   afterAll(() => new Promise((done) => server.close(done)));
 
+  // The 1 s of `init` is too short for a loaded machine: these tests are about what answers, not how fast.
+  const patient = (port: number) => answersHttp(port, 10_000);
+
   it("should propose a port where an HTTP server answers, whatever the status", async () => {
-    const found = await detectIn({}, {}, { answers: answersHttp, ports: [port, closedPort] });
+    const found = await detectIn({}, {}, { answers: patient, ports: [port, closedPort] });
 
     expect(found).toEqual([
       { name: `port-${port}`, service: { port }, source: `answers on localhost:${port}` },
@@ -275,7 +278,7 @@ describe("detectServices on local ports", () => {
     await new Promise<void>((done) => redirecting.listen(0, "localhost", done));
     const redirectingPort = (redirecting.address() as AddressInfo).port;
 
-    const found = await detectIn({}, {}, { answers: answersHttp, ports: [redirectingPort] });
+    const found = await detectIn({}, {}, { answers: patient, ports: [redirectingPort] });
     await new Promise((done) => redirecting.close(done));
     await new Promise((done) => target.close(done));
 
