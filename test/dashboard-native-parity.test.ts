@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
+import type { Config } from "../src/config/schema";
 import { helpBarItems, helpColumns } from "../src/dashboard/keymap";
 import { Tracker } from "../src/dashboard/native/history";
 import { environmentChecks } from "../src/dashboard/native/open";
@@ -261,5 +262,46 @@ describe("checks follow the screen", () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe("environment parameters", () => {
+  it("reports what each environment's file declares on every pass", async () => {
+    let declared: Config = {
+      schemaVersion: 1,
+      services: {},
+      parameters: { zone: { values: ["eu"], strategy: { kind: "path" } } },
+    };
+    const source = {
+      name: "staging",
+      file: "staging.yml",
+      load: async () => ({ config: declared, variables: {}, skipped: new Set<string>() }),
+    };
+    const seen: string[] = [];
+    const live = {
+      settings: { intervalMs: 1000, timeoutMs: 3000 },
+      selection: {},
+      skipped: new Set<string>(),
+      timeouts: {},
+    };
+    const [check] = environmentChecks(
+      {
+        config: { schemaVersion: 1, services: {} },
+        environments: [source],
+        settings: live.settings,
+      } as never,
+      () => live,
+      (env, config) => seen.push(`${env}:${Object.keys(config.parameters ?? {})}`),
+    );
+    await (check as NonNullable<typeof check>).run(new AbortController().signal);
+    declared = {
+      ...declared,
+      parameters: {
+        zone: { values: ["eu"], strategy: { kind: "path" } },
+        size: { values: ["s"], strategy: { kind: "path" } },
+      },
+    };
+    await (check as NonNullable<typeof check>).run(new AbortController().signal);
+    expect(seen).toEqual(["staging:zone", "staging:zone,size"]);
   });
 });

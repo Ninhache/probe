@@ -1,6 +1,11 @@
 import { runChecks } from "../../checkers/run";
 import type { Variables } from "../../config/local";
-import { applySelection, parameterChoices, type Selection } from "../../config/parameters";
+import {
+  applySelection,
+  mergedChoices,
+  parameterChoices,
+  type Selection,
+} from "../../config/parameters";
 import type { Config } from "../../config/schema";
 import { NOTIFY_GRACE_SECONDS } from "../../constants";
 import { App } from "../../tui/app";
@@ -46,6 +51,7 @@ export function environmentChecks(
     skipped: skipped ?? new Set(),
     timeouts: {},
   }),
+  onLoaded: (env: string, declared: Config) => void = () => {},
 ): EnvironmentCheck[] {
   const local: EnvironmentCheck[] =
     Object.keys(config.services).length === 0
@@ -83,6 +89,7 @@ export function environmentChecks(
         name: source.name,
         run: async (signal) => {
           const { config: declared, variables: loaded, skipped } = await source.load();
+          onLoaded(source.name, declared);
           const now = live();
           return runChecks(
             declared,
@@ -114,7 +121,21 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       Object.entries(options.config.services).map(([name, { timeout }]) => [name, timeout]),
     ),
   });
-  const checks = environmentChecks(options, () => view);
+  const loaded = new Map<string, Config>();
+  // Parameters an environment's file declares join the local ones, as on the ink screen.
+  const merge = () =>
+    mergedChoices([
+      parameterChoices(options.config),
+      ...[...loaded.values()].map((declared) => parameterChoices(declared)),
+    ]);
+  const checks = environmentChecks(
+    options,
+    () => view,
+    (env, declared) => {
+      loaded.set(env, declared);
+      view.choices = merge();
+    },
+  );
   const tracker = new Tracker(checks.map((check) => check.name));
   const sources = new Map(options.environments.map((source) => [source.name, source]));
   const known = new Map<string, KnownStates>();
