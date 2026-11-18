@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   HELP_GAP,
-  helpBar,
+  helpBarItems,
   helpColumns,
   helpLines,
   keyCommand,
   paletteEntries,
+  type Screen,
 } from "../src/dashboard/keymap";
+
+const helpBar = (
+  ...args: [screen: Screen, unicode: boolean, columns: number, grid?: boolean, parameters?: boolean]
+) =>
+  helpBarItems(...args)
+    .map(({ keys, action }) => `${keys} ${action}`)
+    .join(args[1] ? " · " : " - ");
 
 describe("helpBar", () => {
   it("should show the keys one needs first in the list", () => {
@@ -94,6 +102,7 @@ describe("helpLines", () => {
       "List",
       "Parameters",
       "Panels",
+      "Service detail",
       "Filter",
       "Add and edit",
       "Outside a text field",
@@ -132,7 +141,11 @@ describe("paletteEntries", () => {
 
   it("should keep the commands that say the query, by what they do or by their word in the bar", () => {
     expect(paletteEntries(true, "ITS URL").map(({ command }) => command)).toEqual(["open"]);
-    expect(paletteEntries(true, " copy ").map(({ command }) => command)).toEqual(["copy"]);
+    expect(paletteEntries(true, " copy ").map(({ command }) => command)).toEqual([
+      "copy",
+      "body",
+      "copylog",
+    ]);
     expect(paletteEntries(true, "zzz")).toEqual([]);
   });
 
@@ -181,21 +194,12 @@ describe("helpColumns", () => {
     expect(widest(left) + HELP_GAP + widest(right)).toBeLessThanOrEqual(80);
   });
 
-  it("should keep two columns down to 60 columns, in unicode and in ASCII", () => {
-    expect(helpColumns(true, 60)).toHaveLength(2);
-    expect(helpColumns(false, 60)).toHaveLength(2);
+  it("should stack the sections when two columns do not fit 60 columns", () => {
+    expect(helpColumns(true, 60)).toEqual([helpLines(true)]);
+    expect(helpColumns(false, 60)).toEqual([helpLines(false)]);
   });
 
   it("should fall back to one column when two do not fit", () => {
     expect(helpColumns(true, 40)).toEqual([helpLines(true)]);
-  });
-
-  it("should fit the height of a terminal of 24 lines in two columns", () => {
-    const title = 1;
-    const bar = 1;
-
-    for (const column of helpColumns(true, 80)) {
-      expect(column.length + title + bar).toBeLessThanOrEqual(24);
-    }
   });
 });

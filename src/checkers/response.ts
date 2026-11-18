@@ -35,6 +35,7 @@ function printable(text: string, kept = ""): string {
 // Waits a short time only: a body that never ends, or comes drop by drop, must not hold the checks.
 async function readStart(
   body: ReadableStream<Uint8Array>,
+  limit: number,
 ): Promise<{ bytes: Uint8Array; cut: boolean }> {
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
@@ -45,7 +46,7 @@ async function readStart(
     timer = setTimeout(() => resolve("late"), RESPONSE_BODY_WAIT_MS);
   });
   try {
-    while (size < RESPONSE_BODY_BYTES) {
+    while (size < limit) {
       const read = reader.read();
       // Left pending when the wait ends first: its failure is nobody's to handle.
       read.catch(() => {});
@@ -65,12 +66,15 @@ async function readStart(
     void reader.cancel().catch(() => {});
   }
   return {
-    bytes: Buffer.concat(chunks).subarray(0, RESPONSE_BODY_BYTES),
-    cut: !ended || size > RESPONSE_BODY_BYTES,
+    bytes: Buffer.concat(chunks).subarray(0, limit),
+    cut: !ended || size > limit,
   };
 }
 
-export async function describeResponse(response: Response): Promise<ResponseDetail> {
+export async function describeResponse(
+  response: Response,
+  limit = RESPONSE_BODY_BYTES,
+): Promise<ResponseDetail> {
   const headers = [...response.headers].map(([name, value]): [string, string] => [
     printable(name),
     SENSITIVE_HEADER.test(name) ? HIDDEN_VALUE : printable(value),
@@ -83,7 +87,7 @@ export async function describeResponse(response: Response): Promise<ResponseDeta
     void response.body.cancel().catch(() => {});
     return { ...detail, bodyNote: `${type} body, not shown` };
   }
-  const { bytes, cut } = await readStart(response.body);
+  const { bytes, cut } = await readStart(response.body, limit);
   if (bytes.length === 0) return detail;
   if (bytes.includes(NUL)) return { ...detail, bodyNote: "binary body, not shown" };
   const decoded = new TextDecoder().decode(bytes).replaceAll("\t", "  ");

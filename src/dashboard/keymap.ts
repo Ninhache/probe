@@ -8,6 +8,10 @@ export type Screen =
   | "form"
   | "input"
   | "confirm"
+  | "detail"
+  | "response"
+  | "peek"
+  | "log"
   | "help";
 
 export type Command =
@@ -15,9 +19,15 @@ export type Command =
   | "detail"
   | "open"
   | "copy"
+  | "body"
+  | "response"
+  | "log"
+  | "changes"
+  | "copylog"
   | "edit"
   | "remove"
   | "add"
+  | "environment"
   | "filter"
   | "options"
   | "parameters"
@@ -29,6 +39,7 @@ export type Command =
 type Section =
   | "List"
   | "Panels"
+  | "Service detail"
   | "Parameters"
   | "Filter"
   | "Add and edit"
@@ -52,10 +63,111 @@ interface Binding {
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
-  screens: ["list"],
+  screens: ["list", "peek", "log"],
   section: "List",
   ...binding,
 });
+
+const detail = (binding: Omit<Binding, "screens" | "section">): Binding => ({
+  screens: ["detail"],
+  section: "Service detail",
+  ...binding,
+});
+
+const response = (binding: Omit<Binding, "screens" | "section">): Binding => ({
+  screens: ["response"],
+  section: "Service detail",
+  ...binding,
+});
+
+/** The bar of the list while its response tab is open: the keys that tab adds. */
+const peek = (binding: Omit<Binding, "screens" | "section">): Binding => ({
+  screens: ["peek"],
+  section: "List",
+  ...binding,
+});
+
+/** The bar of the list while its log tab is open: the keys that tab adds, given up first. */
+const logBar = (binding: Omit<Binding, "screens" | "section">): Binding => ({
+  screens: ["log"],
+  section: "List",
+  ...binding,
+});
+
+const NATIVE_LIST_BINDINGS: readonly Binding[] = [
+  list({
+    keys: "1",
+    action: "log",
+    help: "Log tab",
+    barless: true,
+    command: "log",
+  }),
+  list({
+    keys: "2",
+    action: "response",
+    help: "Response tab",
+    barless: true,
+    command: "response",
+  }),
+  list({
+    keys: "b",
+    action: "copy body",
+    help: "Copy the response body",
+    barless: true,
+    command: "body",
+  }),
+  list({
+    keys: "f",
+    action: "changes only",
+    help: "Log changes only",
+    barless: true,
+    command: "changes",
+  }),
+  list({
+    keys: "y",
+    action: "copy lines",
+    help: "Copy the log lines on screen",
+    barless: true,
+    command: "copylog",
+  }),
+  logBar({ keys: "PgUp PgDn", action: "scroll", drop: 0 }),
+  logBar({ keys: "End", action: "follow", drop: 0 }),
+  logBar({ keys: "f", action: "changes only", drop: 0 }),
+  logBar({ keys: "y", action: "copy lines", drop: 0 }),
+  logBar({ keys: "2", action: "response", drop: 0 }),
+  peek({ keys: "PgUp PgDn", action: "scroll", drop: 3 }),
+  peek({ keys: "u", action: "open", drop: 1 }),
+  peek({ keys: "b", action: "copy body", drop: 1 }),
+  peek({ keys: "1", action: "log", drop: 4 }),
+  list({
+    keys: "n",
+    action: "new environment",
+    help: "New environment",
+    barless: true,
+    command: "environment",
+  }),
+];
+
+const DETAIL_BINDINGS: readonly Binding[] = [
+  detail({ keys: "←→", ascii: "arrows", action: "timeout", help: "Service timeout", drop: 3 }),
+  detail({ keys: "s", action: "skip", help: "Skip the service", drop: 2 }),
+  detail({ keys: "u", action: "open", help: "Open its URL", drop: 1 }),
+  detail({ keys: "c", action: "copy", help: "Copy curl command", drop: 1 }),
+  {
+    screens: ["detail", "readonly"],
+    section: "Service detail",
+    keys: "r",
+    action: "response",
+    help: "Full response",
+    drop: 2,
+  },
+  detail({ keys: "esc", action: "close", help: "Close" }),
+  response({ keys: "↑↓", ascii: "arrows", action: "scroll", help: "Scroll", drop: 3 }),
+  response({ keys: "c", action: "copy response", help: "Copy the response", drop: 1 }),
+  response({ keys: "b", action: "copy body", help: "Copy the body", drop: 1 }),
+  response({ keys: "r", action: "details", help: "Back to the detail", drop: 2 }),
+  response({ keys: "esc", action: "close", help: "Close" }),
+];
 
 const BINDINGS: readonly Binding[] = [
   list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 2 }),
@@ -131,8 +243,8 @@ const BINDINGS: readonly Binding[] = [
   {
     screens: ["choose"],
     section: "Parameters",
-    keys: "←→ hl",
-    ascii: "hl",
+    keys: "↑↓ jk",
+    ascii: "jk",
     action: "parameter",
     help: "Change parameter",
     drop: 1,
@@ -141,8 +253,8 @@ const BINDINGS: readonly Binding[] = [
   {
     screens: ["choose"],
     section: "Parameters",
-    keys: "↑↓ jk",
-    ascii: "jk",
+    keys: "←→ hl",
+    ascii: "hl",
     action: "value",
     help: "Choose its value",
     parameters: true,
@@ -236,8 +348,10 @@ const BINDINGS: readonly Binding[] = [
   { screens: ["confirm"], keys: "y", action: "remove" },
   { screens: ["confirm"], keys: "n esc", action: "keep" },
   { screens: ["help"], keys: "? esc", action: "close" },
+  ...DETAIL_BINDINGS,
+  ...NATIVE_LIST_BINDINGS,
   {
-    screens: ["list", "panel", "readonly", "choose"],
+    screens: ["list", "peek", "log", "panel", "readonly", "choose"],
     section: "Outside a text field",
     keys: "?",
     action: "help",
@@ -245,7 +359,7 @@ const BINDINGS: readonly Binding[] = [
     command: "help",
   },
   {
-    screens: ["list", "panel", "readonly", "choose", "help"],
+    screens: ["list", "peek", "log", "panel", "readonly", "choose", "help"],
     section: "Outside a text field",
     keys: "q",
     action: "quit",
@@ -258,6 +372,7 @@ const SECTIONS: readonly Section[] = [
   "List",
   "Parameters",
   "Panels",
+  "Service detail",
   "Filter",
   "Add and edit",
   "Outside a text field",
@@ -268,33 +383,43 @@ const written = (binding: Binding, unicode: boolean) =>
 
 const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
 
-export function helpBar(
+export interface BarItem {
+  keys: string;
+  action: string;
+}
+
+/** The bindings the bar shows, dropping the lowest ranked ones until `columns` is enough. */
+export function helpBarItems(
   screen: Screen,
   unicode: boolean,
   columns: number,
   grid = false,
   parameters = false,
-): string {
+): BarItem[] {
   const shown = offered(grid).filter(
     (binding) =>
       binding.screens.includes(screen) && !binding.barless && (parameters || !binding.parameters),
   );
-  const line = () =>
-    shown
-      .map((binding) => `${written(binding, unicode)} ${binding.action}`)
-      .join(unicode ? " · " : " - ");
-  while (line().length > columns) {
+  const separator = unicode ? " · " : " - ";
+  const width = () =>
+    shown.reduce(
+      (sum, binding, i) =>
+        sum + (i ? separator.length : 0) + `${written(binding, unicode)} ${binding.action}`.length,
+      0,
+    );
+  while (width() > columns) {
     const droppable = shown.filter(({ drop }) => drop !== undefined);
     if (droppable.length === 0) break;
     const first = droppable.reduce((a, b) => ((a.drop as number) <= (b.drop as number) ? a : b));
     shown.splice(shown.indexOf(first), 1);
   }
-  return line();
+  return shown.map((binding) => ({ keys: written(binding, unicode), action: binding.action }));
 }
 
 export function keyCommand(input: string, enter: boolean): Command | undefined {
-  return BINDINGS.find(({ keys, command }) => command && (enter ? keys === "↵" : keys === input))
-    ?.command;
+  return offered(true).find(
+    ({ keys, command }) => command && (enter ? keys === "↵" : keys === input),
+  )?.command;
 }
 
 export interface PaletteEntry {
@@ -305,7 +430,7 @@ export interface PaletteEntry {
 
 export function paletteEntries(unicode: boolean, query = ""): PaletteEntry[] {
   const wanted = query.trim().toLowerCase();
-  return BINDINGS.flatMap((binding) => {
+  return offered(true).flatMap((binding) => {
     const { command, help, action } = binding;
     if (!command || !help || !`${help} ${action}`.toLowerCase().includes(wanted)) return [];
     return [{ command, label: help, keys: written(binding, unicode) }];
@@ -313,7 +438,7 @@ export function paletteEntries(unicode: boolean, query = ""): PaletteEntry[] {
 }
 
 export interface HelpLine {
-  /** Unique among the lines: the same key can be in two sections. */
+  /** Unique among the lines: the same key can be in two sections, or on two screens of one. */
   id: string;
   text: string;
   heading: boolean;
@@ -325,12 +450,13 @@ const LEFT_SECTIONS = 2;
 function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
   const described = offered(grid).filter(({ help }) => help !== undefined);
   const width = Math.max(...described.map((binding) => written(binding, unicode).length));
-  return sections.flatMap((title) => [
+  const present = sections.filter((title) => described.some(({ section }) => section === title));
+  return present.flatMap((title) => [
     { id: title, text: title, heading: true },
     ...described
       .filter(({ section }) => section === title)
       .map((binding) => ({
-        id: `${title} ${binding.keys}`,
+        id: `${title} ${binding.screens.join("+")} ${binding.keys}`,
         text: `  ${written(binding, unicode).padEnd(width)}  ${binding.help}`,
         heading: false,
       })),

@@ -1,19 +1,11 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { defineCommand } from "citty";
 import { requireProbeDir } from "../config/discovery";
 import { environmentPaths, listEnvironments } from "../config/environments";
-import { SERVICE_NAME_PATTERN } from "../config/schema";
-import { CONFIG_FILE, ENVIRONMENTS_DIR, LOCAL_ENVIRONMENT, PROBE_DIR } from "../constants";
+import { LOCAL_ENVIRONMENT } from "../constants";
 import { ProbeError } from "../errors";
 import { linkFile } from "../ui/links";
-import { openProject, stdoutTerminal } from "./shared";
-import { usedVariables } from "./var";
-
-const fileOf = (name: string) =>
-  name === LOCAL_ENVIRONMENT
-    ? `${PROBE_DIR}/${CONFIG_FILE}`
-    : `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${name}.yml`;
+import { createEnvironment, environmentFile } from "./env-create";
+import { stdoutTerminal } from "./shared";
 
 export default defineCommand({
   meta: {
@@ -44,37 +36,18 @@ export default defineCommand({
       const { hyperlinks } = stdoutTerminal();
       for (const known of names) {
         const file = (await environmentPaths(paths, known)).config;
-        console.log(`${known.padEnd(width)}  ${linkFile(fileOf(known), file, hyperlinks)}`);
+        console.log(
+          `${known.padEnd(width)}  ${linkFile(environmentFile(known), file, hyperlinks)}`,
+        );
       }
       return;
     }
-    if (!SERVICE_NAME_PATTERN.test(name)) {
-      throw new ProbeError(
-        "USAGE",
-        "an environment name is made of letters, digits, _ and -, e.g. prod.",
-      );
-    }
-    if (name === LOCAL_ENVIRONMENT) {
-      throw new ProbeError("USAGE", `${LOCAL_ENVIRONMENT} is ${fileOf(name)}: pick another name.`);
-    }
     const from = args.from ?? LOCAL_ENVIRONMENT;
-    const { config, paths } = await openProject(from);
-    const target = join(paths.dir, ENVIRONMENTS_DIR, `${name}.yml`);
-    await mkdir(dirname(target), { recursive: true });
-    // Only the file that declares the services: what local.yml keeps for the source stays there.
-    const text = await readFile(paths.config, "utf8");
-    try {
-      await writeFile(target, text, { flag: "wx" });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      throw new ProbeError(
-        "USAGE",
-        `${fileOf(name)} is already there: edit it, or pick another name.`,
-      );
-    }
-    console.log(`Created ${fileOf(name)} from ${fileOf(from)}.`);
+    const paths = requireProbeDir(process.cwd());
+    const { variables } = await createEnvironment(paths, name, from);
+    console.log(`Created ${environmentFile(name)} from ${environmentFile(from)}.`);
     console.log(`Change the addresses there, then: probe check --env ${name}`);
-    for (const variable of usedVariables(config).keys()) {
+    for (const variable of variables) {
       console.log(`It sends ${variable}: probe var ${variable} --env ${name} (or export it).`);
     }
   },

@@ -13,14 +13,19 @@ import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
 import doctor from "./commands/doctor";
 import environment from "./commands/env";
+import { createEnvironment, environmentFile } from "./commands/env-create";
 import init, { ignoreLocalFiles, initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import open from "./commands/open";
-import { type ParameterWritten, writeParameter } from "./commands/parameter-writes";
+import {
+  type ParameterWrite,
+  type ParameterWritten,
+  writeParameter,
+} from "./commands/parameter-writes";
 import rm from "./commands/rm";
-import { type ServiceWritten, writeService } from "./commands/service-writes";
-import { secondsToMs, stdoutTerminal } from "./commands/shared";
+import { type ServiceWrite, type ServiceWritten, writeService } from "./commands/service-writes";
+import { noServices, secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
 import variable from "./commands/var";
@@ -31,7 +36,7 @@ import {
   completableTags,
 } from "./completion/services";
 import { COMPLETION_COMMAND } from "./completion/spec";
-import { findProbeDir, requireProbeDir } from "./config/discovery";
+import { findProbeDir, type ProbePaths, requireProbeDir } from "./config/discovery";
 import { listEnvironments } from "./config/environments";
 import { loadConfig, writeServiceTimeout } from "./config/loader";
 import {
@@ -52,12 +57,15 @@ import {
   COMPLETE_COMMAND,
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
+  EXIT_DOWN,
   EXIT_ERROR,
   LOCAL_FILE,
   PROBE_DIR,
   REFRESH_COMMAND,
 } from "./constants";
+import type { Secrets } from "./dashboard/editing";
 import { createSaveQueue } from "./dashboard/saves";
+import type { DashboardSettings } from "./dashboard/settings";
 import { createUndoJournal, journalFiles, type UndoOutcome } from "./dashboard/undo";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
@@ -104,6 +112,10 @@ const main = defineCommand({
       description: "Seconds between two refreshes of the dashboard (probe alone, on a terminal)",
       default: String(DASHBOARD_INTERVAL_SECONDS),
     },
+    once: {
+      type: "boolean",
+      description: "Check once, print the table and exit with 1 if a service is down (probe alone)",
+    },
   },
   subCommands: { ...commands, completion: completionCommand(commands) },
 });
@@ -138,6 +150,7 @@ function notifyUpdate(rawArgs: string[]): void {
 }
 
 const INTERVAL_OPTION = "--interval";
+const ONCE_OPTION = "--once";
 
 function dashboardInterval(rawArgs: string[]): string | undefined | null {
   const [first, second, ...rest] = rawArgs;
@@ -149,28 +162,76 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
 }
 
 // The interactive libraries are imported here only: every other path starts without them.
-async function openedDashboard(rawArgs: string[]): Promise<boolean> {
+async function openedDashboard(allArgs: string[]): Promise<boolean> {
+  const once = allArgs.includes(ONCE_OPTION);
+  const rawArgs = once ? allArgs.filter((arg) => arg !== ONCE_OPTION) : allArgs;
   const interval = dashboardInterval(rawArgs);
   if (interval === null) return false;
   const asked = interval !== undefined;
   const askedMs = asked ? secondsToMs(INTERVAL_OPTION, interval) : undefined;
-  if (!isInteractive(process.stdin, process.stdout, process.env)) {
-    if (!asked) return false;
+  const interactive = isInteractive(process.stdin, process.stdout, process.env);
+  // Nobody to draw for, or one pass asked for: a table, then the exit code.
+  if (!interactive && asked)
     throw new ProbeError(
       "USAGE",
       `${INTERVAL_OPTION} sets the refresh of the dashboard, which needs an interactive terminal.`,
     );
-  }
-  const paths = asked ? requireProbeDir(process.cwd()) : findProbeDir(process.cwd());
+  const plain = once || !interactive;
+  const paths = asked || once ? requireProbeDir(process.cwd()) : findProbeDir(process.cwd());
   if (!paths) return false;
   const { config } = await loadConfig(paths);
   const environments = await listEnvironments(paths);
+  if (plain) {
+    const { oncePass } = await import("./dashboard/native/once");
+    const { environmentSource: source } = await import("./dashboard/sources");
+    const settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
+    const { text, down } = await oncePass({
+      config,
+      variables: await loadVariables(paths),
+      skipped: await readSkippedServices(paths),
+      selection: await readDashboardSelection(paths),
+      timeoutMs: settings.timeoutMs,
+      environments: environments.map((name) => source(paths, name)),
+      terminal: stdoutTerminal(),
+      empty: noServices(paths),
+    });
+    console.log(text);
+    if (down) process.exitCode = EXIT_DOWN;
+    return true;
+  }
   if (Object.keys(config.services).length === 0 && environments.length === 0) {
     if (!asked) return false;
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
   }
-  const { openDashboard, environmentSource } = await import("./dashboard/open");
-  let settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
+  const settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
+  const { saves, writes } = dashboardWrites(paths, settings);
+  const { environmentSource: source } = await import("./dashboard/sources");
+  const { openNativeDashboard } = await import("./dashboard/native/open");
+  await openNativeDashboard({
+    config,
+    environments: environments.map((name) => source(paths, name)),
+    settings,
+    selection: await readDashboardSelection(paths),
+    skipped: await readSkippedServices(paths),
+    onEnvironmentCreate: async (name, from) => {
+      const { variables } = await createEnvironment(paths, name, from);
+      const sends = variables.map(
+        (variable) => `It sends ${variable}: probe var ${variable} --env ${name} (or export it).`,
+      );
+      const told = `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
+      return { source: source(paths, name), message: [told, ...sends].join("\n") };
+    },
+    ...writes,
+  });
+  await saves.idle();
+  // The dashboard said so too, but its screen is gone once it closes.
+  for (const failure of saves.failures()) console.error(`probe: not saved: ${failure}`);
+  return true;
+}
+
+/** What the dashboard writes: every save goes through one queue and one undo journal. */
+function dashboardWrites(paths: ProbePaths, initial: DashboardSettings) {
+  let settings = initial;
   const saves = createSaveQueue();
   const local = `${PROBE_DIR}/${LOCAL_FILE}`;
   const saveLocal = (write: () => Promise<boolean>) =>
@@ -201,73 +262,70 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
     await ignoreLocalFiles(paths.root);
     return writeVariable(paths, name, value);
   };
-  await openDashboard(config, stdoutTerminal(), {
-    environments: environments.map((name) => environmentSource(paths, name)),
-    settings,
-    skipped: await readSkippedServices(paths),
-    selection: await readDashboardSelection(paths),
-    onParameterChange: (name, value) =>
-      saveLocal(() => writeDashboardSelection(paths, name, value)),
-    variables: () => loadVariables(paths),
-    variableSources: async (names) => {
-      const { values } = await readLocalVariables(paths);
-      return Object.fromEntries(
-        names.map((name) => [name, variableSource(name, values, process.env)]),
-      );
+  return {
+    saves,
+    writes: {
+      onParameterChange: (name: string, value: string) =>
+        saveLocal(() => writeDashboardSelection(paths, name, value)),
+      variables: () => loadVariables(paths),
+      variableSources: async (names: readonly string[]) => {
+        const { values } = await readLocalVariables(paths);
+        return Object.fromEntries(
+          names.map((name) => [name, variableSource(name, values, process.env)]),
+        );
+      },
+      onVariableWrite: (name: string, value: string) => saveLocal(() => keepVariable(name, value)),
+      onSettingsChange: (next: DashboardSettings) => {
+        const changed = changedPreferences(settings, next);
+        settings = next;
+        return saveLocal(() => writeDashboardPreferences(paths, changed));
+      },
+      onSkipChange: (name: string, skip: boolean) =>
+        saveLocal(() => writeServiceSkip(paths, name, skip)),
+      onTimeoutChange: (name: string, seconds: number | undefined) =>
+        saves.save(
+          `${PROBE_DIR}/${CONFIG_FILE}`,
+          () =>
+            journal.record(`timeout of ${name}`, () => writeServiceTimeout(paths, name, seconds)),
+          `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+        ),
+      onServiceWrite: async (write: ServiceWrite, secrets: Secrets = {}) => {
+        let written: ServiceWritten | null = null;
+        let failure = await saves.save(
+          `${PROBE_DIR}/${CONFIG_FILE}`,
+          () =>
+            journal.record(`${write.kind} ${write.name}`, async () => {
+              written = await writeService(paths, write);
+              return written !== null;
+            }),
+          write.kind === "add"
+            ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
+            : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+        );
+        // After the config: a service that was not written leaves no secret behind.
+        for (const [name, value] of written ? Object.entries(secrets) : [])
+          failure = (await saveLocal(() => keepVariable(name, value))) ?? failure;
+        return { failure, ...(written as ServiceWritten | null) };
+      },
+      onParameterWrite: async (write: ParameterWrite) => {
+        let written: ParameterWritten | null = null;
+        const failure = await saves.save(
+          `${PROBE_DIR}/${CONFIG_FILE}`,
+          () =>
+            journal.record(`${write.kind} parameter ${write.name}`, async () => {
+              written = await writeParameter(paths, write);
+              return written !== null;
+            }),
+          write.kind === "add"
+            ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
+            : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+        );
+        return { failure, ...(written as ParameterWritten | null) };
+      },
+      onUndo: () => revert("undo"),
+      onRedo: () => revert("redo"),
     },
-    onVariableWrite: (name, value) => saveLocal(() => keepVariable(name, value)),
-    onSettingsChange: (next) => {
-      const changed = changedPreferences(settings, next);
-      settings = next;
-      return saveLocal(() => writeDashboardPreferences(paths, changed));
-    },
-    onSkipChange: (name, skip) => saveLocal(() => writeServiceSkip(paths, name, skip)),
-    onTimeoutChange: (name, seconds) =>
-      saves.save(
-        `${PROBE_DIR}/${CONFIG_FILE}`,
-        () => journal.record(`timeout of ${name}`, () => writeServiceTimeout(paths, name, seconds)),
-        `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
-      ),
-    onServiceWrite: async (write, secrets = {}) => {
-      let written: ServiceWritten | null = null;
-      let failure = await saves.save(
-        `${PROBE_DIR}/${CONFIG_FILE}`,
-        () =>
-          journal.record(`${write.kind} ${write.name}`, async () => {
-            written = await writeService(paths, write);
-            return written !== null;
-          }),
-        write.kind === "add"
-          ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
-          : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
-      );
-      // After the config: a service that was not written leaves no secret behind.
-      for (const [name, value] of written ? Object.entries(secrets) : [])
-        failure = (await saveLocal(() => keepVariable(name, value))) ?? failure;
-      return { failure, ...(written as ServiceWritten | null) };
-    },
-    onParameterWrite: async (write) => {
-      let written: ParameterWritten | null = null;
-      const failure = await saves.save(
-        `${PROBE_DIR}/${CONFIG_FILE}`,
-        () =>
-          journal.record(`${write.kind} parameter ${write.name}`, async () => {
-            written = await writeParameter(paths, write);
-            return written !== null;
-          }),
-        write.kind === "add"
-          ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
-          : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
-      );
-      return { failure, ...(written as ParameterWritten | null) };
-    },
-    onUndo: () => revert("undo"),
-    onRedo: () => revert("redo"),
-  });
-  await saves.idle();
-  // The dashboard said so too, but its screen is gone once it closes.
-  for (const failure of saves.failures()) console.error(`probe: not saved: ${failure}`);
-  return true;
+  };
 }
 
 async function offeredInit(error: unknown, rawArgs: string[]): Promise<boolean> {

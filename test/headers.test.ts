@@ -10,6 +10,8 @@ import {
   MASK,
   masked,
   parseHeaderLine,
+  reference,
+  referencedInJson,
   resolveHeaders,
   serviceVariables,
   splitSecret,
@@ -17,6 +19,7 @@ import {
 import { loadVariables, readLocalVariables, writeVariable } from "../src/config/local";
 import { formatIssues } from "../src/config/migrations";
 import { type Service, serviceSchemaV1 } from "../src/config/schema";
+import { Tracker } from "../src/dashboard/native/history";
 import { tempProject } from "./helpers";
 
 const SECRET = "s3cret-value";
@@ -87,6 +90,10 @@ describe("resolveHeaders", () => {
         ["X-Tenant", "acme-acme"],
       ],
       secrets: [SECRET, "acme"],
+      references: [
+        [SECRET, "API_TOKEN"],
+        ["acme", "TENANT"],
+      ],
     });
   });
 
@@ -318,6 +325,25 @@ describe("http checker with headers", () => {
         case "/echo":
           response.writeHead(200, "OK", { "x-seen": `key ${key}` }).end(`you sent ${key}`);
           break;
+        case "/echo-json":
+          response
+            .writeHead(200, "OK", { "content-type": "application/json" })
+            .end(
+              `{"plain":"${key}","escaped":"${[...String(key)].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`).join("")}","note":"a\\/b","n":1}`,
+            );
+          break;
+        case "/full":
+          response
+            .writeHead(200, "OK", {
+              "set-cookie": "id=abc123",
+              authorization: "Bearer other",
+              "proxy-authorization": "Basic other",
+              "x-trace": "trace-4242",
+              "x-seen": `key ${key}`,
+              "content-type": "text/plain",
+            })
+            .end(`${"line\n".repeat(1_000)}you sent ${key}`);
+          break;
         default:
           response.writeHead(key === SECRET ? 200 : 401).end();
       }
@@ -422,8 +448,75 @@ describe("http checker with headers", () => {
     const { response } = await check("/echo", { variables, detail: true });
 
     expect(JSON.stringify(response)).not.toContain(SECRET);
-    expect(response?.body).toBe(`you sent ${MASK}`);
-    expect(response?.headers).toContainEqual(["x-seen", `key ${MASK}`]);
+    expect(response?.body).toBe(`you sent ${reference("API_KEY")}`);
+    expect(response?.headers).toContainEqual(["x-seen", `key ${reference("API_KEY")}`]);
+  });
+
+  it("keeps an echoed secret out of the log preview", async () => {
+    const result = await check("/echo", { variables, detail: true });
+    const tracker = new Tracker(["local"]);
+    tracker.record("local", [result], 1);
+
+    const [entry] = tracker.log.toArray();
+    expect(entry?.preview).toBe(`you sent ${reference("API_KEY")}`);
+    expect(JSON.stringify(tracker.log.toArray())).not.toContain(SECRET);
+  });
+
+  it("hides a secret a JSON body repeats with escapes", async () => {
+    const { response } = await check("/echo-json", { variables, detail: true });
+
+    expect(JSON.stringify(response)).not.toContain(SECRET);
+    expect(response?.body).toContain(`"plain":"${reference("API_KEY")}"`);
+    expect(response?.body).toContain(`"escaped":"${reference("API_KEY")}"`);
+    expect(response?.body).toContain('"note":"a\\/b"');
+  });
+
+  describe("the whole response", () => {
+    const full = (context: object = {}, more: Partial<Service> = {}) =>
+      check(
+        "/full",
+        {
+          variables: { lookup: lookup({ API_KEY: SECRET, TRACE: "trace-4242" }) },
+          detail: true,
+          ...context,
+        },
+        { headers: { "X-Api-Key": "${API_KEY}", "X-Trace": "${TRACE}" }, ...more },
+      );
+
+    it("keeps a body longer than the short default when asked for more", async () => {
+      const { response } = await full({ bodyBytes: 1_048_576 });
+
+      expect(response?.bodyCut).toBeUndefined();
+      expect(response?.body?.split("\n")).toHaveLength(1_001);
+      expect((await full()).response?.bodyCut).toBe(true);
+    });
+
+    it("marks the body cut at the cap", async () => {
+      const { response } = await full({ bodyBytes: 100 });
+
+      expect(response?.bodyCut).toBe(true);
+      expect(response?.body?.length).toBeLessThanOrEqual(100);
+    });
+
+    it.each(["set-cookie", "authorization", "proxy-authorization"])("hides %s", async (name) => {
+      const { response } = await full({ bodyBytes: 1_048_576 });
+
+      expect(response?.headers).toContainEqual([name, "(hidden)"]);
+    });
+
+    it("hides a header the service sends a variable in, whatever its name", async () => {
+      const { response } = await full();
+
+      expect(response?.headers).toContainEqual(["x-trace", "(hidden)"]);
+    });
+
+    it("puts the reference where a secret is echoed", async () => {
+      const { response } = await full({ bodyBytes: 1_048_576 });
+
+      expect(response?.body?.endsWith(`you sent ${reference("API_KEY")}`)).toBe(true);
+      expect(response?.headers).toContainEqual(["x-seen", `key ${reference("API_KEY")}`]);
+      expect(JSON.stringify(response)).not.toContain(SECRET);
+    });
   });
 
   it("should give the detail the headers as written, a secret typed in clear starred", async () => {
@@ -451,5 +544,45 @@ describe("http checker with headers", () => {
 
     expect(result).toMatchObject({ ok: true, status: 200 });
     expect(seenElsewhere).toHaveLength(1);
+  });
+});
+
+describe("referencedInJson", () => {
+  const refs: [string, string][] = [["hunter2-key", "API_KEY"]];
+  const escaped = "\\u0068unter2\\u002dkey";
+
+  it("should put the reference where an escaped secret is echoed", () => {
+    expect(referencedInJson(`{"k":"${escaped}","n":1}`, refs)).toBe(
+      `{"k":"${reference("API_KEY")}","n":1}`,
+    );
+  });
+
+  it("should keep what surrounds the secret in the same string, re-encoded", () => {
+    expect(referencedInJson(`{"k":"key \\n ${escaped}"}`, refs)).toBe(
+      `{"k":"key \\n ${reference("API_KEY")}"}`,
+    );
+  });
+
+  it("should mask a key, and a secret written with a escaped slash or quote", () => {
+    const quoted: [string, string][] = [['a"/b', "Q"]];
+
+    expect(referencedInJson('{"a\\"\\/b":"x"}', quoted)).toBe(`{"${reference("Q")}":"x"}`);
+  });
+
+  it("should leave a body with no secret as it is, escapes included", () => {
+    const body = '{"k":"\\u0073ecret"}';
+
+    expect(referencedInJson(body, refs)).toBe(body);
+  });
+
+  it("should mask a string cut in the middle of its escapes", () => {
+    expect(referencedInJson(`{"k":"${escaped}`, refs)).toBe(
+      `{"k":"${reference("API_KEY")}`.concat('"'),
+    );
+    expect(referencedInJson(`{"k":"x ${escaped.slice(0, -2)}`, refs)).not.toContain("hunter2");
+  });
+
+  it("should do nothing without a reference", () => {
+    expect(referencedInJson(`{"k":"${escaped}"}`, [])).toBe(`{"k":"${escaped}"}`);
   });
 });

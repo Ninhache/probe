@@ -3,7 +3,6 @@ import {
   addressChanges,
   addressRows,
   EMPTY_PARAMETER_FORM,
-  nextKind,
   parameterExample,
   withScheme,
 } from "../src/dashboard/parameter-form";
@@ -43,18 +42,6 @@ describe("parameterExample", () => {
     expect(parameterExample({ ...form, strategy: "url" }, "env")[1]).toBe(
       "e.g. urls: { globex: https://globex.example.com }",
     );
-  });
-});
-
-describe("nextKind", () => {
-  it("should go round the ways of sending", () => {
-    expect(nextKind("url", 1)).toBe("query");
-    expect(nextKind("query", -1)).toBe("url");
-  });
-
-  it("should take the way a letter starts, and keep the current one for another letter", () => {
-    expect(nextKind("query", "h")).toBe("header");
-    expect(nextKind("query", "z")).toBe("query");
   });
 });
 

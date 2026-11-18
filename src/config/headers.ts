@@ -91,7 +91,12 @@ export function parseHeaderLine(line: string): [name: string, value: string] | u
 }
 
 export type ResolvedHeaders =
-  | { headers: [name: string, value: string][]; secrets: string[] }
+  | {
+      headers: [name: string, value: string][];
+      secrets: string[];
+      /** Each secret value with the variable it came from. */
+      references: [secret: string, variable: string][];
+    }
   | { unset: string[] }
   | { unsendable: string[] };
 
@@ -113,6 +118,9 @@ export function resolveHeaders(
     secrets: [...values.values()].filter(
       (value): value is string => value !== undefined && value.length >= MASKED_MIN_LENGTH,
     ),
+    references: [...values]
+      .filter((pair): pair is [string, string] => (pair[1]?.length ?? 0) >= MASKED_MIN_LENGTH)
+      .map(([variable, value]) => [value, variable]),
   };
 }
 
@@ -121,6 +129,66 @@ export function masked(text: string, secrets: readonly string[]): string {
   return [...secrets]
     .sort((a, b) => b.length - a.length)
     .reduce((hidden, secret) => hidden.replaceAll(secret, MASK), text);
+}
+
+/** Puts the `${NAME}` it came from where a secret is echoed, longest secret first. */
+export function referenced(text: string, references: readonly [string, string][]): string {
+  const known = new Map(references);
+  const found = [...known.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (found.length === 0) return text;
+  return text.replace(new RegExp(found.join("|"), "g"), (secret) =>
+    reference(known.get(secret) as string),
+  );
+}
+
+const QUOTE = 34;
+const BACKSLASH = 92;
+
+// A string cut in the middle (a body kept up to its cap) is closed first, without a dangling escape.
+function decoded(token: string, closed: boolean): string | undefined {
+  const text = closed ? token : `${token.replace(/\\(?:u[0-9a-fA-F]{0,3})?$/, "")}"`;
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Puts the `${NAME}` it came from where a JSON body echoes a secret written with escapes
+ * (`\u0068unter2`, `\/`), which `referenced` cannot see. Each string token is decoded only to be
+ * compared: a token that holds a secret is written again with the reference, and no other token
+ * is touched, so what is decoded never reaches the screen or a copy.
+ */
+export function referencedInJson(body: string, references: readonly [string, string][]): string {
+  if (!body.includes("\\") || references.length === 0) return body;
+  const n = body.length;
+  let out = "";
+  let from = 0;
+  let i = 0;
+  while (i < n) {
+    if (body.charCodeAt(i) !== QUOTE) {
+      i++;
+      continue;
+    }
+    const start = i++;
+    while (i < n && body.charCodeAt(i) !== QUOTE) i += body.charCodeAt(i) === BACKSLASH ? 2 : 1;
+    const closed = i < n;
+    const end = Math.min(i + 1, n);
+    i = end;
+    const token = body.slice(start, end);
+    if (!token.includes("\\")) continue;
+    const text = decoded(token, closed);
+    if (text === undefined) continue;
+    const masked = referenced(text, references);
+    if (masked === text) continue;
+    out += body.slice(from, start) + JSON.stringify(masked);
+    from = end;
+  }
+  return from === 0 ? body : out + body.slice(from);
 }
 
 export function templateParts(value: string): { text?: string; variable?: string }[] {

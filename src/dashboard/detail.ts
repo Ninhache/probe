@@ -1,8 +1,5 @@
 import type { CheckResult } from "../checkers/types";
-import { DASHBOARD_HISTORY_LENGTH } from "../constants";
 import { truncate } from "../ui/terminal";
-
-export type LatencyHistory = Readonly<Record<string, readonly number[]>>;
 
 export interface DetailLine {
   id: string;
@@ -24,17 +21,6 @@ const TRANSPORT_HEADERS = new Set([
   "keep-alive",
   "transfer-encoding",
 ]);
-
-export function recordLatencies(history: LatencyHistory, results: CheckResult[]): LatencyHistory {
-  return Object.fromEntries(
-    results.map(({ name, status, ok, skipped, latencyMs }) => {
-      const before = history[name] ?? [];
-      // A type without a status answers by being up.
-      const answered = (status !== undefined || ok) && !skipped;
-      return [name, answered ? [...before, latencyMs].slice(-DASHBOARD_HISTORY_LENGTH) : before];
-    }),
-  );
-}
 
 export function sparkline(values: readonly number[], unicode: boolean, width: number): string {
   if (values.length === 0) return "";

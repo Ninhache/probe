@@ -37,7 +37,7 @@ function supportsHyperlinks(env: NodeJS.ProcessEnv): boolean {
   return env.TERM === "alacritty" || env.TERM === "xterm-kitty";
 }
 
-function supportsUnicode(env: NodeJS.ProcessEnv): boolean {
+export function supportsUnicode(env: NodeJS.ProcessEnv): boolean {
   if (env.TERM === "linux") return false;
   return /UTF-?8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || "");
 }

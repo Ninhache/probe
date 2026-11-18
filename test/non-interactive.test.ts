@@ -15,14 +15,7 @@ const FIXTURES = resolve(import.meta.dirname, "fixtures");
 const DIST_URL = pathToFileURL(resolve(CLI, "..")).href;
 const RECORDER = pathToFileURL(join(FIXTURES, "record-modules.mjs")).href;
 
-const INTERACTIVE_PACKAGES = [
-  "ink",
-  "react",
-  "react-reconciler",
-  "yoga-layout",
-  "@clack",
-  "@inquirer",
-];
+const INTERACTIVE_PACKAGES = ["@clack", "@inquirer"];
 
 /**
  * Alert threshold: bytes of JavaScript `probe --version` may load. Counted, not timed, so a loaded

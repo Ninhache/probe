@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { reference } from "../src/config/headers";
-import { DASHBOARD_HISTORY_LENGTH } from "../src/constants";
-import { detailLines, recordLatencies, sparkline } from "../src/dashboard/detail";
+import { detailLines, sparkline } from "../src/dashboard/detail";
 
 const base = { name: "api", type: "http", target: "http://localhost:3000/" };
 const up: CheckResult = {
@@ -22,31 +21,6 @@ const up: CheckResult = {
 const options = { unicode: true, width: 40, room: 20 };
 const texts = (result: CheckResult, history: number[] = [], overrides = {}) =>
   detailLines(result, history, { ...options, ...overrides }).map(({ text }) => text);
-
-describe("recordLatencies", () => {
-  it("adds the latency of each answer and keeps the last ones", () => {
-    const first = recordLatencies({}, [up]);
-    expect(first).toEqual({ api: [4] });
-
-    let history = first;
-    for (let pass = 0; pass < DASHBOARD_HISTORY_LENGTH + 5; pass += 1)
-      history = recordLatencies(history, [{ ...up, latencyMs: pass }]);
-    expect(history.api).toHaveLength(DASHBOARD_HISTORY_LENGTH);
-    expect(history.api?.at(-1)).toBe(DASHBOARD_HISTORY_LENGTH + 4);
-  });
-
-  it("counts neither a skipped service nor one that did not answer", () => {
-    const skipped: CheckResult = { ...base, ok: true, skipped: true, latencyMs: 0 };
-    const refused: CheckResult = { ...base, ok: false, latencyMs: 1, error: "connection refused" };
-
-    expect(recordLatencies({ api: [4] }, [skipped])).toEqual({ api: [4] });
-    expect(recordLatencies({ api: [4] }, [refused])).toEqual({ api: [4] });
-  });
-
-  it("forgets a service that is no longer checked", () => {
-    expect(recordLatencies({ api: [4], gone: [9] }, [up])).toEqual({ api: [4, 4] });
-  });
-});
 
 describe("sparkline", () => {
   it("draws one bar per check, the lowest and the highest at both ends of the scale", () => {

@@ -3,7 +3,6 @@ import type { ParameterKind } from "../checkers/types";
 import type { AddressChanges, ParameterField } from "../commands/parameter-writes";
 import { PARAMETER_VALUE_PATTERN, type Parameter, VALUE_EXPECTED } from "../config/schema";
 import { nameProblem, withScheme } from "../config/service-input";
-import { choiceHint, nextChoice } from "./choice";
 
 // An address has its own lines, under the fields.
 type FormField = Exclude<ParameterField, "address">;
@@ -37,12 +36,6 @@ export const EMPTY_PARAMETER_FORM: ParameterFormValues = {
   strategy: "query",
   strategyName: "",
 };
-
-/** The way of sending next to `current`, or the one a typed letter starts. */
-export const nextKind = (current: string, step: 1 | -1 | string) =>
-  nextChoice(KINDS, current, step);
-
-export const KIND_HINT = choiceHint(KINDS);
 
 export function parameterFormRows(adding: boolean, strategy: string): readonly ParameterFormRow[] {
   const named = NAME_ROWS[kindOf(strategy) ?? "query"];
@@ -138,13 +131,6 @@ export function parameterExample(values: ParameterFormValues, parameter: string)
   return [SAYS[kind], `e.g. ${example}`];
 }
 
-export function parameterFormRow(rows: readonly ParameterFormRow[], field: FormField): number {
-  return Math.max(
-    0,
-    rows.findIndex(({ key }) => key === field),
-  );
-}
-
 /** Per service, its address for each value: `{ api: { dev: "https://dev.example.com" } }`. */
 export type Addresses = Readonly<Record<string, Readonly<Record<string, string>>>>;
 
@@ -183,12 +169,4 @@ export function addressChanges(
     changes[row.service] = { ...changes[row.service], [row.value]: address };
   }
   return changes;
-}
-
-export function withAddress(
-  addresses: Addresses,
-  { service, value }: AddressRow,
-  address: string,
-): Addresses {
-  return { ...addresses, [service]: { ...addresses[service], [value]: address } };
 }

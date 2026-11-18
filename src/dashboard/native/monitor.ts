@@ -1,0 +1,82 @@
+import type { CheckResult } from "../../checkers/types";
+
+export interface EnvironmentCheck {
+  name: string;
+  run(signal: AbortSignal): Promise<CheckResult[]>;
+}
+
+export interface MonitorOptions {
+  intervalMs: number;
+  onResults: (env: string, results: CheckResult[]) => void;
+  onFailure: (env: string, message: string) => void;
+}
+
+/** Runs every environment on its own timer. It updates state through the callbacks and never draws. */
+export class Monitor {
+  private readonly shutdown = new AbortController();
+  private readonly inflight = new Set<string>();
+  private timers: NodeJS.Timeout[] = [];
+  private generation = 0;
+
+  constructor(
+    private readonly checks: EnvironmentCheck[],
+    private readonly options: MonitorOptions,
+  ) {}
+
+  start(): void {
+    for (const check of this.checks) {
+      void this.run(check);
+      this.timers.push(setInterval(() => void this.run(check), this.options.intervalMs));
+    }
+  }
+
+  /** Starts checking one more environment now, at the pace of the others. */
+  add(check: EnvironmentCheck): void {
+    this.checks.push(check);
+    void this.run(check);
+    this.timers.push(setInterval(() => void this.run(check), this.options.intervalMs));
+  }
+
+  /** Same checks, another pace. */
+  setInterval(intervalMs: number): void {
+    this.options.intervalMs = intervalMs;
+    for (const timer of this.timers) clearInterval(timer);
+    this.timers = this.checks.map((check) => setInterval(() => void this.run(check), intervalMs));
+  }
+
+  stop(): void {
+    for (const timer of this.timers) clearInterval(timer);
+    this.timers = [];
+    this.shutdown.abort();
+  }
+
+  /**
+   * What a pass is run with changed (the selection, the config): the passes under way are
+   * dropped when they end, and run again at once.
+   */
+  invalidate(): void {
+    this.generation += 1;
+  }
+
+  /** Checks every environment now; one already running is not started twice. */
+  refresh(): void {
+    for (const check of this.checks) void this.run(check);
+  }
+
+  async run(check: EnvironmentCheck): Promise<void> {
+    if (this.inflight.has(check.name) || this.shutdown.signal.aborted) return;
+    this.inflight.add(check.name);
+    const started = this.generation;
+    const stale = () => started !== this.generation;
+    try {
+      const results = await check.run(this.shutdown.signal);
+      if (!this.shutdown.signal.aborted && !stale()) this.options.onResults(check.name, results);
+    } catch (error) {
+      if (!this.shutdown.signal.aborted && !stale())
+        this.options.onFailure(check.name, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.inflight.delete(check.name);
+      if (stale()) void this.run(check);
+    }
+  }
+}

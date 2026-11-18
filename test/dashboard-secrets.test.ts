@@ -8,26 +8,25 @@ const SECRET = "s3cr3t-token-0123456789";
 const DOWN = "\u001b[B";
 const CONFIG = "schemaVersion: 1\nservices:\n  api: { port: 1 }\n";
 const REFERENCE = "$" + "{API_TOKEN}";
-// ink draws nothing once CI is in the environment, even empty.
-const ON_SCREEN = { CI: undefined, CONTINUOUS_INTEGRATION: undefined };
+const TAB = "\t";
+const CTRL_U = "\u0015";
 const read = (file: string) => readFile(file, "utf8").catch(() => "");
 
 describe.skipIf(!hasPython())("a secret typed in the dashboard", () => {
   it("should go to local.yml, a reference to config.yml, and nowhere else", async () => {
     const paths = await tempProject(CONFIG);
 
+    // The form opens on the address: three tabs reach the header, whose current value is emptied.
     const { screen } = await onTerminal(
       paths.root,
       [],
       [
         ["api", "e"],
-        ["Edit api", `${DOWN.repeat(5)}Authorization: Bearer ${SECRET}${ENTER}`],
+        ["edit api", `${TAB.repeat(3)}${CTRL_U}Authorization: Bearer ${SECRET}${ENTER}`],
         ["holds a secret", ""],
         ["API_TOKEN", ENTER],
-        ["Saved api", ENTER],
-        ["set in local.yml", "q"],
+        ["Saved api", "q"],
       ],
-      ON_SCREEN,
     );
 
     expect(screen).toContain("Saved api, API_TOKEN kept in .probe/local.yml");
@@ -51,11 +50,10 @@ describe.skipIf(!hasPython())("a secret typed in the dashboard", () => {
       [],
       [
         ["api", ENTER],
-        ["API_TOKEN  not set", `${DOWN.repeat(2)}${ENTER}`],
-        ["Value of API_TOKEN", `${SECRET}${ENTER}`],
+        ["not set", `${DOWN}${ENTER}`],
+        ["Value of", `${SECRET}${ENTER}`],
         ["Kept API_TOKEN", "q"],
       ],
-      ON_SCREEN,
     );
 
     expect(screen).not.toContain(SECRET);

@@ -1,17 +1,23 @@
-import { render } from "ink-testing-library";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { serviceType } from "../src/checkers/registry";
 import { runChecks } from "../src/checkers/run";
 import type { ServiceType } from "../src/checkers/types";
 import { applySelection } from "../src/config/parameters";
 import { configSchemaV1, type Service } from "../src/config/schema";
 import { serviceActions } from "../src/dashboard/actions";
-import { Dashboard, type DashboardProps } from "../src/dashboard/Dashboard";
-import { detailLines, recordLatencies } from "../src/dashboard/detail";
+import { detailLines } from "../src/dashboard/detail";
+import { type EditCallbacks, liveEditing } from "../src/dashboard/editing";
+import { createEditor } from "../src/dashboard/native/editor";
+import { Tracker } from "../src/dashboard/native/history";
+import {
+  handleInput,
+  initialView,
+  renderDashboard,
+  type ViewActions,
+} from "../src/dashboard/native/view";
+import { parseInput } from "../src/tui/input";
+import { Screen } from "../src/tui/screen";
 import { formatCheckResults } from "../src/ui/report";
-
-// Not the 1 s default: on a loaded machine a render can take longer.
-const waitFor = <T,>(check: () => T) => vi.waitFor(check, { timeout: 30_000 });
 
 // A type with no URL, no headers and no command: what the dashboard and `check` know must come from it.
 const socket: ServiceType = {
@@ -72,7 +78,7 @@ describe("a service type", () => {
 
   it("should show an up service without a status by its latency", async () => {
     const results = await runChecks(config, [], { timeoutMs: 100, types });
-    const history = recordLatencies({}, results).db ?? [];
+    const history = [1];
 
     const lines = detailLines(results[0] as never, history, {
       unicode: false,
@@ -101,47 +107,55 @@ describe("a service type", () => {
   });
 
   describe("in the dashboard", () => {
-    let app: ReturnType<typeof render> | undefined;
-    afterEach(() => app?.unmount());
-
-    function open(onServiceWrite: NonNullable<DashboardProps["onServiceWrite"]>) {
-      app = render(
-        <Dashboard
-          terminal={{ isTTY: true, color: false, columns: 80, hyperlinks: false, unicode: true }}
-          settings={{ intervalMs: 60_000, timeoutMs: 3_000 }}
-          check={() => runChecks(config, [], { timeoutMs: 100, types })}
-          graceMs={0}
-          serviceForm={() => socket.form}
-          urlParameter={() => ({ name: "env", values: ["dev", "prod"] })}
-          onServiceWrite={onServiceWrite}
-        />,
-      );
-      return app;
+    function open(onServiceWrite: NonNullable<EditCallbacks["onServiceWrite"]>) {
+      const editing = {
+        ...liveEditing(config, { onServiceWrite }),
+        serviceForm: () => socket.form,
+      };
+      const view = initialView({ choices: {} });
+      const tracker = new Tracker(["local"]);
+      const edit = createEditor({
+        view,
+        tracker,
+        editing,
+        changed: () => {},
+        redraw: () => {},
+        fileOf: () => undefined,
+        declaredIn: () => [],
+      });
+      const actions: ViewActions = { quit() {}, refresh() {}, edit };
+      const draw = () => {
+        const screen = new Screen(110, 32, "truecolor");
+        renderDashboard(screen, { x: 0, y: 0, w: 110, h: 32 }, tracker, view, 0);
+        return screen.toPlainText();
+      };
+      const press = (text: string) => {
+        for (const event of parseInput(text)) handleInput(event, tracker, view, actions);
+      };
+      draw();
+      return { draw, press };
     }
 
-    it("should ask for the fields of the type only", async () => {
-      const { lastFrame, stdin } = open(vi.fn(async () => ({ saved: true })));
-      await waitFor(() => expect(lastFrame()).toContain("socket localhost:5432"));
+    it("should ask for the fields of the type only", () => {
+      const { draw, press } = open(vi.fn(async () => ({ config })));
 
-      stdin.write("a");
+      press("a");
 
-      await waitFor(() => expect(lastFrame()).toContain("Add a service"));
-      expect(lastFrame()).toContain("Port");
-      expect(lastFrame()).not.toMatch(/Header|Method|URL dev/);
+      expect(draw()).toContain("add a service");
+      expect(draw()).toContain("Port");
+      expect(draw()).not.toMatch(/Header|Method|URL dev/);
     });
 
     it("should add a service with the fields of the type", async () => {
-      const onServiceWrite = vi.fn<NonNullable<DashboardProps["onServiceWrite"]>>(async () => ({
-        saved: true,
+      const onServiceWrite = vi.fn<NonNullable<EditCallbacks["onServiceWrite"]>>(async () => ({
+        config,
       }));
-      const { lastFrame, stdin } = open(onServiceWrite);
-      await waitFor(() => expect(lastFrame()).toContain("socket localhost:5432"));
-      stdin.write("a");
-      await waitFor(() => expect(lastFrame()).toContain("Add a service"));
+      const { press } = open(onServiceWrite);
+      press("a");
 
-      stdin.write("cache\t6379\r");
+      press("cache\t6379\r");
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
-      await waitFor(() => expect(onServiceWrite).toHaveBeenCalled());
       expect(onServiceWrite.mock.lastCall?.[0]).toEqual({
         kind: "add",
         name: "cache",

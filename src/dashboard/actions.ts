@@ -5,7 +5,7 @@ import type { Selection } from "../config/parameters";
 import type { Config } from "../config/schema";
 import { notifierName, sendNotification } from "../notify";
 import { openerCommand, openUrl } from "../open-url";
-import type { DashboardProps } from "./Dashboard";
+import type { ResponsePart } from "./response";
 
 const NOTIFICATION_TITLE = "probe";
 
@@ -29,7 +29,19 @@ const system = (): ActionDeps => ({
 export function serviceActions(
   config: (selection?: Selection) => Config,
   deps: ActionDeps = system(),
-): Required<Pick<DashboardProps, "onOpen" | "onCopy" | "onNotify">> {
+): {
+  onOpen(name: string, selection?: Selection): Promise<string>;
+  onCopy(name: string, timeout: number | undefined, selection?: Selection): Promise<string>;
+  /** Resolves to a warning when no notification could be shown. */
+  onNotify(message: string): Promise<string | undefined>;
+  onCopyResponse(
+    text: string,
+    cut: boolean,
+    part?: ResponsePart,
+    formatted?: boolean,
+  ): Promise<string>;
+  onCopyLog(text: string): Promise<string>;
+} {
   const service = (name: string, selection?: Selection) => config(selection).services[name];
   const gone = (name: string) => `${name} is no longer in the config`;
   return {
@@ -53,6 +65,19 @@ export function serviceActions(
       }
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy with. The command:\n${command}`;
+    },
+    async onCopyResponse(text, cut, part = "response", formatted = false) {
+      if (await deps.copyText(text)) {
+        if (formatted) return `Copied the ${part} (formatted JSON)`;
+        return cut ? `Copied the ${part}, its body cut` : `Copied the ${part}`;
+      }
+      const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
+      return `No ${tools.join(" or ")} to copy the ${part} with`;
+    },
+    async onCopyLog(text) {
+      if (await deps.copyText(text)) return "Copied the log lines";
+      const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
+      return `No ${tools.join(" or ")} to copy the log with`;
     },
     async onNotify(message) {
       if (await deps.notify(NOTIFICATION_TITLE, message)) return undefined;

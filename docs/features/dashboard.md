@@ -1,39 +1,90 @@
 # Dashboard
 
-`probe` alone, on a terminal, opens a live list of your services and checks them every 2 s.
+`probe` alone, on a terminal, opens a live screen of your services and checks them every 2 s.
 
 ```sh
 probe                # every 2 s
 probe --interval 5   # every 5 s
+probe --once         # check once, print the table, exit
 ```
 
-Off a terminal, in CI or in a pipe, use `probe check`.
+Off a terminal, in CI or in a pipe, `probe` checks once, prints the table and exits with `1` if a service is
+down, as `probe --once` does anywhere. `--interval` needs a terminal.
+
+## The screen
+
+- The services table on the left: one line per service, with its status, last latency, uptime and a small trend.
+  With [several environments](#several-environments) there is one column per environment.
+- On the right, for the selected service: its latency, its uptime against a 99% objective, and a panel with two
+  tabs, `1` log and `2` response.
+- The log tab has one line per check, for every service of the selected environment: time, service, the
+  environment on the all tab, the status code or the error, and the start of the body on one line (256 characters
+  at most). A line where a service went up or down has a `▶` in front (`>` in ASCII) and is bold. `f` shows only
+  those lines; the box says `changes only`. The last 1,000 lines are kept. The log follows the newest line;
+  `PgUp` `PgDn` or the wheel scroll up, `End` follows again. The bodies were hidden of their secrets when they
+  were checked, so a preview never shows one.
+- The response tab shows the last answer of the selected service: status line, headers, then the body. `PgUp`
+  `PgDn` scroll it.
+- A JSON body (a `json` content type, or a body that parses as JSON) is shown indented and in colour, here and
+  in the full response view. A body cut at the size cap, or one that is not valid JSON, is shown as received.
+  Secrets are hidden before the body is laid out, and no string is decoded on the way. `c` copies the body as
+  received, `b` copies the indented JSON.
+- The mouse works. Every key hint on screen can be clicked, in the footer, in the border of a box and in a
+  panel (`p parameters`, `esc close`, `1 log`, `changes only`): a click does what pressing that key does, and
+  does nothing where the key would do nothing. A hint with several keys, like `PgUp PgDn`, has one target per
+  key. Also:
+  - click a service to select it, double-click it to open its detail;
+  - click an environment tab to switch to it;
+  - click a log line to select its service and show its response;
+  - click the request URL in the detail of a service to open it, like `u`;
+  - click `‹` or `›` next to a value in a form or a panel to step it, like the arrow keys;
+  - click a row of the command palette (`:`) to run it.
+
+  The wheel scrolls the lists, the log and the response. While a panel is open, it takes every click: a click
+  outside it does nothing. A drag, a right click or the wheel over a hint does nothing.
+
+  Hover: a hint or button under the pointer is shown in reverse video (with or without color). That needs a
+  terminal that reports mouse motion (any-event tracking, mode 1003); in tmux, set `set -g mouse on`. In a
+  terminal that never sends motion nothing lights up, and clicks still work. The highlight is dropped when the
+  pointer leaves the window (where the terminal reports the focus), when a key is pressed, when a panel opens
+  and on resize.
+
+  To select text with the mouse, hold `Shift` (`Option` on macOS in some terminals) while dragging: how the
+  terminal lets you bypass the mouse depends on the terminal.
 
 ## Keys
 
 | Key             | What it does                                   |
 | --------------- | ---------------------------------------------- |
 | `↑` `↓` `j` `k` | Move                                           |
+| `←` `→` `h` `l` | Change environment                             |
 | `r`             | Check now                                      |
 | `Enter`         | Open the detail of the selected service        |
+| `1` `2`         | Log tab, response tab                          |
+| `PgUp` `PgDn`   | Scroll the log or the response tab             |
+| `End`           | Follow the newest line of the log tab          |
+| `f`             | Log tab: only the changes of state, or all     |
+| `y`             | Copy the lines on screen of the log tab        |
 | `u`             | Open its URL in the browser                    |
 | `c`             | Copy its curl command                          |
+| `b`             | Copy the body of its last response             |
 | `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
 | `p`             | Choose, add or edit [parameters](#parameters)  |
 | `a`             | Add a service                                  |
 | `e`             | Edit the selected service                      |
 | `d`             | Remove the selected service, after a question  |
+| `n`             | Create an [environment](#several-environments) |
 | `z`             | Undo the last change to `config.yml`           |
 | `Z`             | Redo what `z` undid                            |
 | `:`             | Find a command by what it does; `Enter` runs   |
 | `o`             | Options: interval, timeout and notifications   |
-| `?`             | Every key; `?` or `Esc` closes                 |
+| `?`             | Every key, scrolling; `?` or `Esc` closes      |
 | `q`             | Quit                                           |
 
 The bar at the bottom shows the keys you need first. While you type (filter, form, command palette), `q` and
 `?` are letters.
 
-`c` uses `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the command is shown to copy by
+`c` and `b` use `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the text is shown to copy by
 hand.
 
 ## Add, edit, remove
@@ -82,8 +133,9 @@ On `Enter` the form asks under which variable to keep it and proposes a name (`A
 
 ## Detail of a service
 
-`Enter` shows the last answer of the selected service: status, latencies of this session, headers and the
-first lines of the body. For a service that is down: what failed and what to try.
+`Enter` shows the selected service: status, latencies of this session and, for a service that is down, what
+failed and what to try. `r` there opens the full response (status line, headers, body), scrollable with `↑` `↓`
+and `PgUp` `PgDn`. `c` copies the whole response, `b` its body, `r` goes back to the detail, `Esc` closes.
 
 `Request:` gives the method and the whole URL, parameters applied. `Headers sent:` lists the headers of the
 request, parameters included, as `config.yml` writes them. A variable stays `${NAME}`, never its value:
@@ -109,28 +161,17 @@ Under it, the panel has:
 
 ## Parameters
 
-With [parameters](parameters.md) in the config, a line under the summary shows one selector per parameter
-(since 0.21.0):
+With [parameters](parameters.md) in the config, `p` opens the parameters panel: one row per parameter, with
+its chosen value as `‹ value ›`. `↑` `↓` (`j` `k`) change parameter, `←` `→` (`h` `l`) choose its value. `p` or
+`Esc` closes it.
 
 ```
-probe · 2/2 up · every 2s
-tenant ‹ globex ›   version ‹ v1 ›
-› ✓ api  http://localhost:3000/globex/health  200  4ms
+┌─ parameters ───────────────┐
+│ › tenant    ‹ globex ›     │
+│   version   ‹ v1 ›         │
+└────────────────────────────┘
 ```
 
-- `p` opens the parameters panel: one tab per parameter, the values of the selected one below it.
-  `←` `→` (`h` `l`) change parameter, `↑` `↓` (`j` `k`) choose its value. `p` or `Esc` closes it.
-
-  ```
-  ┌────────────────────────────┐
-  │ Parameters                 │
-  │  tenant  [version]         │
-  │   v1                       │
-  │ › v2                       │
-  └────────────────────────────┘
-  ```
-
-  In color, the selected tab, the chosen value and its selector on the line are drawn in reverse video.
 - In the panel, `a` adds a parameter, `e` edits the selected one and `d` removes it, after a question. With no
   parameter yet, `p` opens the panel to add the first one. The form asks for:
   - the name;
@@ -168,9 +209,8 @@ tenant ‹ globex ›   version ‹ v1 ›
 - The parameters do not depend on each other: each one is chosen on its own, whatever its name.
 - The choice is saved in `.probe/local.yml` and comes back at the next start. A value the config no longer
   lists gives the first one again.
-- With [several environments](#several-environments), one choice applies to every column, and the selectors
-  list the parameters of every file. A file that does not list the chosen value keeps its first one, and the
-  line says it for the selected column: `prod uses tenant=acme`.
+- With [several environments](#several-environments), one choice applies to every column, and the panel
+  lists the parameters of every file. A file that does not list the chosen value keeps its first one.
 
 ## Options saved for your machine
 
@@ -196,22 +236,20 @@ The dashboard shows `not saved: …`, and says it again when it closes.
 
 ## Several environments
 
-With [environments](environments.md) in `.probe/envs/`, the list becomes a grid: one line per service name, one
-column per environment, `local` first.
+With [environments](environments.md) in `.probe/envs/`, the services table gets one column per environment,
+`local` first, and the header lists them as tabs next to `all`.
 
 ```
-probe · 4/6 up · every 2s
-        local 1/2                 dev 2/2                   prod 1/2
-api   › ✓ 200 4ms                 ✓ 200 120ms               ✗ expected 200, got 503
-db      ✗ connection refused      ✓ 200 80ms
-front                                                       ✓ 200 90ms
-local · http://localhost:3000/health
+ probe   all   local   prod
+│ service   local     prod         last  uptime trend │
+│ api       ● up      ● up         12ms  100.0%     ▁▁ │
+│ db        ● down    · -          12ms    0.0%      ▁ │
 ```
 
-- `←` `→` or `h` `l` change environment. `›` marks the selected cell, and the line under the grid says what it
-  is.
-- An empty cell is a service the environment does not have.
-- `Enter`, `u` and `c` work on the selected cell.
+- `←` `→` or `h` `l` change environment. The latency, uptime and response panels follow the selected one.
+- `·` is a service the environment does not have.
+- `Enter`, `u`, `c` and `b` work on the selected cell.
+- `n` creates an environment: it asks for a name and writes its file in `.probe/envs/`.
 - The other environments are read-only: `a`, `e` and `d` say which file to change.
 - A file that cannot be read shows `!` next to its name, with the reason when you select it.
 - A notification names the environment (`prod/api`).

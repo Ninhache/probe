@@ -13,7 +13,11 @@ import {
   writeServiceSkip,
   writeVariable,
 } from "../src/config/local";
-import { environmentColumn, environmentSource } from "../src/dashboard/open";
+import { applySelection } from "../src/config/parameters";
+import type { Config } from "../src/config/schema";
+import { type ActionDeps, serviceActions } from "../src/dashboard/actions";
+import { sourceCheck } from "../src/dashboard/native/open";
+import { environmentSource } from "../src/dashboard/sources";
 import { tempProject } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -455,10 +459,16 @@ describe("what local.yml keeps for an environment", () => {
     const local = await prodAndStaging();
     await writeFile(local.local, KEPT_FOR_PROD);
     const check = (name: string) =>
-      environmentColumn(environmentSource(local, name, {})).check(
-        new AbortController().signal,
-        2000,
-      );
+      sourceCheck(
+        environmentSource(local, name, {}),
+        () => ({
+          settings: { intervalMs: 60_000, timeoutMs: 2000 },
+          selection: {},
+          skipped: new Set<string>(),
+          timeouts: {},
+        }),
+        () => {},
+      ).run(new AbortController().signal);
 
     expect(await check("prod")).toMatchObject([{ name: "api", ok: true }]);
     expect(await check("staging")).toMatchObject([{ ok: false, error: "API_KEY is not set" }]);
@@ -566,9 +576,31 @@ describe("a value kept for an environment", () => {
     const local = await prodAndStaging();
     await writeFile(local.local, KEPT_FOR_PROD);
 
-    const column = environmentColumn(environmentSource(local, "prod", {}));
-    await column.check(new AbortController().signal, 2000);
-    const copied = await column.onCopy?.("api");
+    let declared: Config | undefined;
+    await sourceCheck(
+      environmentSource(local, "prod", {}),
+      () => ({
+        settings: { intervalMs: 60_000, timeoutMs: 2000 },
+        selection: {},
+        skipped: new Set<string>(),
+        timeouts: {},
+      }),
+      (_env, config) => {
+        declared = config;
+      },
+    ).run(new AbortController().signal);
+    const config = declared as Config;
+    const deps: ActionDeps = {
+      platform: "linux",
+      env: {},
+      openUrl: async () => true,
+      copyText: async () => true,
+      notify: async () => true,
+    };
+    const copied = await serviceActions(
+      (selection) => applySelection(config, selection),
+      deps,
+    ).onCopy("api", undefined, {});
 
     expect(copied).toContain("$API_KEY");
     expect(copied).not.toContain(SECRET);

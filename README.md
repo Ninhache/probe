@@ -62,7 +62,7 @@ Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 
 | Feature                                         | In one line                                                        |
 | ----------------------------------------------- | ------------------------------------------------------------------ |
-| [Dashboard](docs/features/dashboard.md)         | A live list of your services, with keys to add, edit and inspect   |
+| [Dashboard](docs/features/dashboard.md)         | A live screen of your services, with keys to add, edit and inspect |
 | [Discover](docs/features/discover.md)           | `probe init` proposes the services of your compose file, `.env`... |
 | [Wait](docs/features/wait.md)                   | `probe wait && pnpm test`: go on once everything is up             |
 | [Doctor](docs/features/doctor.md)               | Who holds the port, which container is stopped                     |

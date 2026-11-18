@@ -885,11 +885,17 @@ describe("probe (top level)", () => {
       const result = await exec(process.execPath, [CLI, ...args], cwd, env);
       expect(result.stdout + result.stderr, args.join(" ")).not.toContain("\u001b");
     }
-    const usage = await exec(process.execPath, [CLI], cwd, env);
+    const usage = await exec(process.execPath, [CLI], await tempDir(), env);
     expect(usage.code).toBe(2);
     expect(usage.stdout).toContain(
       "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|env|status|doctor|sync|migrate",
     );
+  });
+
+  it("declares --once in the usage of the dashboard", async () => {
+    const { stdout } = await probe(await tempDir(), "--help");
+
+    expect(stdout).toContain("--once");
   });
 
   it("refuses --interval off a terminal, where no dashboard opens", async () => {
