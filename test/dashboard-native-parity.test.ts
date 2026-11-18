@@ -4,7 +4,7 @@ import type { CheckResult } from "../src/checkers/types";
 import type { Config } from "../src/config/schema";
 import { helpBarItems, helpColumns } from "../src/dashboard/keymap";
 import { Tracker } from "../src/dashboard/native/history";
-import { environmentChecks, shouldNotify } from "../src/dashboard/native/open";
+import { environmentChecks, mergedParameters, shouldNotify } from "../src/dashboard/native/open";
 import {
   handleInput,
   initialView,
@@ -14,7 +14,9 @@ import {
   type ViewInit,
 } from "../src/dashboard/native/view";
 import type { InputEvent } from "../src/tui/input";
+import { parseInput } from "../src/tui/input";
 import { Screen } from "../src/tui/screen";
+import { fieldKey, fieldValue, textField } from "../src/tui/textfield";
 
 const key = (name: string, extra: Partial<InputEvent> = {}): InputEvent =>
   ({ kind: "key", name, ctrl: false, alt: false, shift: false, raw: name, ...extra }) as InputEvent;
@@ -313,5 +315,44 @@ describe("notifications", () => {
     expect(shouldNotify(true, 1, true)).toBe(false);
     expect(shouldNotify(false, 1, false)).toBe(false);
     expect(shouldNotify(true, 0, false)).toBe(false);
+  });
+});
+
+describe("merged parameters", () => {
+  it("joins the local values and those of the environments, without repeats", () => {
+    const declare = (parameters: Record<string, string[]>): Config => ({
+      schemaVersion: 1,
+      services: {},
+      parameters: Object.fromEntries(
+        Object.entries(parameters).map(([name, values]) => [
+          name,
+          { values, strategy: { kind: "path" as const } },
+        ]),
+      ),
+    });
+    expect(
+      mergedParameters(declare({ zone: ["eu"] }), [
+        declare({ zone: ["eu", "us"], size: ["s"] }),
+        declare({}),
+      ]),
+    ).toEqual({ zone: ["eu", "us"], size: ["s"] });
+  });
+});
+
+describe("terminal focus reports", () => {
+  it("are one key nobody acts on", () => {
+    for (const report of ["\x1b[I", "\x1b[O"]) {
+      const events = parseInput(report);
+      expect(events).toHaveLength(1);
+      const [event] = events as [InputEvent];
+      expect(event.kind === "key" && event.name).toBe("unknown");
+      const field = textField("abc");
+      expect(event.kind === "key" && fieldKey(field, event)).toBe(field);
+      expect(fieldValue(field)).toBe("abc");
+      const { view } = setup();
+      const before = { ...view, modals: undefined };
+      handleInput(event, new Tracker(["local"]), view, { quit() {}, refresh() {} });
+      expect({ ...view, modals: undefined }).toEqual(before);
+    }
   });
 });

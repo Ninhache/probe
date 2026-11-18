@@ -120,6 +120,11 @@ export const shouldNotify = (
   focused: boolean | undefined,
 ) => enabled && changes > 0 && focused !== true;
 
+/** The parameters of the local config, then those the environments' files declare as read last. */
+export function mergedParameters(local: Config, others: Iterable<Config>) {
+  return mergedChoices([parameterChoices(local), ...[...others].map(parameterChoices)]);
+}
+
 /** The btop-style dashboard drawn by the zero-dependency engine. Resolves once the terminal is restored. */
 export function openNativeDashboard(options: NativeDashboardOptions): Promise<void> {
   const view = initialView({
@@ -133,11 +138,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   });
   const loaded = new Map<string, Config>();
   // Parameters an environment's file declares join the local ones, as on the ink screen.
-  const merge = () =>
-    mergedChoices([
-      parameterChoices(options.config),
-      ...[...loaded.values()].map((declared) => parameterChoices(declared)),
-    ]);
+  const merge = () => mergedParameters(options.config, loaded.values());
   const checks = environmentChecks(
     options,
     () => view,
