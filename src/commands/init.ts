@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { defineCommand } from "citty";
 import { pathsFor } from "../config/discovery";
 import { CURRENT_SCHEMA_VERSION } from "../config/schema";
-import { BACKUP_GLOB, LOCAL_FILE, PROBE_DIR } from "../constants";
+import { BACKUP_GLOB, configJsonSchemaUrl, LOCAL_FILE, PROBE_DIR } from "../constants";
 import { ProbeError } from "../errors";
 import { isInteractive } from "../ui/terminal";
 import { offerDetected } from "./detected";
@@ -12,7 +12,9 @@ import { openProject } from "./shared";
 
 const IGNORED = [`${PROBE_DIR}/${LOCAL_FILE}`, `${PROBE_DIR}/${BACKUP_GLOB}`];
 
-const INITIAL_CONFIG = `# probe - local services to health-check. Edit by hand or with \`probe add\`.
+// The first line lets editors complete and check the file.
+const INITIAL_CONFIG = `# yaml-language-server: $schema=${configJsonSchemaUrl(CURRENT_SCHEMA_VERSION)}
+# probe - local services to health-check. Edit by hand or with \`probe add\`.
 schemaVersion: ${CURRENT_SCHEMA_VERSION}
 services: {}
 `;

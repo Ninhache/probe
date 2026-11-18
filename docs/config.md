@@ -11,6 +11,20 @@ Everything lives in `.probe/`, at the root of your project.
 
 Never put secrets in `config.yml`, `lock.yml` or `envs/`: use a [variable](features/headers.md).
 
+## Editor support
+
+`probe init` starts `config.yml` with a link to its JSON Schema. Since 0.24.0.
+
+```yaml
+# yaml-language-server: $schema=https://cdn.jsdelivr.net/npm/@ninhache/probe@latest/schema/config.v1.json
+schemaVersion: 1
+```
+
+- VS Code, with the YAML extension by Red Hat, and JetBrains IDEs complete the keys and underline a misspelled one.
+- A config made before 0.24.0 has no link: paste the first line above at the top of it.
+- The schema follows the latest release of probe, and some rules stay with probe: a value of `urls` that no
+  parameter declares, two parameters that set the same header. `probe check` still reports them.
+
 ## Services
 
 ```yaml

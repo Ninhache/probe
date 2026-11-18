@@ -39,6 +39,10 @@ export const WAIT_BACKOFF_FACTOR = 2;
 // Time kept before the deadline for one last check, so the final report is not a pause old.
 export const WAIT_LAST_PASS_MS = 1_000;
 
+// The published package serves it: editors see the keys of the latest release, not of `main`.
+export const configJsonSchemaUrl = (schemaVersion: number) =>
+  `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@latest/schema/config.v${schemaVersion}.json`;
+
 export const REGISTRY_LATEST_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
 export const REGISTRY_TIMEOUT_MS = 5_000;
 export const UPDATE_CHECK_TTL_MS = 24 * 60 * 60 * 1000;
