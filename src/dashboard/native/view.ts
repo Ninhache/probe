@@ -493,6 +493,18 @@ export function handleInput(
   view: ViewState,
   actions: ViewActions,
 ): void {
+  const said = view.status;
+  dispatch(event, tracker, view, actions);
+  // What an action said lasts until the next key, unless that key said something itself.
+  if (event.kind === "key" && view.status === said) view.status = undefined;
+}
+
+function dispatch(
+  event: InputEvent,
+  tracker: Tracker,
+  view: ViewState,
+  actions: ViewActions,
+): void {
   if (view.modals.depth > 0) {
     const typing = view.modals.top?.typing === true;
     if (event.kind === "key" && event.name === "q" && !event.ctrl && !event.alt && !typing)

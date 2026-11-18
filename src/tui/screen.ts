@@ -1,4 +1,5 @@
 import { ansi } from "./ansi";
+import { asciiGlyph } from "./ascii";
 import { type ColorMode, colorParams, type RGB } from "./color";
 import type { Rect } from "./layout";
 import { charWidth, graphemes } from "./width";
@@ -41,6 +42,8 @@ export function sgr(style: Style | undefined, mode: ColorMode): string {
  * cells that changed.
  */
 export class Screen {
+  /** Draw only ASCII: for a terminal that cannot show the box and block glyphs. */
+  ascii = false;
   width = 0;
   height = 0;
   readonly mode: ColorMode;
@@ -101,6 +104,7 @@ export class Screen {
   }
 
   private put(x: number, y: number, ch: string, s: string): number {
+    if (this.ascii) ch = asciiGlyph(ch);
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;
     let w = charWidth(ch);
     if (w === 0) return 0;

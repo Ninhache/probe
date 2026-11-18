@@ -9,6 +9,7 @@ import {
 import type { Config } from "../../config/schema";
 import { NOTIFY_GRACE_SECONDS, RESPONSE_FULL_BODY_BYTES } from "../../constants";
 import { App } from "../../tui/app";
+import { supportsUnicode } from "../../ui/terminal";
 import { type ActionDeps, serviceActions } from "../actions";
 import { changeMessage, type KnownStates, stateChanges } from "../changes";
 import { type EditCallbacks, liveEditing } from "../editing";
@@ -23,7 +24,7 @@ import { handleInput, initialView, renderDashboard, say, type ViewState } from "
 
 export { LOCAL_ENVIRONMENT };
 
-const MIN_SIZE = { w: 70, h: 16 };
+const MIN_SIZE = { w: 60, h: 16 };
 const TICK_MS = 1000;
 
 export interface NativeDashboardOptions extends EditCallbacks {
@@ -363,6 +364,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       tickMs: TICK_MS,
       mouse: true,
       minSize: MIN_SIZE,
+      ascii: !supportsUnicode(process.env),
     });
     monitor.start();
     app.start();

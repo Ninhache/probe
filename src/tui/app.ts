@@ -18,7 +18,24 @@ export type AppOptions = {
   mouse?: boolean;
   /** Below this size, show a "terminal too small" message instead of a broken layout. */
   minSize?: { w: number; h: number };
+  /** Draw ASCII only, for a terminal whose locale is not UTF-8. */
+  ascii?: boolean;
 };
+
+/** Draw one frame: the app, or the "too small" message below `min`. */
+export function drawFrame(
+  s: Screen,
+  min: { w: number; h: number } | undefined,
+  render: AppOptions["render"],
+): void {
+  s.clear();
+  if (min && (s.width < min.w || s.height < min.h)) {
+    const msg = `Terminal too small: ${s.width}x${s.height}, need ${min.w}x${min.h}`;
+    s.text(Math.max(0, (s.width - msg.length) >> 1), s.height >> 1, msg, { bold: true });
+  } else {
+    render(s, { x: 0, y: 0, w: s.width, h: s.height });
+  }
+}
 
 /** Glues Terminal + Screen + input together and schedules frames. */
 export class App {
@@ -35,6 +52,7 @@ export class App {
     this.opts = opts;
     this.terminal = new Terminal({ mouse: opts.mouse });
     this.screen = new Screen(this.terminal.cols, this.terminal.rows, detectColorMode());
+    this.screen.ascii = opts.ascii === true;
   }
 
   start(): void {
@@ -93,14 +111,7 @@ export class App {
     this.lastFrameAt = performance.now();
     this.frame++;
     const s = this.screen;
-    s.clear();
-    const min = this.opts.minSize;
-    if (min && (s.width < min.w || s.height < min.h)) {
-      const msg = `Terminal too small: ${s.width}x${s.height}, need ${min.w}x${min.h}`;
-      s.text(Math.max(0, (s.width - msg.length) >> 1), s.height >> 1, msg, { bold: true });
-    } else {
-      this.opts.render(s, { x: 0, y: 0, w: s.width, h: s.height });
-    }
+    drawFrame(s, this.opts.minSize, this.opts.render);
     const diff = s.flush();
     if (diff) this.terminal.write(ansi.syncStart + diff + ansi.syncEnd);
   }
