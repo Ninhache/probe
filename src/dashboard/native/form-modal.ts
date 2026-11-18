@@ -7,12 +7,11 @@ import { defaultTheme as t } from "../../tui/theme";
 import { graphemes, pad, strWidth } from "../../tui/width";
 import { nextChoice } from "../choice";
 import type { Panel } from "./panels";
+import { drawStepper } from "./stepper";
 
 const MARKER = "› ";
 const LABEL_GAP = 2;
 const FRAME_ROWS = 2;
-const CHOICE_OPEN = "‹ ";
-const CHOICE_CLOSE = " ›";
 
 /** One line of a form: a text field, or a choice among words. */
 export interface FormLine {
@@ -147,7 +146,18 @@ export function formModal(options: FormOptions): FormModal {
         const state = field(line.id);
         if (line.choices) {
           const value = fieldValue(state) || (line.choices[0] ?? "");
-          screen.text(x, y, `${CHOICE_OPEN}${value}${CHOICE_CLOSE}`, { fg: t.accent }, room);
+          // The choice wraps around: with two or more words it can always move either way.
+          const moves = line.choices.length > 1;
+          drawStepper(
+            screen,
+            x,
+            y,
+            value,
+            { previous: moves, next: moves },
+            { fg: t.accent },
+            active,
+            room,
+          );
           return;
         }
         const display = drawn(line, state);

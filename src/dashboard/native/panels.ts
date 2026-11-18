@@ -12,6 +12,7 @@ import { responseLines, responseProblem, responseText } from "../response";
 import { SETTING_ROWS, stepChoice, stepServiceTimeout } from "../settings";
 import type { VariableRow } from "../variables";
 import { LOCAL_ENVIRONMENT, type Tracker } from "./history";
+import { drawStepper, type Reach, reachAt } from "./stepper";
 import { say, type ViewActions, type ViewState } from "./view";
 
 const PANEL_WIDTH = 72;
@@ -41,6 +42,21 @@ function folds(text: string, width: number): string[] {
     letters.slice(i * width, (i + 1) * width).join(""),
   );
 }
+
+/** A row whose value moves with ←→: drawn `‹ value ›`. */
+const stepRow = (
+  screen: Screen,
+  inner: Rect,
+  i: number,
+  label: string,
+  value: string,
+  reach: Reach,
+  on: boolean,
+) => {
+  row(screen, inner, i, label, "", on);
+  const style = { fg: t.accent, ...(on ? { bg: t.selectedBg, bold: true } : {}) };
+  drawStepper(screen, inner.x + PAD + 14, inner.y + i, value, reach, style, on, inner.w - PAD - 14);
+};
 
 /** What `detailLines` says about a service, for every service type, plus its timeout and skip. */
 export function detailPanel(
@@ -142,13 +158,17 @@ export function detailPanel(
       if (!writable) return;
       const timeout = view.timeouts[service];
       const first = inner.h - extra();
-      row(
+      stepRow(
         screen,
         inner,
         first,
         "timeout",
         timeout === undefined ? "default" : `${timeout}s`,
-        false,
+        {
+          previous: timeout !== undefined,
+          next: stepServiceTimeout(timeout, 1) !== timeout,
+        },
+        at < 0,
       );
       row(screen, inner, first + 1, "skip", view.skipped.has(service) ? "yes" : "no", false);
       found.forEach(({ name, source }, i) => {
@@ -230,9 +250,21 @@ export function optionsPanel(view: ViewState, actions: ViewActions): Panel {
     footer: "↑↓ move · ←→ change · esc",
     size: { w: OPTIONS_WIDTH, h: rows + 2 },
     draw(screen, inner) {
-      for (const [i, each] of SETTING_ROWS.entries())
-        row(screen, inner, i, each.label, seconds(view.settings[each.key]), i === at);
-      row(screen, inner, rows - 1, "Notify", view.settings.notify ? "on" : "off", at === rows - 1);
+      for (const [i, each] of SETTING_ROWS.entries()) {
+        const now = view.settings[each.key];
+        const reach = reachAt(each.choicesMs.indexOf(now), each.choicesMs.length);
+        stepRow(screen, inner, i, each.label, seconds(now), reach, i === at);
+      }
+      const on = view.settings.notify === true;
+      stepRow(
+        screen,
+        inner,
+        rows - 1,
+        "Notify",
+        on ? "on" : "off",
+        { previous: on, next: !on },
+        at === rows - 1,
+      );
     },
     onEvent(event: InputEvent) {
       if (event.kind !== "key" || event.ctrl || event.alt) return event.kind === "mouse";
@@ -269,7 +301,7 @@ export function parametersPanel(view: ViewState, actions: ViewActions): Panel {
   return {
     title: "parameters",
     bar: "choose",
-    footer: "←→ parameter · ↑↓ value · esc",
+    footer: "↑↓ parameter · ←→ value · esc",
     get size() {
       return { w: OPTIONS_WIDTH + 8, h: Math.max(1, names(view.choices).length) + 2 };
     },
@@ -283,8 +315,11 @@ export function parametersPanel(view: ViewState, actions: ViewActions): Panel {
       if (all.length === 0)
         screen.text(inner.x + 1, inner.y, "None yet: a adds one", { fg: t.muted });
       const now = selected(view);
-      for (const [i, name] of names(view.choices).entries())
-        row(screen, inner, i, name, now[name] ?? "", i === at);
+      for (const [i, name] of names(view.choices).entries()) {
+        const values = view.choices[name] ?? [];
+        const reach = reachAt(values.indexOf(now[name] as string), values.length);
+        stepRow(screen, inner, i, name, now[name] ?? "", reach, i === at);
+      }
     },
     onEvent(event: InputEvent) {
       if (event.kind !== "key" || event.ctrl || event.alt) return event.kind === "mouse";
@@ -294,14 +329,14 @@ export function parametersPanel(view: ViewState, actions: ViewActions): Panel {
       if (parameters && event.name === "a") parameters.add();
       else if (parameters && here !== undefined && event.name === "e") parameters.edit(here);
       else if (parameters && here !== undefined && event.name === "d") parameters.remove(here);
-      else if (event.name === "left" || event.name === "h") at = Math.max(0, at - 1);
-      else if (event.name === "right" || event.name === "l") at = Math.min(all.length - 1, at + 1);
-      else if (["up", "down", "k", "j"].includes(event.name)) {
+      else if (event.name === "up" || event.name === "k") at = Math.max(0, at - 1);
+      else if (event.name === "down" || event.name === "j") at = Math.min(all.length - 1, at + 1);
+      else if (["left", "right", "h", "l"].includes(event.name)) {
         const name = all[at];
         const values = name === undefined ? undefined : view.choices[name];
         if (name === undefined || !values) return true;
         const current = selected(view)[name] as string;
-        const step = event.name === "down" || event.name === "j" ? 1 : -1;
+        const step = event.name === "right" || event.name === "l" ? 1 : -1;
         const value =
           values[Math.max(0, Math.min(values.length - 1, values.indexOf(current) + step))];
         if (value === undefined || value === current) return true;

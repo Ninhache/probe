@@ -205,9 +205,9 @@ describe("parameters", () => {
     expect(draw().split("\n")[0]).toContain("region: us");
     press("p");
     expect(draw()).toContain("┤parameters├");
-    press("down", "down");
+    press("right", "right");
     expect(view.selection).toEqual({ region: "us", env: "prod" });
-    press("right", "up");
+    press("down", "left");
     expect(calls).toEqual(["parameter env=prod", "parameter region=eu"]);
     press("escape");
     expect(draw().split("\n")[0]).toContain("env: prod");

@@ -55,6 +55,8 @@ interface Binding {
   parameters?: true;
   /** Only on the native screen: the ink screen's bar and help leave it out. */
   native?: true;
+  /** Only on the ink screen: the native one has its own binding for the key. */
+  ink?: true;
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
@@ -189,6 +191,7 @@ const BINDINGS: readonly Binding[] = [
     help: "Change parameter",
     drop: 1,
     parameters: true,
+    ink: true,
   },
   {
     screens: ["choose"],
@@ -198,6 +201,28 @@ const BINDINGS: readonly Binding[] = [
     action: "value",
     help: "Choose its value",
     parameters: true,
+    ink: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "↑↓ jk",
+    ascii: "jk",
+    action: "parameter",
+    help: "Change parameter",
+    drop: 1,
+    parameters: true,
+    native: true,
+  },
+  {
+    screens: ["choose"],
+    section: "Parameters",
+    keys: "←→ hl",
+    ascii: "hl",
+    action: "value",
+    help: "Choose its value",
+    parameters: true,
+    native: true,
   },
   {
     screens: ["choose"],
@@ -322,7 +347,9 @@ const written = (binding: Binding, unicode: boolean) =>
   unicode ? binding.keys : (binding.ascii ?? binding.keys);
 
 const offered = (grid: boolean, native = false) =>
-  BINDINGS.filter((binding) => (grid || !binding.grid) && (native || !binding.native));
+  BINDINGS.filter(
+    (binding) => (grid || !binding.grid) && (native || !binding.native) && !(native && binding.ink),
+  );
 
 export interface BarItem {
   keys: string;

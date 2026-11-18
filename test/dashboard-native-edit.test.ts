@@ -721,6 +721,17 @@ describe("a new environment", () => {
     expect(draw()).toContain("New environment");
   });
 
+  it("draws the source chooser with chevrons", async () => {
+    const { press, draw } = await project(["dev"]);
+    press("n");
+    const from =
+      draw()
+        .split("\n")
+        .find((text) => text.includes("Copy from")) ?? "";
+    expect(from).toContain("‹");
+    expect(from).toContain("›");
+  });
+
   it("copies the services of local, never a secret value, and shows the new tab", async () => {
     const { press, draw, paths, tracker, view, added } = await project();
     press("nprod");
