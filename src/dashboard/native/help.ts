@@ -1,3 +1,4 @@
+import { registerHints } from "../../tui/hits";
 import type { InputEvent } from "../../tui/input";
 import type { Rect } from "../../tui/layout";
 import type { Modal } from "../../tui/modal";
@@ -33,6 +34,7 @@ export function drawHelpBar(
   const end = row.x + row.w;
   items.forEach(({ keys, action }, i) => {
     if (i > 0) x += screen.text(x, row.y, BAR_SEPARATOR, { fg: t.muted }, end - x);
+    registerHints(screen.hits, x, row.y, `${keys} ${action}`, end);
     x += screen.text(x, row.y, keys, { fg: t.accent, bold: true }, end - x);
     x += screen.text(x, row.y, ` ${action}`, { fg: t.muted }, end - x);
   });

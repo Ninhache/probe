@@ -1,4 +1,5 @@
 import { at, type RGB } from "./color";
+import { registerHints } from "./hits";
 import { inset, type Rect, resolveSizes, type Size } from "./layout";
 import type { Screen, Style } from "./screen";
 import { pad } from "./width";
@@ -19,6 +20,8 @@ export type BoxOptions = {
   hotkey?: string;
   /** Text on the bottom border. */
   footer?: string;
+  /** The footer is a hint (`esc close`): the keys in it are clickable. */
+  footerHints?: boolean;
   border?: keyof typeof BORDERS;
   color?: RGB;
   titleColor?: RGB;
@@ -51,7 +54,10 @@ export function box(screen: Screen, r: Rect, o: BoxOptions = {}): Rect {
     let x = r.x + 2;
     screen.set(x++, y, b.l, line);
     if (hotkey) x += screen.text(x, y, hotkey, { fg: o.hotkeyColor, bold: true }, room);
-    x += screen.text(x, y, text, { fg: o.titleColor, bold: true }, room - (x - r.x - 3));
+    const start = x;
+    const shown = room - (x - r.x - 3);
+    x += screen.text(x, y, text, { fg: o.titleColor, bold: true }, shown);
+    if (y !== r.y && o.footerHints) registerHints(screen.hits, start, y, text, start + shown);
     screen.set(x, y, b.r, line);
   };
   if (o.title) label(r.y, o.title, o.hotkey);
@@ -240,9 +246,11 @@ export function tabs(
   active: number,
   on: Style,
   off: Style,
+  onTab?: (index: number, x: number, width: number) => void,
 ): number {
   let col = 0;
   labels.forEach((l, i) => {
+    onTab?.(i, x + col, l.length + 2);
     col += screen.text(x + col, y, ` ${l} `, i === active ? on : off);
     col += 1;
   });

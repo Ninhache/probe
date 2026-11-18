@@ -1,6 +1,7 @@
 import { ansi } from "./ansi";
 import { asciiGlyph } from "./ascii";
 import { type ColorMode, colorParams, type RGB } from "./color";
+import { HitMap } from "./hits";
 import type { Rect } from "./layout";
 import { charWidth, graphemes } from "./width";
 
@@ -44,6 +45,8 @@ export function sgr(style: Style | undefined, mode: ColorMode): string {
 export class Screen {
   /** Draw only ASCII: for a terminal that cannot show the box and block glyphs. */
   ascii = false;
+  /** The clickable regions of the frame being drawn. */
+  readonly hits = new HitMap();
   width = 0;
   height = 0;
   readonly mode: ColorMode;
@@ -75,6 +78,7 @@ export class Screen {
 
   /** Blank the back frame. Call at the start of every frame. */
   clear(): void {
+    this.hits.clear();
     this.chars.fill(" ");
     this.sgrs.fill(PLAIN);
   }

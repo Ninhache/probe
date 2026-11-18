@@ -4,9 +4,11 @@ import {
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
   DEFAULT_TIMEOUT_SECONDS,
+  DOUBLE_CLICK_MS,
   PROBE_DIR,
 } from "../../constants";
-import type { InputEvent } from "../../tui/input";
+import { HitMap, registerHints } from "../../tui/hits";
+import { type InputEvent, parseInput } from "../../tui/input";
 import { columns, fill, type Rect, rows } from "../../tui/layout";
 import { type ListGeometry, listKey, listMouse } from "../../tui/list";
 import { ModalStack } from "../../tui/modal";
@@ -75,6 +77,12 @@ export interface ViewState {
   bottomTop: number;
   /** The most the response tab can scroll, as of the last frame. */
   bottomMax: number;
+  /** The clickable regions of the last frame. */
+  hits: HitMap;
+  /** The log lines on screen, as of the last frame: a click on a line picks one. */
+  logEntries: LogEntry[];
+  /** The last left click, for a double-click. */
+  lastClick?: { at: number; x: number; y: number };
   /** The log tab shows only the lines where a service changed state. */
   logChanges: boolean;
   /** The log tab sticks to its last line until the user scrolls up. */
@@ -147,6 +155,8 @@ export const initialView = (init: ViewInit = {}): ViewState => ({
   tab: 0,
   bottom: "log",
   logChanges: false,
+  hits: new HitMap(),
+  logEntries: [],
   logFollow: true,
   logShown: [],
   bottomTop: 0,
@@ -224,6 +234,7 @@ export function renderDashboard(
     view.tab,
     { fg: t.title, bg: t.selectedBg, bold: true },
     { fg: t.muted },
+    (index, at, width) => screen.hits.add(at, header.y, width, "env", "", index),
   );
   const picked = effectiveSelection(view.choices, view.selection);
   for (const [name, value] of Object.entries(picked)) {
@@ -319,13 +330,16 @@ export function renderDashboard(
     const text = view.status.text.replaceAll("\n", " · ");
     screen.text(1, footer.y, text, { fg: t.warn }, area.w - 2);
   } else {
+    screen.hits.layer = view.modals.depth;
     drawHelpBar(screen, footer, {
       screen: barScreen,
       grid: tracker.environments.length > 1,
       parameters: Object.keys(view.choices).length > 0 || view.canEditParameters === true,
     });
+    screen.hits.layer = 0;
   }
   view.modals.draw(screen, area);
+  view.hits = screen.hits;
 }
 
 function filterNote(view: ViewState, count: number): string {
@@ -420,6 +434,10 @@ const logLines = (tracker: Tracker, env: string | undefined, changes: boolean): 
     .toArray()
     .filter((entry) => env === undefined || entry.env === env);
 
+const CHANGES_NOTE = "changes only";
+/** Column offset of the text of a box footer: the corner, a dash and the bracket come first. */
+const FOOTER_TEXT_AT = 3;
+
 /** The gutter of a log line: a marker where the service changed state, blank otherwise. */
 const MARKER = "▶";
 
@@ -483,7 +501,7 @@ function drawBottom(
     color: t.border,
     footer:
       [
-        view.bottom === "log" && view.logChanges ? "changes only" : "",
+        view.bottom === "log" && view.logChanges ? CHANGES_NOTE : "",
         view.bottomMax > 0
           ? `${view.bottomTop + 1}-${Math.min(view.bottomTop + room, total)}/${total}`
           : "",
@@ -501,14 +519,26 @@ function drawBottom(
     screen.set(x, area.y, BORDERS.rounded.l, { fg: t.border });
     screen.text(x + 1, area.y, label, style);
     screen.set(x + 1 + label.length, area.y, BORDERS.rounded.r, { fg: t.border });
+    registerHints(screen.hits, x + 1, area.y, label);
     view.bottomTitles.push({ tab, x, w: label.length + 2 });
     x += label.length + 2;
   }
   if (view.bottom === "log") {
     const visible = lines.slice(view.bottomTop, view.bottomTop + l.h);
     view.logShown = visible.map((entry) => logText(entry, env === undefined));
-    for (const [i, entry] of visible.entries())
+    view.logEntries = visible;
+    for (const [i, entry] of visible.entries()) {
       drawLog(screen, l.x + 1, l.y + i, l.w - 2, entry, env === undefined);
+      screen.hits.add(l.x + 1, l.y + i, l.w - 2, "log", "", i);
+    }
+    if (view.logChanges && area.h > 2)
+      screen.hits.add(
+        area.x + FOOTER_TEXT_AT,
+        area.y + area.h - 1,
+        CHANGES_NOTE.length,
+        "key",
+        "f",
+      );
     return;
   }
   shown.slice(view.bottomTop, view.bottomTop + l.h).forEach((line, i) => {
@@ -551,10 +581,44 @@ export function handleInput(
   view: ViewState,
   actions: ViewActions,
 ): void {
+  if (event.kind === "mouse" && clickRegion(event, tracker, view, actions)) return;
   const said = view.status;
   dispatch(event, tracker, view, actions);
   // What an action said lasts until the next key, unless that key said something itself.
   if (event.kind === "key" && view.status === said) view.status = undefined;
+}
+
+/**
+ * A click on a drawn hint or button. A key hint sends the key it names, through the same path as the
+ * keyboard, so it is ignored whenever that key would be. True when a region took the event: a drag, a
+ * wheel or another button over a hint does nothing, except the wheel over the log lines.
+ */
+function clickRegion(
+  event: Extract<InputEvent, { kind: "mouse" }>,
+  tracker: Tracker,
+  view: ViewState,
+  actions: ViewActions,
+): boolean {
+  const hit = view.hits.at(event.x, event.y, view.modals.depth);
+  if (!hit) return false;
+  if (event.action !== "press" || event.button !== "left") return hit.action !== "log";
+  if (hit.action === "key") {
+    for (const key of parseInput(hit.input)) handleInput(key, tracker, view, actions);
+  } else if (view.filtering) {
+    return true;
+  } else if (hit.action === "env") {
+    if (hit.ref < tabNames(tracker).length) {
+      view.tab = hit.ref;
+      view.offset = 0;
+    }
+  } else {
+    const entry = view.logEntries[hit.ref];
+    if (entry) {
+      view.selected = entry.service;
+      showBottom(view, "response");
+    }
+  }
+  return true;
 }
 
 function dispatch(
@@ -584,7 +648,9 @@ function dispatch(
   const current = { selected: Math.max(0, selectedIndex(tracker, view)), offset: view.offset };
   if (event.kind === "mouse") {
     if (peekMouse(event, view)) return;
+    const row = onServiceRow(event, view, list.length);
     select(listMouse(current, event, geometry));
+    if (row && doubleClick(event, view)) handleInput(enterKey(), tracker, view, actions);
     return;
   }
   if (view.filtering) {
@@ -620,6 +686,25 @@ function dispatch(
   else select(listKey(current, event, geometry));
 }
 
+const enterKey = (): InputEvent => parseInput("\r")[0] as InputEvent;
+
+/** A left press on a row of the service table. */
+const onServiceRow = (event: InputEvent, view: ViewState, count: number): boolean => {
+  if (event.kind !== "mouse" || event.action !== "press" || event.button !== "left") return false;
+  const { x, y, w } = view.tableBody;
+  return event.x >= x && event.x < x + w && event.y >= y && event.y - y + view.offset < count;
+};
+
+/** Whether this press completes a double-click, and remembers it as the one to be followed. */
+function doubleClick(event: InputEvent, view: ViewState): boolean {
+  if (event.kind !== "mouse") return false;
+  const now = Date.now();
+  const last = view.lastClick;
+  const double = last !== undefined && now - last.at <= DOUBLE_CLICK_MS && last.y === event.y;
+  view.lastClick = double ? undefined : { at: now, x: event.x, y: event.y };
+  return double;
+}
+
 const scrollPeek = (view: ViewState, by: number) => {
   view.bottomTop = Math.max(0, Math.min(view.bottomMax, view.bottomTop + by));
   if (view.bottom === "log") view.logFollow = view.bottomTop >= view.bottomMax;
@@ -634,14 +719,6 @@ const showBottom = (view: ViewState, tab: BottomTab) => {
 /** A click on a tab title, or the wheel over the response tab. True when the event was for the box. */
 function peekMouse(event: InputEvent, view: ViewState): boolean {
   if (event.kind !== "mouse") return false;
-  if (event.action === "press" && event.button === "left") {
-    const title = view.bottomTitles.find(
-      ({ x, w }) => event.y === view.bottomBox.y && event.x >= x && event.x < x + w,
-    );
-    if (!title) return false;
-    showBottom(view, title.tab);
-    return true;
-  }
   const { x, y, w, h } = view.bottomBox;
   const over = event.x >= x && event.x < x + w && event.y >= y && event.y < y + h;
   if (!over) return false;

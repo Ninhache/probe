@@ -238,6 +238,8 @@ export function detailPanel(
         if (i >= inner.h - extra()) return;
         const fg = line.tone ? tones[line.tone] : t.fg;
         screen.text(inner.x + PAD, inner.y + i, line.text, { fg }, inner.w - PAD);
+        if (line.id.startsWith("request "))
+          screen.hits.add(inner.x + PAD, inner.y + i, inner.w - PAD, "key", "u");
       });
       if (!writable) return;
       const timeout = view.timeouts[service];

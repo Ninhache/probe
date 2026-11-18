@@ -57,15 +57,18 @@ export class ModalStack {
     this.lastArea = area;
     this.items.forEach((modal, index) => {
       const r = modalRect(area, modal.size);
+      screen.hits.layer = index + 1;
       screen.fill(r, " ");
       const inner = box(screen, r, {
         title: modal.title,
         footer: modal.footer,
+        footerHints: true,
         color: index === this.items.length - 1 ? t.borderFocus : t.border,
         titleColor: t.title,
       });
       modal.draw(screen, inner);
     });
+    screen.hits.layer = 0;
   }
 
   /** Give an event to the topmost modal. Returns false only when no modal is open. */

@@ -25,6 +25,8 @@ export const RESPONSE_BODY_BYTES = 2_048;
 export const RESPONSE_BODY_WAIT_MS = 500;
 /** What the dashboard keeps of a response body in memory, to show it whole and copy it. */
 export const RESPONSE_FULL_BODY_BYTES = 1_048_576;
+/** Two left clicks on the same cell within this many milliseconds are a double-click. */
+export const DOUBLE_CLICK_MS = 400;
 /** The log tab keeps this much of a body per line: a one-line preview, never the body. */
 export const LOG_PREVIEW_CHARS = 256;
 /** Lines the log tab remembers; the oldest go first. */

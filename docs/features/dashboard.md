@@ -29,7 +29,19 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
   in the full response view. A body cut at the size cap, or one that is not valid JSON, is shown as received.
   Secrets are hidden before the body is laid out, and no string is decoded on the way. `c` copies the body as
   received, `b` copies the indented JSON.
-- The mouse works: click a service, a tab or an environment, and scroll the wheel over the lists.
+- The mouse works. Every key hint on screen can be clicked, in the footer, in the border of a box and in a
+  panel (`p parameters`, `esc close`, `1 log`, `changes only`): a click does what pressing that key does, and
+  does nothing where the key would do nothing. A hint with several keys, like `PgUp PgDn`, has one target per
+  key. Also:
+  - click a service to select it, double-click it to open its detail;
+  - click an environment tab to switch to it;
+  - click a log line to select its service and show its response;
+  - click the request URL in the detail of a service to open it, like `u`.
+    The wheel scrolls the lists, the log and the response. While a panel is open, it takes every click: a click
+    outside it does nothing. A drag, a right click or the wheel over a hint does nothing. Probe does not ask the
+    terminal for mouse movement, so a hint does not light up under the pointer. To select text with the mouse,
+    hold `Shift` (`Option` on macOS in some terminals) while dragging: how the terminal lets you bypass the
+    mouse depends on the terminal.
 
 ## Keys
 
