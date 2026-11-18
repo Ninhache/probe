@@ -173,12 +173,33 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
   if (process.env.PROBE_TUI === "native") {
     const { environmentSource: source } = await import("./dashboard/sources");
     const { openNativeDashboard } = await import("./dashboard/native/open");
+    const saves = createSaveQueue();
+    const local = `${PROBE_DIR}/${LOCAL_FILE}`;
+    const saveLocal = (write: () => Promise<boolean>) =>
+      saves.save(local, write, `${local} cannot be edited safely: fix or delete it`);
+    const journal = createUndoJournal(journalFiles(paths));
     await openNativeDashboard({
       config,
       environments: environments.map((name) => source(paths, name)),
       settings,
       selection: await readDashboardSelection(paths),
+      skipped: await readSkippedServices(paths),
       variables: () => loadVariables(paths),
+      onParameterChange: (name, value) =>
+        saveLocal(() => writeDashboardSelection(paths, name, value)),
+      onSettingsChange: (next) => {
+        const changed = changedPreferences(settings, next);
+        settings = next;
+        return saveLocal(() => writeDashboardPreferences(paths, changed));
+      },
+      onSkipChange: (name, skip) => saveLocal(() => writeServiceSkip(paths, name, skip)),
+      onTimeoutChange: (name, seconds) =>
+        saves.save(
+          `${PROBE_DIR}/${CONFIG_FILE}`,
+          () =>
+            journal.record(`timeout of ${name}`, () => writeServiceTimeout(paths, name, seconds)),
+          `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
+        ),
     });
     return true;
   }
