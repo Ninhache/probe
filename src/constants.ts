@@ -25,6 +25,12 @@ export const RESPONSE_BODY_BYTES = 2_048;
 export const RESPONSE_BODY_WAIT_MS = 500;
 /** What the dashboard keeps of a response body in memory, to show it whole and copy it. */
 export const RESPONSE_FULL_BODY_BYTES = 1_048_576;
+/** The log tab keeps this much of a body per line: a one-line preview, never the body. */
+export const LOG_PREVIEW_CHARS = 256;
+/** Lines the log tab remembers; the oldest go first. */
+export const LOG_SIZE = 1_000;
+/** A preview is cut from this many characters of the body, so its cost does not follow the body's size. */
+export const LOG_PREVIEW_SCAN_CHARS = 4_096;
 /** A JSON body over this is shown as received: laying out a megabyte would stall the screen. */
 export const JSON_FORMAT_MAX_BYTES = 262_144;
 // How much of a body is searched for `contains`: a health endpoint answers far less.

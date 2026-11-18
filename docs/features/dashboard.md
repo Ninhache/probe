@@ -16,9 +16,13 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 - The services table on the left: one line per service, with its status, last latency, uptime and a small trend.
   With [several environments](#several-environments) there is one column per environment.
 - On the right, for the selected service: its latency, its uptime against a 99% objective, and a panel with two
-  tabs, `1` events and `2` response.
+  tabs, `1` events, `2` response and `3` log.
 - The events tab lists the changes of status of this session. The response tab shows the last answer of the
   selected service: status line, headers, then the body. `PgUp` `PgDn` scroll it.
+- The log tab has one line per check, for every service of the selected environment: time, service, the
+  environment on the all tab, the status code or the error, and the start of the body on one line (256 characters
+  at most). The last 1,000 lines are kept. It follows the newest line; `PgUp` `PgDn` or the wheel scroll up, `End`
+  follows again. The bodies were hidden of their secrets when they were checked, so a preview never shows one.
 - A JSON body (a `json` content type, or a body that parses as JSON) is shown indented and in colour, here and
   in the full response view. A body cut at the size cap, or one that is not valid JSON, is shown as received.
   Secrets are hidden before the body is laid out, and no string is decoded on the way. `c` copies the body as
@@ -33,8 +37,10 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 | `←` `→` `h` `l` | Change environment                             |
 | `r`             | Check now                                      |
 | `Enter`         | Open the detail of the selected service        |
-| `1` `2`         | Events tab, response tab                       |
-| `PgUp` `PgDn`   | Scroll the response tab                        |
+| `1` `2` `3`     | Events tab, response tab, log tab              |
+| `PgUp` `PgDn`   | Scroll the response or the log tab             |
+| `End`           | Follow the newest line of the log tab          |
+| `y`             | Copy the lines on screen of the log tab        |
 | `u`             | Open its URL in the browser                    |
 | `c`             | Copy its curl command                          |
 | `b`             | Copy the body of its last response             |

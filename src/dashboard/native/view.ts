@@ -10,7 +10,7 @@ import type { InputEvent } from "../../tui/input";
 import { columns, fill, type Rect, rows } from "../../tui/layout";
 import { type ListGeometry, listKey, listMouse } from "../../tui/list";
 import { ModalStack } from "../../tui/modal";
-import type { Screen } from "../../tui/screen";
+import type { Screen, Style } from "../../tui/screen";
 import { drawField, fieldKey, fieldValue, type TextField, textField } from "../../tui/textfield";
 import { defaultTheme as t } from "../../tui/theme";
 import {
@@ -33,7 +33,13 @@ import { HTTP_ONLY, NO_RESPONSE, type ResponsePart } from "../response";
 import type { DashboardSettings } from "../settings";
 import type { Editor } from "./editor";
 import { drawHelpBar, helpModal } from "./help";
-import { LOCAL_ENVIRONMENT, type SeriesStats, statsOf, type Tracker } from "./history";
+import {
+  LOCAL_ENVIRONMENT,
+  type LogEntry,
+  type SeriesStats,
+  statsOf,
+  type Tracker,
+} from "./history";
 import { paletteModal } from "./palette";
 import {
   copyBody,
@@ -54,10 +60,11 @@ const ALL = "all";
 const STATUS_MAX_WIDTH = 10;
 
 /** The tabs of the box under the graph: what it shows. */
-export type BottomTab = "events" | "response";
+export type BottomTab = "events" | "response" | "log";
 const BOTTOM_TABS: readonly { tab: BottomTab; key: string }[] = [
   { tab: "events", key: "1" },
   { tab: "response", key: "2" },
+  { tab: "log", key: "3" },
 ];
 /** Rows a PgUp or PgDn moves the response tab by, besides the page: the wheel moves this many. */
 const PEEK_WHEEL_ROWS = 3;
@@ -69,6 +76,10 @@ export interface ViewState {
   bottomTop: number;
   /** The most the response tab can scroll, as of the last frame. */
   bottomMax: number;
+  /** The log tab sticks to its last line until the user scrolls up. */
+  logFollow: boolean;
+  /** The lines the log tab shows, as plain text, as of the last frame: `y` copies them. */
+  logShown: string[];
   /** The box and its tab titles, as of the last frame: clicks are matched against them. */
   bottomBox: Rect;
   bottomTitles: { tab: BottomTab; x: number; w: number }[];
@@ -134,6 +145,8 @@ export const initialView = (init: ViewInit = {}): ViewState => ({
   ...init,
   tab: 0,
   bottom: "events",
+  logFollow: true,
+  logShown: [],
   bottomTop: 0,
   bottomMax: 0,
   bottomBox: { x: 0, y: 0, w: 0, h: 0 },
@@ -297,7 +310,9 @@ export function renderDashboard(
         ? "filter"
         : view.bottom === "response"
           ? "peek"
-          : "list";
+          : view.bottom === "log"
+            ? "log"
+            : "list";
   if (view.status && now - view.status.at < STATUS_MS) {
     const text = view.status.text.replaceAll("\n", " · ");
     screen.text(1, footer.y, text, { fg: t.warn }, area.w - 2);
@@ -397,6 +412,44 @@ function peekRows(
   return responseRows(result, width);
 }
 
+/** The log lines of an environment, or of all, oldest first. */
+const logLines = (tracker: Tracker, env: string | undefined): LogEntry[] =>
+  tracker.log.toArray().filter((entry) => env === undefined || entry.env === env);
+
+/** A log line as plain text: what `y` copies. */
+function logText(entry: LogEntry, withEnv: boolean): string {
+  return [
+    clock(entry.at),
+    entry.service,
+    withEnv ? entry.env : "",
+    entry.detail ?? "",
+    entry.preview,
+  ]
+    .filter((part) => part !== "")
+    .join(" ");
+}
+
+function drawLog(
+  screen: Screen,
+  x: number,
+  y: number,
+  width: number,
+  entry: LogEntry,
+  withEnv: boolean,
+): void {
+  const end = x + width;
+  let at = x;
+  const put = (text: string, style: Style) => {
+    if (text === "" || at >= end) return;
+    at += screen.text(at, y, text, style, end - at) + 1;
+  };
+  put(clock(entry.at), { fg: t.muted });
+  put(entry.service, { fg: t.fg });
+  if (withEnv) put(entry.env, { fg: t.muted });
+  put(entry.detail ?? "", { fg: entry.ok ? t.ok : t.err, bold: true });
+  put(entry.preview, { fg: entry.ok ? t.muted : t.err });
+}
+
 /** The box under the graph: its tab titles sit in the top border, the active one in accent. */
 function drawBottom(
   screen: Screen,
@@ -407,16 +460,21 @@ function drawBottom(
   env: string | undefined,
 ): void {
   const focus = service === undefined ? undefined : focusEnv(tracker, view, service);
+  const lines = view.bottom === "log" ? logLines(tracker, env) : [];
   const shown =
     view.bottom === "response" ? peekRows(tracker, view, service, focus, area.w - 4) : [];
   const room = Math.max(0, area.h - 2);
-  view.bottomMax = Math.max(0, shown.length - room);
-  view.bottomTop = Math.min(view.bottomTop, view.bottomMax);
+  const total = view.bottom === "log" ? lines.length : shown.length;
+  view.bottomMax = Math.max(0, total - room);
+  view.bottomTop =
+    view.bottom === "log" && view.logFollow
+      ? view.bottomMax
+      : Math.min(view.bottomTop, view.bottomMax);
   const l = box(screen, area, {
     color: t.border,
     footer:
       view.bottomMax > 0
-        ? `${view.bottomTop + 1}-${Math.min(view.bottomTop + room, shown.length)}/${shown.length}`
+        ? `${view.bottomTop + 1}-${Math.min(view.bottomTop + room, total)}/${total}`
         : undefined,
   });
   view.bottomBox = area;
@@ -431,6 +489,13 @@ function drawBottom(
     screen.set(x + 1 + label.length, area.y, BORDERS.rounded.r, { fg: t.border });
     view.bottomTitles.push({ tab, x, w: label.length + 2 });
     x += label.length + 2;
+  }
+  if (view.bottom === "log") {
+    const visible = lines.slice(view.bottomTop, view.bottomTop + l.h);
+    view.logShown = visible.map((entry) => logText(entry, env === undefined));
+    for (const [i, entry] of visible.entries())
+      drawLog(screen, l.x + 1, l.y + i, l.w - 2, entry, env === undefined);
+    return;
   }
   if (view.bottom === "response") {
     shown.slice(view.bottomTop, view.bottomTop + l.h).forEach((line, i) => {
@@ -462,6 +527,8 @@ export interface ViewActions {
   copy?(service: string, env: string): void;
   /** Copies the text of a response, or only its body: `cut` when the body is not all there. */
   copyResponse?(text: string, cut: boolean, part?: ResponsePart, formatted?: boolean): void;
+  /** Copies the log lines that are on screen. */
+  copyLog?(text: string): void;
   skip?(service: string, skip: boolean): void;
   timeout?(service: string, seconds: number | undefined): void;
   settings?(settings: DashboardSettings): void;
@@ -538,7 +605,11 @@ function dispatch(
     else actions.quit();
     return;
   }
-  if (view.bottom === "response" && (event.name === "pageup" || event.name === "pagedown")) {
+  if (view.bottom === "log" && event.name === "end") {
+    view.logFollow = true;
+    return;
+  }
+  if (view.bottom !== "events" && (event.name === "pageup" || event.name === "pagedown")) {
     scrollPeek(view, (event.name === "pageup" ? -1 : 1) * Math.max(1, view.bottomBox.h - 2));
     return;
   }
@@ -554,11 +625,13 @@ function dispatch(
 
 const scrollPeek = (view: ViewState, by: number) => {
   view.bottomTop = Math.max(0, Math.min(view.bottomMax, view.bottomTop + by));
+  if (view.bottom === "log") view.logFollow = view.bottomTop >= view.bottomMax;
 };
 
 const showBottom = (view: ViewState, tab: BottomTab) => {
   if (view.bottom !== tab) view.bottomTop = 0;
   view.bottom = tab;
+  if (tab === "log") view.logFollow = true;
 };
 
 /** A click on a tab title, or the wheel over the response tab. True when the event was for the box. */
@@ -574,7 +647,7 @@ function peekMouse(event: InputEvent, view: ViewState): boolean {
   }
   const { x, y, w, h } = view.bottomBox;
   const over = event.x >= x && event.x < x + w && event.y >= y && event.y < y + h;
-  if (!over || view.bottom !== "response") return false;
+  if (!over || view.bottom === "events") return false;
   if (event.action === "wheel-up") scrollPeek(view, -PEEK_WHEEL_ROWS);
   else if (event.action === "wheel-down") scrollPeek(view, PEEK_WHEEL_ROWS);
   else return false;
@@ -640,7 +713,13 @@ export function runCommand(
       break;
     case "events":
     case "response":
+    case "log":
       showBottom(view, command);
+      break;
+    case "copylog":
+      if (view.bottom !== "log") say(view, "Open the log tab (3) to copy its lines");
+      else if (view.logShown.length === 0) say(view, "The log has no line to copy");
+      else actions.copyLog?.(view.logShown.join("\n"));
       break;
     case "body":
       copyBody(

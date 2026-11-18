@@ -19,6 +19,7 @@ import {
 import { loadVariables, readLocalVariables, writeVariable } from "../src/config/local";
 import { formatIssues } from "../src/config/migrations";
 import { type Service, serviceSchemaV1 } from "../src/config/schema";
+import { Tracker } from "../src/dashboard/native/history";
 import { tempProject } from "./helpers";
 
 const SECRET = "s3cret-value";
@@ -449,6 +450,16 @@ describe("http checker with headers", () => {
     expect(JSON.stringify(response)).not.toContain(SECRET);
     expect(response?.body).toBe(`you sent ${reference("API_KEY")}`);
     expect(response?.headers).toContainEqual(["x-seen", `key ${reference("API_KEY")}`]);
+  });
+
+  it("keeps an echoed secret out of the log preview", async () => {
+    const result = await check("/echo", { variables, detail: true });
+    const tracker = new Tracker(["local"]);
+    tracker.record("local", [result], 1);
+
+    const [entry] = tracker.log.toArray();
+    expect(entry?.preview).toBe(`you sent ${reference("API_KEY")}`);
+    expect(JSON.stringify(tracker.log.toArray())).not.toContain(SECRET);
   });
 
   it("hides a secret a JSON body repeats with escapes", async () => {

@@ -141,7 +141,11 @@ describe("paletteEntries", () => {
 
   it("should keep the commands that say the query, by what they do or by their word in the bar", () => {
     expect(paletteEntries(true, "ITS URL").map(({ command }) => command)).toEqual(["open"]);
-    expect(paletteEntries(true, " copy ").map(({ command }) => command)).toEqual(["copy", "body"]);
+    expect(paletteEntries(true, " copy ").map(({ command }) => command)).toEqual([
+      "copy",
+      "body",
+      "copylog",
+    ]);
     expect(paletteEntries(true, "zzz")).toEqual([]);
   });
 

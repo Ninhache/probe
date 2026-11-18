@@ -1,5 +1,10 @@
 import type { CheckResult } from "../../checkers/types";
-import { LOCAL_ENVIRONMENT } from "../../constants";
+import {
+  LOCAL_ENVIRONMENT,
+  LOG_PREVIEW_CHARS,
+  LOG_PREVIEW_SCAN_CHARS,
+  LOG_SIZE,
+} from "../../constants";
 
 export { LOCAL_ENVIRONMENT };
 
@@ -16,6 +21,28 @@ export interface Transition {
   env: string;
   ok: boolean;
   detail?: string;
+}
+
+/** One check result as a line of the log tab. */
+export interface LogEntry {
+  at: number;
+  service: string;
+  env: string;
+  ok: boolean;
+  /** The status code, or the error of a failure. */
+  detail?: string;
+  /** The body on one line, cut: built once, when the result is recorded. */
+  preview: string;
+}
+
+/** The body of a result as one line. The body was masked when it was checked, so no secret is in it. */
+export function bodyPreview(body: string | undefined): string {
+  if (!body) return "";
+  return body
+    .slice(0, LOG_PREVIEW_SCAN_CHARS)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, LOG_PREVIEW_CHARS);
 }
 
 export const HISTORY_SIZE = 600;
@@ -83,6 +110,7 @@ const keyOf = (service: string, env: string) => `${env}\u0000${service}`;
 /** What the dashboard remembers: a bounded history per service and environment, and the up/down transitions. */
 export class Tracker {
   readonly events = new Ring<Transition>(EVENTS_SIZE);
+  readonly log = new Ring<LogEntry>(LOG_SIZE);
   private readonly series = new Map<string, Ring<Sample>>();
   private readonly known = new Set<string>();
   private readonly results = new Map<string, CheckResult>();
@@ -122,6 +150,7 @@ export class Tracker {
     this.known.clear();
     this.results.clear();
     this.events.clear();
+    this.log.clear();
   }
 
   /** Forget the services of an environment that are not in `names` any more: removed or undone. */
@@ -164,6 +193,14 @@ export class Tracker {
         ? undefined
         : (result.error ?? (result.status ? String(result.status) : undefined));
       ring.push({ ok: result.ok, latencyMs: result.latencyMs, at, detail });
+      this.log.push({
+        at,
+        service: result.name,
+        env,
+        ok: result.ok,
+        detail: result.ok ? (result.status ? String(result.status) : undefined) : detail,
+        preview: bodyPreview(result.response?.body),
+      });
       if (before ? before.ok !== result.ok : !result.ok) {
         this.events.push({ at, service: result.name, env, ok: result.ok, detail });
       }

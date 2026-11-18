@@ -11,6 +11,7 @@ export type Screen =
   | "detail"
   | "response"
   | "peek"
+  | "log"
   | "help";
 
 export type Command =
@@ -21,6 +22,8 @@ export type Command =
   | "body"
   | "events"
   | "response"
+  | "log"
+  | "copylog"
   | "edit"
   | "remove"
   | "add"
@@ -60,7 +63,7 @@ interface Binding {
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
-  screens: ["list", "peek"],
+  screens: ["list", "peek", "log"],
   section: "List",
   ...binding,
 });
@@ -106,6 +109,30 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     barless: true,
     command: "body",
   }),
+  list({
+    keys: "3",
+    action: "log",
+    help: "Log tab",
+    barless: true,
+    command: "log",
+  }),
+  list({
+    keys: "y",
+    action: "copy lines",
+    help: "Copy the log lines on screen",
+    barless: true,
+    command: "copylog",
+  }),
+  {
+    screens: ["log"],
+    section: "List",
+    keys: "PgUp PgDn",
+    action: "scroll",
+    drop: 3,
+  },
+  { screens: ["log"], section: "List", keys: "End", action: "follow", drop: 2 },
+  { screens: ["log"], section: "List", keys: "y", action: "copy lines", drop: 1 },
+  { screens: ["log"], section: "List", keys: "1", action: "events", drop: 4 },
   peek({ keys: "PgUp PgDn", action: "scroll", drop: 3 }),
   peek({ keys: "u", action: "open", drop: 1 }),
   peek({ keys: "b", action: "copy body", drop: 1 }),

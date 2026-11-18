@@ -335,6 +335,13 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
                 say(view, message);
                 app.requestRender();
               }),
+          copyLog: (text) =>
+            void system(editing.config())
+              .onCopyLog(text)
+              .then((message) => {
+                say(view, message);
+                app.requestRender();
+              }),
           skip: (service, skip) => {
             track(options.onSkipChange?.(service, skip));
             monitor.refresh();

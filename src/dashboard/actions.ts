@@ -40,6 +40,7 @@ export function serviceActions(
     part?: ResponsePart,
     formatted?: boolean,
   ): Promise<string>;
+  onCopyLog(text: string): Promise<string>;
 } {
   const service = (name: string, selection?: Selection) => config(selection).services[name];
   const gone = (name: string) => `${name} is no longer in the config`;
@@ -72,6 +73,11 @@ export function serviceActions(
       }
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy the ${part} with`;
+    },
+    async onCopyLog(text) {
+      if (await deps.copyText(text)) return "Copied the log lines";
+      const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
+      return `No ${tools.join(" or ")} to copy the log with`;
     },
     async onNotify(message) {
       if (await deps.notify(NOTIFICATION_TITLE, message)) return undefined;
