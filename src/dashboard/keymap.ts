@@ -57,10 +57,6 @@ interface Binding {
   grid?: true;
   /** In the bar only when the selected config declares parameters. */
   parameters?: true;
-  /** Only on the native screen: the ink screen's bar and help leave it out. */
-  native?: true;
-  /** Only on the ink screen: the native one has its own binding for the key. */
-  ink?: true;
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
@@ -69,25 +65,22 @@ const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
   ...binding,
 });
 
-const detail = (binding: Omit<Binding, "screens" | "section" | "native">): Binding => ({
+const detail = (binding: Omit<Binding, "screens" | "section">): Binding => ({
   screens: ["detail"],
   section: "Service detail",
-  native: true,
   ...binding,
 });
 
-const response = (binding: Omit<Binding, "screens" | "section" | "native">): Binding => ({
+const response = (binding: Omit<Binding, "screens" | "section">): Binding => ({
   screens: ["response"],
   section: "Service detail",
-  native: true,
   ...binding,
 });
 
 /** The bar of the list while its response tab is open: the keys that tab adds. */
-const peek = (binding: Omit<Binding, "screens" | "section" | "native">): Binding => ({
+const peek = (binding: Omit<Binding, "screens" | "section">): Binding => ({
   screens: ["peek"],
   section: "List",
-  native: true,
   ...binding,
 });
 
@@ -98,7 +91,6 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     help: "Events tab",
     barless: true,
     command: "events",
-    native: true,
   }),
   list({
     keys: "2",
@@ -106,7 +98,6 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     help: "Response tab",
     barless: true,
     command: "response",
-    native: true,
   }),
   list({
     keys: "b",
@@ -114,7 +105,6 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     help: "Copy the response body",
     barless: true,
     command: "body",
-    native: true,
   }),
   peek({ keys: "PgUp PgDn", action: "scroll", drop: 3 }),
   peek({ keys: "u", action: "open", drop: 1 }),
@@ -126,7 +116,6 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     help: "New environment",
     barless: true,
     command: "environment",
-    native: true,
   }),
 ];
 
@@ -138,7 +127,6 @@ const DETAIL_BINDINGS: readonly Binding[] = [
   {
     screens: ["detail", "readonly"],
     section: "Service detail",
-    native: true,
     keys: "r",
     action: "response",
     help: "Full response",
@@ -226,34 +214,12 @@ const BINDINGS: readonly Binding[] = [
   {
     screens: ["choose"],
     section: "Parameters",
-    keys: "←→ hl",
-    ascii: "hl",
-    action: "parameter",
-    help: "Change parameter",
-    drop: 1,
-    parameters: true,
-    ink: true,
-  },
-  {
-    screens: ["choose"],
-    section: "Parameters",
-    keys: "↑↓ jk",
-    ascii: "jk",
-    action: "value",
-    help: "Choose its value",
-    parameters: true,
-    ink: true,
-  },
-  {
-    screens: ["choose"],
-    section: "Parameters",
     keys: "↑↓ jk",
     ascii: "jk",
     action: "parameter",
     help: "Change parameter",
     drop: 1,
     parameters: true,
-    native: true,
   },
   {
     screens: ["choose"],
@@ -263,7 +229,6 @@ const BINDINGS: readonly Binding[] = [
     action: "value",
     help: "Choose its value",
     parameters: true,
-    native: true,
   },
   {
     screens: ["choose"],
@@ -387,10 +352,7 @@ const SECTIONS: readonly Section[] = [
 const written = (binding: Binding, unicode: boolean) =>
   unicode ? binding.keys : (binding.ascii ?? binding.keys);
 
-const offered = (grid: boolean, native = false) =>
-  BINDINGS.filter(
-    (binding) => (grid || !binding.grid) && (native || !binding.native) && !(native && binding.ink),
-  );
+const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
 
 export interface BarItem {
   keys: string;
@@ -404,9 +366,8 @@ export function helpBarItems(
   columns: number,
   grid = false,
   parameters = false,
-  native = false,
 ): BarItem[] {
-  const shown = offered(grid, native).filter(
+  const shown = offered(grid).filter(
     (binding) =>
       binding.screens.includes(screen) && !binding.barless && (parameters || !binding.parameters),
   );
@@ -426,20 +387,8 @@ export function helpBarItems(
   return shown.map((binding) => ({ keys: written(binding, unicode), action: binding.action }));
 }
 
-export function helpBar(
-  screen: Screen,
-  unicode: boolean,
-  columns: number,
-  grid = false,
-  parameters = false,
-): string {
-  return helpBarItems(screen, unicode, columns, grid, parameters)
-    .map(({ keys, action }) => `${keys} ${action}`)
-    .join(unicode ? " · " : " - ");
-}
-
-export function keyCommand(input: string, enter: boolean, native = false): Command | undefined {
-  return offered(true, native).find(
+export function keyCommand(input: string, enter: boolean): Command | undefined {
+  return offered(true).find(
     ({ keys, command }) => command && (enter ? keys === "↵" : keys === input),
   )?.command;
 }
@@ -450,9 +399,9 @@ export interface PaletteEntry {
   keys: string;
 }
 
-export function paletteEntries(unicode: boolean, query = "", native = false): PaletteEntry[] {
+export function paletteEntries(unicode: boolean, query = ""): PaletteEntry[] {
   const wanted = query.trim().toLowerCase();
-  return offered(true, native).flatMap((binding) => {
+  return offered(true).flatMap((binding) => {
     const { command, help, action } = binding;
     if (!command || !help || !`${help} ${action}`.toLowerCase().includes(wanted)) return [];
     return [{ command, label: help, keys: written(binding, unicode) }];
@@ -460,7 +409,7 @@ export function paletteEntries(unicode: boolean, query = "", native = false): Pa
 }
 
 export interface HelpLine {
-  /** Unique among the lines: the same key can be in two sections. */
+  /** Unique among the lines: the same key can be in two sections, or on two screens of one. */
   id: string;
   text: string;
   heading: boolean;
@@ -469,13 +418,8 @@ export interface HelpLine {
 const HELP_GAP = 3;
 const LEFT_SECTIONS = 2;
 
-function sectionLines(
-  sections: readonly Section[],
-  unicode: boolean,
-  grid: boolean,
-  native: boolean,
-): HelpLine[] {
-  const described = offered(grid, native).filter(({ help }) => help !== undefined);
+function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
+  const described = offered(grid).filter(({ help }) => help !== undefined);
   const width = Math.max(...described.map((binding) => written(binding, unicode).length));
   const present = sections.filter((title) => described.some(({ section }) => section === title));
   return present.flatMap((title) => [
@@ -483,31 +427,26 @@ function sectionLines(
     ...described
       .filter(({ section }) => section === title)
       .map((binding) => ({
-        id: `${title} ${binding.keys}`,
+        id: `${title} ${binding.screens.join("+")} ${binding.keys}`,
         text: `  ${written(binding, unicode).padEnd(width)}  ${binding.help}`,
         heading: false,
       })),
   ]);
 }
 
-export function helpLines(unicode: boolean, grid = false, native = false): HelpLine[] {
-  return sectionLines(SECTIONS, unicode, grid, native);
+export function helpLines(unicode: boolean, grid = false): HelpLine[] {
+  return sectionLines(SECTIONS, unicode, grid);
 }
 
-export function helpColumns(
-  unicode: boolean,
-  columns: number,
-  grid = false,
-  native = false,
-): HelpLine[][] {
+export function helpColumns(unicode: boolean, columns: number, grid = false): HelpLine[][] {
   // The list and the parameters it opens on the left: both columns then fit 24 lines.
   const sides = [
-    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid, native),
-    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid, native),
+    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid),
+    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid),
   ];
   const widths = sides.map((side) => Math.max(...side.map(({ text }) => text.length)));
   const fits = (widths[0] as number) + HELP_GAP + (widths[1] as number) <= columns;
-  return fits ? sides : [helpLines(unicode, grid, native)];
+  return fits ? sides : [helpLines(unicode, grid)];
 }
 
 export { HELP_GAP };

@@ -7,8 +7,7 @@ import type { InputEvent } from "../../tui/input";
 import type { ModalStack } from "../../tui/modal";
 import { drawField, fieldKey, fieldValue, textField } from "../../tui/textfield";
 import { defaultTheme as t } from "../../tui/theme";
-import type { Secrets } from "../Dashboard";
-import type { Editing } from "../editing";
+import type { Editing, Secrets } from "../editing";
 import {
   emptyForm,
   type FormSecret,

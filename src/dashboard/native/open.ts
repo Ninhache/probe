@@ -206,7 +206,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     },
   };
   const loaded = new Map<string, Config>();
-  // Parameters an environment's file declares join the local ones, as on the ink screen.
+  // Parameters an environment's file declares join the local ones.
   const merge = () => mergedParameters(editing.config(), loaded.values());
   const checks = environmentChecks(
     live,

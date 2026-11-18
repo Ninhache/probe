@@ -74,10 +74,8 @@ describe("the parameters panel", () => {
     press("p");
     const text = draw();
     expect(text).toContain("↑↓ parameter · ←→ value · esc");
-    const bar = helpBarItems("choose", true, 200, false, true, true);
+    const bar = helpBarItems("choose", true, 200, false, true);
     expect(bar.find(({ action }) => action === "parameter")?.keys).toBe("↑↓ jk");
-    const ink = helpBarItems("choose", true, 200, false, true);
-    expect(ink.find(({ action }) => action === "parameter")?.keys).toBe("←→ hl");
   });
 
   it("draws a chevron only where the value can move", () => {

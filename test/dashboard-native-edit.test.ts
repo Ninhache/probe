@@ -8,7 +8,7 @@ import type { ServiceWrite } from "../src/commands/service-writes";
 import { reference } from "../src/config/headers";
 import { parameterChoices } from "../src/config/parameters";
 import type { Config } from "../src/config/schema";
-import type { ParameterWriteOutcome } from "../src/dashboard/Dashboard";
+import type { ParameterWriteOutcome } from "../src/dashboard/editing";
 import { type EditCallbacks, liveEditing, timeoutsOf } from "../src/dashboard/editing";
 import { createEditor } from "../src/dashboard/native/editor";
 import { Tracker } from "../src/dashboard/native/history";

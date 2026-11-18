@@ -16,9 +16,3 @@ export function nextChoice(
   const next = starting.indexOf(choices[at] ?? "") + 1;
   return starting[next % starting.length] ?? current;
 }
-
-/** The keys that choose, with the list when it fits in `room`. */
-export function choiceHint(choices: readonly string[], room = Number.POSITIVE_INFINITY): string {
-  const listed = `←→ or a letter: ${choices.join(", ")}`;
-  return listed.length <= room ? listed : "←→ or a first letter, again for the next";
-}

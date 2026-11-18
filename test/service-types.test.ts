@@ -5,7 +5,7 @@ import type { ServiceType } from "../src/checkers/types";
 import { applySelection } from "../src/config/parameters";
 import { configSchemaV1, type Service } from "../src/config/schema";
 import { serviceActions } from "../src/dashboard/actions";
-import { detailLines, recordLatencies } from "../src/dashboard/detail";
+import { detailLines } from "../src/dashboard/detail";
 import { type EditCallbacks, liveEditing } from "../src/dashboard/editing";
 import { createEditor } from "../src/dashboard/native/editor";
 import { Tracker } from "../src/dashboard/native/history";
@@ -78,7 +78,7 @@ describe("a service type", () => {
 
   it("should show an up service without a status by its latency", async () => {
     const results = await runChecks(config, [], { timeoutMs: 100, types });
-    const history = recordLatencies({}, results).db ?? [];
+    const history = [1];
 
     const lines = detailLines(results[0] as never, history, {
       unicode: false,

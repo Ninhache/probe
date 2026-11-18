@@ -2,8 +2,7 @@ import { PARAMETER_KINDS } from "../../checkers/registry";
 import type { ParameterWrite } from "../../commands/parameter-writes";
 import { urlProblem } from "../../config/schema";
 import type { ModalStack } from "../../tui/modal";
-import type { ParameterWriteOutcome } from "../Dashboard";
-import type { Editing } from "../editing";
+import type { Editing, ParameterWriteOutcome } from "../editing";
 import {
   type AddressRow,
   addressChanges,

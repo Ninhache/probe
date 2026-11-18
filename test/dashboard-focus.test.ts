@@ -9,7 +9,7 @@ const FOCUS_OUT = `${ESCAPE}[O`;
 function terminal() {
   const input = new PassThrough();
   const read: string[] = [];
-  // Ink reads the same way: what the watch sees must still reach it.
+  // The input engine reads the same way: what the watch sees must still reach it.
   input.on("readable", () => {
     for (let chunk = input.read(); chunk !== null; chunk = input.read()) read.push(String(chunk));
   });

@@ -4,16 +4,28 @@ import type { ParameterProblem, ParameterWrite } from "../commands/parameter-wri
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
 import { serviceVariables } from "../config/headers";
 import { type Config, declaresAddress, type Parameter, type Service } from "../config/schema";
-import type {
-  ParameterWriteOutcome,
-  Secrets,
-  ServiceTimeouts,
-  ServiceWriteOutcome,
-} from "./Dashboard";
 import type { UrlParameter } from "./form";
 import type { Addresses } from "./parameter-form";
 import type { Saved } from "./saves";
 import { type VariableSources, type VariableTools, variableTools } from "./variables";
+
+/** The values of the variables a write keeps in local.yml, by name. */
+export type Secrets = Readonly<Record<string, string>>;
+
+export interface ServiceWriteOutcome {
+  saved: boolean;
+  failure?: string;
+  warning?: string;
+}
+
+export interface ParameterWriteOutcome {
+  saved: boolean;
+  problem?: ParameterProblem;
+  failure?: string;
+  drops?: string[];
+}
+
+export type ServiceTimeouts = Readonly<Record<string, number | undefined>>;
 
 /** What writes the files, given by the command line: each resolves to the config as written, or to why not. */
 export interface EditCallbacks {

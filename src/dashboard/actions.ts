@@ -5,7 +5,6 @@ import type { Selection } from "../config/parameters";
 import type { Config } from "../config/schema";
 import { notifierName, sendNotification } from "../notify";
 import { openerCommand, openUrl } from "../open-url";
-import type { DashboardProps } from "./Dashboard";
 import type { ResponsePart } from "./response";
 
 const NOTIFICATION_TITLE = "probe";
@@ -30,7 +29,11 @@ const system = (): ActionDeps => ({
 export function serviceActions(
   config: (selection?: Selection) => Config,
   deps: ActionDeps = system(),
-): Required<Pick<DashboardProps, "onOpen" | "onCopy" | "onNotify">> & {
+): {
+  onOpen(name: string, selection?: Selection): Promise<string>;
+  onCopy(name: string, timeout: number | undefined, selection?: Selection): Promise<string>;
+  /** Resolves to a warning when no notification could be shown. */
+  onNotify(message: string): Promise<string | undefined>;
   onCopyResponse(text: string, cut: boolean, part?: ResponsePart): Promise<string>;
 } {
   const service = (name: string, selection?: Selection) => config(selection).services[name];

@@ -1,8 +1,7 @@
 import type { ParameterWrite } from "../../commands/parameter-writes";
 import type { ServiceWrite } from "../../commands/service-writes";
 import { CONFIG_FILE, LOCAL_ENVIRONMENT, LOCAL_FILE, PROBE_DIR } from "../../constants";
-import type { Secrets } from "../Dashboard";
-import type { Editing } from "../editing";
+import type { Editing, Secrets } from "../editing";
 import type { VariableRow } from "../variables";
 import { confirmModal } from "./confirm";
 import { environmentFormModal } from "./environment-form";

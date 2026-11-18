@@ -63,7 +63,7 @@ import {
   PROBE_DIR,
   REFRESH_COMMAND,
 } from "./constants";
-import type { Secrets } from "./dashboard/Dashboard";
+import type { Secrets } from "./dashboard/editing";
 import { createSaveQueue } from "./dashboard/saves";
 import type { DashboardSettings } from "./dashboard/settings";
 import { createUndoJournal, journalFiles, type UndoOutcome } from "./dashboard/undo";

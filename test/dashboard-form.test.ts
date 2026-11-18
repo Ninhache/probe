@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  EMPTY_FORM,
+  emptyForm,
   formFields,
   formProblem,
   formRows,
@@ -20,7 +20,7 @@ describe("service form", () => {
   });
 
   it("should read empty fields as the defaults", () => {
-    expect(formFields({ ...EMPTY_FORM, name: "api", address: "3000" })).toEqual({
+    expect(formFields({ ...emptyForm(), name: "api", address: "3000" })).toEqual({
       port: 3000,
       host: "localhost",
       path: "/",
@@ -31,7 +31,7 @@ describe("service form", () => {
   });
 
   it("should read the method in capitals, and refuse one that is not a known verb", () => {
-    const values = { ...EMPTY_FORM, name: "api", address: "3000", method: "post" };
+    const values = { ...emptyForm(), name: "api", address: "3000", method: "post" };
 
     expect(formFields(values).method).toBe("POST");
     expect(formProblem(adding, values, [])).toBeUndefined();
@@ -66,7 +66,7 @@ describe("service form", () => {
   });
 
   it("should drop a header whose line was emptied", () => {
-    const values = { ...EMPTY_FORM, address: "3000", headers: ["  ", "Accept: text/plain"] };
+    const values = { ...emptyForm(), address: "3000", headers: ["  ", "Accept: text/plain"] };
 
     expect(formFields(values).headers).toEqual({ Accept: "text/plain" });
     expect(formFields({ ...values, headers: [""] }).headers).toBeUndefined();
@@ -79,7 +79,7 @@ describe("service form", () => {
     ["Authorization:", "Authorization expects a value"],
     ["Accept: \u0007", "Accept expects a value on one line"],
   ])("should refuse the header %j", (line, message) => {
-    const values = { ...EMPTY_FORM, name: "web", address: "3000", headers: ["Accept: a", line] };
+    const values = { ...emptyForm(), name: "web", address: "3000", headers: ["Accept: a", line] };
 
     const problem = formProblem(adding, { ...values, headers: ["X-One: 1", line] }, []);
 
@@ -88,7 +88,7 @@ describe("service form", () => {
   });
 
   it("should refuse the same header twice, whatever the case", () => {
-    const values = { ...EMPTY_FORM, address: "3000", headers: ["Accept: a", "", "accept: b"] };
+    const values = { ...emptyForm(), address: "3000", headers: ["Accept: a", "", "accept: b"] };
 
     expect(formProblem(formRows(false), values, [])).toEqual({
       row: formRows(false).length + 2,
@@ -97,7 +97,7 @@ describe("service form", () => {
   });
 
   it("should never repeat a value in what it refuses", () => {
-    const values = { ...EMPTY_FORM, address: "3000", headers: [`X-Token: ${SECRET}\u0007`] };
+    const values = { ...emptyForm(), address: "3000", headers: [`X-Token: ${SECRET}\u0007`] };
 
     expect(formProblem(formRows(false), values, [])?.message).not.toContain(SECRET);
   });
@@ -108,7 +108,7 @@ describe("service form", () => {
       `Authorization: Bearer ${SECRET}`,
       `X-Api-Key: ${SECRET}`,
     ];
-    const values = { ...EMPTY_FORM, address: "3000", headers };
+    const values = { ...emptyForm(), address: "3000", headers };
 
     expect(formProblem(formRows(false), values, [])).toBeUndefined();
     const found = formSecret(values);
@@ -122,7 +122,7 @@ describe("service form", () => {
   it("should find no secret in a reference or in an ordinary header", () => {
     const headers = [`Authorization: Bearer ${REFERENCE}`, "Accept: text/plain"];
 
-    expect(formSecret({ ...EMPTY_FORM, headers })).toBeUndefined();
+    expect(formSecret({ ...emptyForm(), headers })).toBeUndefined();
   });
 
   it.each([
@@ -135,18 +135,18 @@ describe("service form", () => {
     [{ name: "web", address: "3000", expect: "ok" }, 2],
     [{ name: "web", address: "3000", expect: "999" }, 2],
   ])("should refuse %o at row %i", (typed, row) => {
-    expect(formProblem(adding, { ...EMPTY_FORM, ...typed }, ["api"])?.row).toBe(row);
+    expect(formProblem(adding, { ...emptyForm(), ...typed }, ["api"])?.row).toBe(row);
   });
 
   it("should accept a name and a port alone", () => {
     expect(
-      formProblem(adding, { ...EMPTY_FORM, name: "web", address: "3000" }, ["api"]),
+      formProblem(adding, { ...emptyForm(), name: "web", address: "3000" }, ["api"]),
     ).toBeUndefined();
   });
 
   it("should not look at the name when editing", () => {
     expect(
-      formProblem(formRows(false), { ...EMPTY_FORM, address: "3000" }, ["api"]),
+      formProblem(formRows(false), { ...emptyForm(), address: "3000" }, ["api"]),
     ).toBeUndefined();
   });
 });

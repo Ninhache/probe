@@ -21,7 +21,6 @@ export const DEFAULT_MAKEFILE = "Makefile";
 export const DEFAULT_CHECKER_TYPE = "http";
 export const DEFAULT_TIMEOUT_SECONDS = 3;
 export const DASHBOARD_INTERVAL_SECONDS = 2;
-export const DASHBOARD_HISTORY_LENGTH = 30;
 export const RESPONSE_BODY_BYTES = 2_048;
 export const RESPONSE_BODY_WAIT_MS = 500;
 /** What the dashboard keeps of a response body in memory, to show it whole and copy it. */

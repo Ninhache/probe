@@ -13,8 +13,8 @@ const PROMPT = ": ";
 export function paletteModal(choose: (command: Command) => void): Panel {
   let query = textField();
   let at = 0;
-  const entries = () => paletteEntries(true, fieldValue(query), true);
-  const total = paletteEntries(true, "", true).length;
+  const entries = () => paletteEntries(true, fieldValue(query));
+  const total = paletteEntries(true, "").length;
   return {
     title: "commands",
     bar: "palette",

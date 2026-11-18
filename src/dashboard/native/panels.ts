@@ -99,7 +99,7 @@ export function detailPanel(
   const width = Math.min(PANEL_WIDTH, area.w - MARGIN * 2);
   const variables = writable ? actions.edit?.variables : undefined;
   let found: readonly VariableRow[] = [];
-  // -1 is no variable: enter then closes the panel, as on the ink screen.
+  // -1 is no variable: enter then closes the panel.
   let at = -1;
   const load = () =>
     void variables?.load(service).then((rows) => {
@@ -313,7 +313,7 @@ export function selected(view: ViewState): Readonly<Record<string, string>> {
   return effectiveSelection(view.choices, view.selection);
 }
 
-/** One row per parameter: ←→ pick the parameter, ↑↓ change its value, as on the ink screen. */
+/** One row per parameter: ←→ pick the parameter, ↑↓ change its value. */
 export function parametersPanel(view: ViewState, actions: ViewActions): Panel {
   const names = (choices: ParameterChoices) => Object.keys(choices);
   let at = 0;

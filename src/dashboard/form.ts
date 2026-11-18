@@ -62,8 +62,6 @@ export function emptyForm(form: ServiceForm = defaultForm()): FormValues {
   };
 }
 
-export const EMPTY_FORM: FormValues = emptyForm();
-
 export function formRows(adding: boolean, form: ServiceForm = defaultForm()): readonly FormRow[] {
   return adding ? [NAME_ROW, ...form.fields] : form.fields;
 }
