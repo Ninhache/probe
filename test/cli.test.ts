@@ -106,9 +106,11 @@ describe("probe init", () => {
   it("creates the config and the .gitignore entries, and no Makefile", async () => {
     const root = await project();
 
-    expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).toContain(
-      "schemaVersion: 1\nservices: {}\n",
+    const config = await readFile(join(root, ".probe", "config.yml"), "utf8");
+    expect(config).toMatch(
+      /^# yaml-language-server: \$schema=https:\/\/cdn\.jsdelivr\.net\/npm\/@ninhache\/probe@latest\/schema\/config\.v1\.json\n/,
     );
+    expect(config).toContain("schemaVersion: 1\nservices: {}\n");
     expect(await readdir(root)).toEqual([".gitignore", ".probe"]);
     expect(await readdir(join(root, ".probe"))).toEqual(["config.yml"]);
     expect(await readFile(join(root, ".gitignore"), "utf8")).toBe(
@@ -124,6 +126,15 @@ describe("probe init", () => {
 
     expect(await readFile(join(root, ".gitignore"), "utf8")).toBe(
       "node_modules\n.probe/local.yml\n.probe/*.bak.yml\n",
+    );
+  });
+
+  it("keeps the link to the JSON Schema when a service is added", async () => {
+    const root = await project();
+    await probe(root, "add", "api", "-p", "3000");
+
+    expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).toMatch(
+      /^# yaml-language-server: \$schema=\S+\n# probe - /,
     );
   });
 
