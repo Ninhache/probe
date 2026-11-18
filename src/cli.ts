@@ -112,10 +112,6 @@ const main = defineCommand({
       description: "Seconds between two refreshes of the dashboard (probe alone, on a terminal)",
       default: String(DASHBOARD_INTERVAL_SECONDS),
     },
-    once: {
-      type: "boolean",
-      description: "Check once, print a table and exit (native screen: PROBE_TUI=native)",
-    },
   },
   subCommands: { ...commands, completion: completionCommand(commands) },
 });
@@ -164,7 +160,7 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
 // The interactive libraries are imported here only: every other path starts without them.
 async function openedDashboard(allArgs: string[]): Promise<boolean> {
   const native = process.env.PROBE_TUI === "native";
-  // `--once` belongs to the native screen: the ink one does not know it.
+  // `--once` belongs to the native screen and is not declared in the usage yet: the ink one does not know it.
   const once = native && allArgs.includes(ONCE_OPTION);
   const rawArgs = once ? allArgs.filter((arg) => arg !== ONCE_OPTION) : allArgs;
   const interval = dashboardInterval(rawArgs);
