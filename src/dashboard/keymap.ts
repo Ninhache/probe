@@ -19,6 +19,7 @@ export type Command =
   | "edit"
   | "remove"
   | "add"
+  | "environment"
   | "filter"
   | "options"
   | "parameters"
@@ -67,6 +68,17 @@ const detail = (binding: Omit<Binding, "screens" | "section" | "native">): Bindi
   native: true,
   ...binding,
 });
+
+const NATIVE_LIST_BINDINGS: readonly Binding[] = [
+  list({
+    keys: "n",
+    action: "new environment",
+    help: "New environment",
+    barless: true,
+    command: "environment",
+    native: true,
+  }),
+];
 
 const DETAIL_BINDINGS: readonly Binding[] = [
   detail({ keys: "←→", ascii: "arrows", action: "timeout", help: "Service timeout", drop: 3 }),
@@ -256,6 +268,7 @@ const BINDINGS: readonly Binding[] = [
   { screens: ["confirm"], keys: "n esc", action: "keep" },
   { screens: ["help"], keys: "? esc", action: "close" },
   ...DETAIL_BINDINGS,
+  ...NATIVE_LIST_BINDINGS,
   {
     screens: ["list", "panel", "readonly", "choose"],
     section: "Outside a text field",
@@ -336,9 +349,10 @@ export function helpBar(
     .join(unicode ? " · " : " - ");
 }
 
-export function keyCommand(input: string, enter: boolean): Command | undefined {
-  return BINDINGS.find(({ keys, command }) => command && (enter ? keys === "↵" : keys === input))
-    ?.command;
+export function keyCommand(input: string, enter: boolean, native = false): Command | undefined {
+  return offered(true, native).find(
+    ({ keys, command }) => command && (enter ? keys === "↵" : keys === input),
+  )?.command;
 }
 
 export interface PaletteEntry {
@@ -347,9 +361,9 @@ export interface PaletteEntry {
   keys: string;
 }
 
-export function paletteEntries(unicode: boolean, query = ""): PaletteEntry[] {
+export function paletteEntries(unicode: boolean, query = "", native = false): PaletteEntry[] {
   const wanted = query.trim().toLowerCase();
-  return BINDINGS.flatMap((binding) => {
+  return offered(true, native).flatMap((binding) => {
     const { command, help, action } = binding;
     if (!command || !help || !`${help} ${action}`.toLowerCase().includes(wanted)) return [];
     return [{ command, label: help, keys: written(binding, unicode) }];

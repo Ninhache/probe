@@ -43,10 +43,44 @@ export interface NativeDashboardOptions extends EditCallbacks {
   deps?: ActionDeps;
   /** Says whether the terminal window has the focus; by default asked of the terminal itself. */
   focus?: FocusWatch;
+  /** Creates the file of a new environment, copied from `from`; absent where none can be created. */
+  onEnvironmentCreate?: (
+    name: string,
+    from: string,
+  ) => Promise<{ source: EnvironmentSource; message: string }>;
 }
 
 /** What the next pass runs with: the screen changes it while it runs. */
 export type LiveState = Pick<ViewState, "settings" | "skipped" | "timeouts" | "selection">;
+
+/** The check of an environment file, read again at each pass. */
+export function sourceCheck(
+  source: EnvironmentSource,
+  live: () => LiveState,
+  onLoaded: (env: string, declared: Config) => void,
+): EnvironmentCheck {
+  return {
+    name: source.name,
+    run: async (signal) => {
+      const { config: declared, variables: loaded, skipped } = await source.load();
+      onLoaded(source.name, declared);
+      const now = live();
+      return runChecks(
+        declared,
+        [],
+        {
+          timeoutMs: now.settings.timeoutMs,
+          signal,
+          detail: true,
+          variables: loaded,
+          configFile: source.file,
+          selection: now.selection,
+        },
+        skipped,
+      );
+    },
+  };
+}
 
 export function environmentChecks(
   options: NativeDashboardOptions,
@@ -93,32 +127,7 @@ export function environmentChecks(
           },
         },
       ];
-  return [
-    ...local,
-    ...environments.map(
-      (source): EnvironmentCheck => ({
-        name: source.name,
-        run: async (signal) => {
-          const { config: declared, variables: loaded, skipped } = await source.load();
-          onLoaded(source.name, declared);
-          const now = live();
-          return runChecks(
-            declared,
-            [],
-            {
-              timeoutMs: now.settings.timeoutMs,
-              signal,
-              detail: true,
-              variables: loaded,
-              configFile: source.file,
-              selection: now.selection,
-            },
-            skipped,
-          );
-        },
-      }),
-    ),
-  ];
+  return [...local, ...environments.map((source) => sourceCheck(source, live, onLoaded))];
 }
 
 /** A window in focus shows the change itself: only one out of focus, or unknown, is notified. */
@@ -212,7 +221,29 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       say(view, cfg ? await work(cfg) : `${env} cannot be read`);
       app.requestRender();
     };
+    const created = options.onEnvironmentCreate;
+    const createEnvironment =
+      created &&
+      (async (name: string, from: string) => {
+        const { source, message } = await created(name, from);
+        sources.set(name, source);
+        tracker.add(name);
+        view.tab = tracker.environments.indexOf(name) + 1;
+        monitor.add(
+          sourceCheck(
+            source,
+            () => view,
+            (env, declared) => {
+              loaded.set(env, declared);
+              view.choices = merge();
+            },
+          ),
+        );
+        app.requestRender();
+        return message;
+      });
     const edit = createEditor({
+      createEnvironment,
       view,
       tracker,
       editing,

@@ -87,10 +87,19 @@ export class Tracker {
   private readonly known = new Set<string>();
   private readonly results = new Map<string, CheckResult>();
 
+  /** The tabs, in order; `add` appends one while the dashboard runs. */
+  readonly environments: string[];
+
   constructor(
-    readonly environments: readonly string[],
+    environments: readonly string[],
     private readonly historySize = HISTORY_SIZE,
-  ) {}
+  ) {
+    this.environments = [...environments];
+  }
+
+  add(env: string): void {
+    if (!this.environments.includes(env)) this.environments.push(env);
+  }
 
   /** Service names seen so far, in the order they first appeared, then sorted. */
   services(env?: string): string[] {

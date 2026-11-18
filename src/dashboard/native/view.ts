@@ -412,7 +412,8 @@ export function handleInput(
     return;
   }
   const typed = fromEngineKey(event).input;
-  const command = event.name === "enter" ? keyCommand("", true) : keyCommand(typed, false);
+  const command =
+    event.name === "enter" ? keyCommand("", true, true) : keyCommand(typed, false, true);
   if (command) runCommand(command, tracker, view, actions);
   else if (typed === ":") openPalette(view);
   else if (event.name === "tab") cycle(event.shift ? -1 : 1);
@@ -486,6 +487,9 @@ export function runCommand(
     case "add":
       if (elsewhere) say(view, elsewhere);
       else actions.edit?.add();
+      break;
+    case "environment":
+      actions.edit?.environment?.();
       break;
     case "edit":
       edit((editor, name) => editor.edit(name));

@@ -1,5 +1,8 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
+import { createEnvironment } from "../src/commands/env-create";
 import type { ParameterWrite } from "../src/commands/parameter-writes";
 import type { ServiceWrite } from "../src/commands/service-writes";
 import { reference } from "../src/config/headers";
@@ -9,6 +12,7 @@ import type { ParameterWriteOutcome } from "../src/dashboard/Dashboard";
 import { type EditCallbacks, liveEditing, timeoutsOf } from "../src/dashboard/editing";
 import { createEditor } from "../src/dashboard/native/editor";
 import { Tracker } from "../src/dashboard/native/history";
+import { Monitor } from "../src/dashboard/native/monitor";
 import {
   handleInput,
   initialView,
@@ -17,6 +21,7 @@ import {
 } from "../src/dashboard/native/view";
 import { parseInput } from "../src/tui/input";
 import { Screen } from "../src/tui/screen";
+import { tempProject } from "./helpers";
 
 const ESC = "\x1b";
 const ENTER = "\r";
@@ -36,12 +41,13 @@ const answered = (name: string): CheckResult =>
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 interface Options {
+  create?: (name: string, from: string) => Promise<string>;
   edits?: Partial<EditCallbacks>;
   config?: Config;
   environments?: string[];
 }
 
-function setup({ edits = {}, config = initial, environments = [] }: Options = {}) {
+function setup({ edits = {}, config = initial, environments = [], create }: Options = {}) {
   const writes: ServiceWrite[] = [];
   const kept: Record<string, string>[] = [];
   const callbacks: EditCallbacks = {
@@ -75,6 +81,14 @@ function setup({ edits = {}, config = initial, environments = [] }: Options = {}
     redraw: () => {},
     fileOf: (env) => (env === "local" ? undefined : `${env}.yml`),
     declaredIn: () => ["prod.yml"],
+    createEnvironment:
+      create &&
+      (async (name, from) => {
+        const told = await create(name, from);
+        tracker.add(name);
+        view.tab = tracker.environments.indexOf(name) + 1;
+        return told;
+      }),
   });
   const calls: string[] = [];
   const actions: ViewActions = { quit: () => calls.push("quit"), refresh: () => {}, edit };
@@ -400,7 +414,7 @@ describe("command palette", () => {
 
   it("scrolls the commands on a short terminal, the selected one in sight", () => {
     const { press, draw } = setup();
-    press(`:${down.repeat(13)}`);
+    press(`:${down.repeat(30)}`);
     const frame = draw(110, 14);
     expect(frame).toContain("Quit");
     expect(frame).not.toContain("Check now");
@@ -661,5 +675,111 @@ describe("an empty list", () => {
     const { view, draw } = setup({ config: { schemaVersion: 1, services: {} } as Config });
     view.canAdd = true;
     expect(draw()).toContain("no service: press a to add one");
+  });
+});
+
+// Real files are read and written: a few turns of the event loop.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
+
+describe("a new environment", () => {
+  const SECRET = "never-copied-value";
+  const yaml = [
+    "schemaVersion: 1",
+    "services:",
+    `  api: { host: localhost, port: 3000, headers: { X-Key: '${reference("KEY")}' } }`,
+    "",
+  ].join("\n");
+
+  async function project(existing: string[] = []) {
+    const paths = await tempProject(yaml);
+    await writeFile(join(paths.dir, "local.yml"), `variables:\n  KEY: ${SECRET}\n`);
+    await mkdir(join(paths.dir, "envs"), { recursive: true });
+    for (const name of existing)
+      await writeFile(join(paths.dir, "envs", `${name}.yml`), `${yaml}# ${name}\n`);
+    const added: string[] = [];
+    const test = setup({
+      environments: existing,
+      edits: {},
+      create: async (name, from) => {
+        const { variables } = await createEnvironment(paths, name, from);
+        added.push(name);
+        return `Created ${name} from ${from}. Sends ${variables.join(", ")}`;
+      },
+    });
+    return { ...test, paths, added };
+  }
+  const read = (paths: { dir: string }, name: string) =>
+    readFile(join(paths.dir, "envs", `${name}.yml`), "utf8");
+
+  it("is offered by n and by the palette", async () => {
+    const { press, draw } = await project();
+    press("n");
+    expect(draw()).toContain("new environment");
+    press(ESC);
+    press(":");
+    press("environment");
+    expect(draw()).toContain("New environment");
+  });
+
+  it("copies the services of local, never a secret value, and shows the new tab", async () => {
+    const { press, draw, paths, tracker, view, added } = await project();
+    press("nprod");
+    press(ENTER);
+    await settle();
+    expect(added).toEqual(["prod"]);
+    const copy = await read(paths, "prod");
+    expect(copy).toBe(yaml);
+    expect(copy).not.toContain(SECRET);
+    expect(tracker.environments).toContain("prod");
+    expect(view.tab).toBe(tracker.environments.indexOf("prod") + 1);
+    const frame = draw();
+    expect(frame).toContain("prod");
+    expect(frame).toContain("Created prod from local");
+    expect(frame).not.toContain(SECRET);
+    expect(view.modals.depth).toBe(0);
+  });
+
+  it("copies from another environment when it is chosen", async () => {
+    const { press, paths } = await project(["staging"]);
+    press(`nqa${"\t"}`);
+    press(`${ESC}[C`);
+    press(ENTER);
+    await settle();
+    expect(await read(paths, "qa")).toContain("# staging");
+  });
+
+  it.each([
+    ["bad name", "an environment name is made of letters, digits, _ and -, e.g. prod."],
+    ["local", "local is .probe/config.yml: pick another name."],
+    ["staging", ".probe/envs/staging.yml is already there: edit it, or pick another name."],
+  ])("refuses %j", async (name, message) => {
+    const { press, draw, added } = await project(["staging"]);
+    press(`n${name}`);
+    press(ENTER);
+    await settle();
+    expect(draw()).toContain(message);
+    expect(added).toEqual([]);
+  });
+
+  it("keeps the form open when the file turned up meanwhile", async () => {
+    const { press, draw, paths } = await project();
+    await writeFile(join(paths.dir, "envs", "late.yml"), "x");
+    press("nlate");
+    press(ENTER);
+    await settle();
+    expect(draw()).toContain("is already there");
+  });
+
+  it("starts the checks of an environment added to a running monitor", async () => {
+    const ran: string[] = [];
+    const monitor = new Monitor([], {
+      intervalMs: 60_000,
+      onResults: (env) => void ran.push(env),
+      onFailure: () => {},
+    });
+    monitor.add({ name: "prod", run: async () => [answered("api")] });
+    await settle();
+    monitor.stop();
+    expect(ran).toEqual(["prod"]);
   });
 });

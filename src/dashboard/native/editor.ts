@@ -1,10 +1,11 @@
 import type { ParameterWrite } from "../../commands/parameter-writes";
 import type { ServiceWrite } from "../../commands/service-writes";
-import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../../constants";
+import { CONFIG_FILE, LOCAL_ENVIRONMENT, LOCAL_FILE, PROBE_DIR } from "../../constants";
 import type { Secrets } from "../Dashboard";
 import type { Editing } from "../editing";
 import type { VariableRow } from "../variables";
 import { confirmModal } from "./confirm";
+import { environmentFormModal } from "./environment-form";
 import type { Tracker } from "./history";
 import { parameterFormModal } from "./parameter-form";
 import { serviceFormModal } from "./service-form";
@@ -22,6 +23,8 @@ export interface Editor {
   remove(service: string): void;
   undo(): void;
   redo(): void;
+  /** Opens the form of a new environment; absent when none can be created. */
+  environment?(): void;
   /** The keys of the parameters panel; absent when no writer was given. */
   parameters?: {
     add(): void;
@@ -42,6 +45,8 @@ export interface EditorDeps {
   editing: Editing;
   /** The files changed: the services and parameters are read again and a pass starts. `restart` also forgets what was measured. */
   changed(restart?: boolean): void;
+  /** Creates an environment and its tab; resolves to what to tell. Absent where none can be created. */
+  createEnvironment?(name: string, from: string): Promise<string>;
   /** The files of the other environments that declare this parameter. */
   declaredIn(parameter: string): string[];
   redraw(): void;
@@ -57,6 +62,8 @@ export function createEditor({
   redraw,
   fileOf,
   declaredIn,
+  tracker,
+  createEnvironment,
 }: EditorDeps): Editor {
   const { writeService, writeParameter, variables, writeVariable } = editing;
 
@@ -144,6 +151,23 @@ export function createEditor({
     },
     undo: () => void history("undo"),
     redo: () => void history("redo"),
+    environment:
+      createEnvironment &&
+      (() =>
+        view.modals.push(
+          environmentFormModal({
+            stack: view.modals,
+            redraw,
+            sources: () => [
+              LOCAL_ENVIRONMENT,
+              ...tracker.environments.filter((e) => e !== LOCAL_ENVIRONMENT),
+            ],
+            taken: () => tracker.environments,
+            create: async (name, from) => {
+              say(view, await createEnvironment(name, from));
+            },
+          }),
+        )),
     parameters: writeParameter && {
       add: () => view.modals.push(parameterFormModal(parameterContext)),
       edit(name) {

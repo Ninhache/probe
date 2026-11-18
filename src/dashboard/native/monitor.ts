@@ -18,7 +18,7 @@ export class Monitor {
   private timers: NodeJS.Timeout[] = [];
 
   constructor(
-    private readonly checks: readonly EnvironmentCheck[],
+    private readonly checks: EnvironmentCheck[],
     private readonly options: MonitorOptions,
   ) {}
 
@@ -27,6 +27,13 @@ export class Monitor {
       void this.run(check);
       this.timers.push(setInterval(() => void this.run(check), this.options.intervalMs));
     }
+  }
+
+  /** Starts checking one more environment now, at the pace of the others. */
+  add(check: EnvironmentCheck): void {
+    this.checks.push(check);
+    void this.run(check);
+    this.timers.push(setInterval(() => void this.run(check), this.options.intervalMs));
   }
 
   /** Same checks, another pace. */

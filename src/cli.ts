@@ -13,6 +13,7 @@ import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
 import doctor from "./commands/doctor";
 import environment from "./commands/env";
+import { createEnvironment, environmentFile } from "./commands/env-create";
 import init, { ignoreLocalFiles, initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
@@ -186,6 +187,14 @@ async function openedDashboard(rawArgs: string[]): Promise<boolean> {
       settings,
       selection: await readDashboardSelection(paths),
       skipped: await readSkippedServices(paths),
+      onEnvironmentCreate: async (name, from) => {
+        const { variables } = await createEnvironment(paths, name, from);
+        const sends = variables.map(
+          (variable) => `It sends ${variable}: probe var ${variable} --env ${name} (or export it).`,
+        );
+        const told = `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
+        return { source: source(paths, name), message: [told, ...sends].join("\n") };
+      },
       ...writes,
     });
   } else {

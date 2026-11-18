@@ -936,6 +936,9 @@ export function Dashboard({
         return setHelp(true);
       case "quit":
         return exit();
+      case "environment":
+        // Only the native screen offers it: the keymap leaves it out of this one.
+        return;
       default:
         return command satisfies never;
     }
