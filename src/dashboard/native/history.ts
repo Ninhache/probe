@@ -193,7 +193,8 @@ export class Tracker {
         service: result.name,
         env,
         ok: result.ok,
-        detail: result.ok ? (result.status ? String(result.status) : undefined) : detail,
+        // The code alone leaves room for the body; the error is only for a check with no answer.
+        detail: result.status ? String(result.status) : detail,
         preview: bodyPreview(result.response?.body),
         change,
       };

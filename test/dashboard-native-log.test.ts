@@ -104,7 +104,7 @@ describe("log tab", () => {
     const lines = draw().split("\n");
     const at = (text: string) => lines.findIndex((line) => line.includes(text));
     expect(lines[at("first body")]).toContain("api local 200 first body");
-    expect(lines[at("503 down")]).toContain("web local HTTP 503 down");
+    expect(lines[at("503 down")]).toContain("web local 503 down");
     expect(at("first body")).toBeLessThan(at("second"));
   });
 
@@ -204,7 +204,7 @@ describe("log tab", () => {
     expect(copied).toHaveLength(1);
     expect(copied[0]?.split("\n")).toEqual([
       expect.stringMatching(/^ {2}\d\d:\d\d:\d\d api local 200 one$/),
-      expect.stringMatching(/^> \d\d:\d\d:\d\d web local HTTP 503 two$/),
+      expect.stringMatching(/^> \d\d:\d\d:\d\d web local 503 two$/),
     ]);
     expect(copied[0]).not.toContain("\u001b");
     expect(view.logShown).toHaveLength(2);
@@ -304,6 +304,32 @@ describe("log tab", () => {
       draw();
 
       expect(tracker.changes.toArray()).toBe(before);
+    });
+  });
+
+  describe("status column", () => {
+    it("should show only the code when a failed check got an answer", () => {
+      const { tracker } = setup();
+
+      tracker.record("local", [http("api", "{}", false)], 0);
+
+      expect(tracker.log.toArray().at(-1)?.detail).toBe("503");
+    });
+
+    it("should show the error when a failed check got no answer", () => {
+      const { tracker } = setup();
+      const refused: CheckResult = {
+        name: "api",
+        type: "http",
+        ok: false,
+        target: "http://127.0.0.1:4101/api",
+        latencyMs: 1,
+        error: "connection refused",
+      };
+
+      tracker.record("local", [refused], 0);
+
+      expect(tracker.log.toArray().at(-1)?.detail).toBe("connection refused");
     });
   });
 });
