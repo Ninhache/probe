@@ -19,6 +19,10 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
   tabs, `1` events and `2` response.
 - The events tab lists the changes of status of this session. The response tab shows the last answer of the
   selected service: status line, headers, then the body. `PgUp` `PgDn` scroll it.
+- A JSON body (a `json` content type, or a body that parses as JSON) is shown indented and in colour, here and
+  in the full response view. A body cut at the size cap, or one that is not valid JSON, is shown as received.
+  Secrets are hidden before the body is laid out, and no string is decoded on the way. `c` copies the body as
+  received, `b` copies the indented JSON.
 - The mouse works: click a service, a tab or an environment, and scroll the wheel over the lists.
 
 ## Keys
