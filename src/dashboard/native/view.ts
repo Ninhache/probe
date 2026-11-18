@@ -60,11 +60,10 @@ const ALL = "all";
 const STATUS_MAX_WIDTH = 10;
 
 /** The tabs of the box under the graph: what it shows. */
-export type BottomTab = "events" | "response" | "log";
+export type BottomTab = "log" | "response";
 const BOTTOM_TABS: readonly { tab: BottomTab; key: string }[] = [
-  { tab: "events", key: "1" },
+  { tab: "log", key: "1" },
   { tab: "response", key: "2" },
-  { tab: "log", key: "3" },
 ];
 /** Rows a PgUp or PgDn moves the response tab by, besides the page: the wheel moves this many. */
 const PEEK_WHEEL_ROWS = 3;
@@ -76,6 +75,8 @@ export interface ViewState {
   bottomTop: number;
   /** The most the response tab can scroll, as of the last frame. */
   bottomMax: number;
+  /** The log tab shows only the lines where a service changed state. */
+  logChanges: boolean;
   /** The log tab sticks to its last line until the user scrolls up. */
   logFollow: boolean;
   /** The lines the log tab shows, as plain text, as of the last frame: `y` copies them. */
@@ -144,7 +145,8 @@ export const initialView = (init: ViewInit = {}): ViewState => ({
   choices: {},
   ...init,
   tab: 0,
-  bottom: "events",
+  bottom: "log",
+  logChanges: false,
   logFollow: true,
   logShown: [],
   bottomTop: 0,
@@ -413,12 +415,17 @@ function peekRows(
 }
 
 /** The log lines of an environment, or of all, oldest first. */
-const logLines = (tracker: Tracker, env: string | undefined): LogEntry[] =>
-  tracker.log.toArray().filter((entry) => env === undefined || entry.env === env);
+const logLines = (tracker: Tracker, env: string | undefined, changes: boolean): LogEntry[] =>
+  (changes ? tracker.changes : tracker.log)
+    .toArray()
+    .filter((entry) => env === undefined || entry.env === env);
+
+/** The gutter of a log line: a marker where the service changed state, blank otherwise. */
+const MARKER = "▶";
 
 /** A log line as plain text: what `y` copies. */
 function logText(entry: LogEntry, withEnv: boolean): string {
-  return [
+  return `${entry.change ? ">" : " "} ${[
     clock(entry.at),
     entry.service,
     withEnv ? entry.env : "",
@@ -426,7 +433,7 @@ function logText(entry: LogEntry, withEnv: boolean): string {
     entry.preview,
   ]
     .filter((part) => part !== "")
-    .join(" ");
+    .join(" ")}`;
 }
 
 function drawLog(
@@ -438,10 +445,12 @@ function drawLog(
   withEnv: boolean,
 ): void {
   const end = x + width;
-  let at = x;
+  const bold = entry.change;
+  if (entry.change) screen.set(x, y, MARKER, { fg: entry.ok ? t.ok : t.err, bold });
+  let at = x + 2;
   const put = (text: string, style: Style) => {
     if (text === "" || at >= end) return;
-    at += screen.text(at, y, text, style, end - at) + 1;
+    at += screen.text(at, y, text, { ...style, bold: style.bold || bold }, end - at) + 1;
   };
   put(clock(entry.at), { fg: t.muted });
   put(entry.service, { fg: t.fg });
@@ -460,7 +469,7 @@ function drawBottom(
   env: string | undefined,
 ): void {
   const focus = service === undefined ? undefined : focusEnv(tracker, view, service);
-  const lines = view.bottom === "log" ? logLines(tracker, env) : [];
+  const lines = view.bottom === "log" ? logLines(tracker, env, view.logChanges) : [];
   const shown =
     view.bottom === "response" ? peekRows(tracker, view, service, focus, area.w - 4) : [];
   const room = Math.max(0, area.h - 2);
@@ -473,9 +482,14 @@ function drawBottom(
   const l = box(screen, area, {
     color: t.border,
     footer:
-      view.bottomMax > 0
-        ? `${view.bottomTop + 1}-${Math.min(view.bottomTop + room, total)}/${total}`
-        : undefined,
+      [
+        view.bottom === "log" && view.logChanges ? "changes only" : "",
+        view.bottomMax > 0
+          ? `${view.bottomTop + 1}-${Math.min(view.bottomTop + room, total)}/${total}`
+          : "",
+      ]
+        .filter((part) => part !== "")
+        .join(" · ") || undefined,
   });
   view.bottomBox = area;
   view.bottomTitles = [];
@@ -497,25 +511,8 @@ function drawBottom(
       drawLog(screen, l.x + 1, l.y + i, l.w - 2, entry, env === undefined);
     return;
   }
-  if (view.bottom === "response") {
-    shown.slice(view.bottomTop, view.bottomTop + l.h).forEach((line, i) => {
-      drawRow(screen, l.x + 1, l.y + i, line, l.w - 2);
-    });
-    return;
-  }
-  const entries = tracker.events
-    .toArray()
-    .filter((event) => env === undefined || event.env === env)
-    .slice(-l.h)
-    .reverse();
-  entries.forEach((event, i) => {
-    const y = l.y + i;
-    let x = l.x + 1;
-    x += screen.text(x, y, clock(event.at), { fg: t.muted }) + 1;
-    x += screen.text(x, y, event.service, { fg: t.fg }) + 1;
-    x += screen.text(x, y, event.env, { fg: t.muted }) + 1;
-    const state = event.ok ? "UP" : `DOWN${event.detail ? ` (${event.detail})` : ""}`;
-    screen.text(x, y, state, { fg: event.ok ? t.ok : t.err, bold: true }, l.x + l.w - 1 - x);
+  shown.slice(view.bottomTop, view.bottomTop + l.h).forEach((line, i) => {
+    drawRow(screen, l.x + 1, l.y + i, line, l.w - 2);
   });
 }
 
@@ -609,7 +606,7 @@ function dispatch(
     view.logFollow = true;
     return;
   }
-  if (view.bottom !== "events" && (event.name === "pageup" || event.name === "pagedown")) {
+  if (event.name === "pageup" || event.name === "pagedown") {
     scrollPeek(view, (event.name === "pageup" ? -1 : 1) * Math.max(1, view.bottomBox.h - 2));
     return;
   }
@@ -647,7 +644,7 @@ function peekMouse(event: InputEvent, view: ViewState): boolean {
   }
   const { x, y, w, h } = view.bottomBox;
   const over = event.x >= x && event.x < x + w && event.y >= y && event.y < y + h;
-  if (!over || view.bottom === "events") return false;
+  if (!over) return false;
   if (event.action === "wheel-up") scrollPeek(view, -PEEK_WHEEL_ROWS);
   else if (event.action === "wheel-down") scrollPeek(view, PEEK_WHEEL_ROWS);
   else return false;
@@ -711,13 +708,19 @@ export function runCommand(
       if (service !== undefined && env !== undefined)
         view.modals.push(detailPanel(view.area, tracker, view, service, env, actions));
       break;
-    case "events":
     case "response":
     case "log":
       showBottom(view, command);
       break;
+    case "changes":
+      if (view.bottom !== "log") say(view, "Open the log tab (1) to filter its lines");
+      else {
+        view.logChanges = !view.logChanges;
+        view.logFollow = true;
+      }
+      break;
     case "copylog":
-      if (view.bottom !== "log") say(view, "Open the log tab (3) to copy its lines");
+      if (view.bottom !== "log") say(view, "Open the log tab (1) to copy its lines");
       else if (view.logShown.length === 0) say(view, "The log has no line to copy");
       else actions.copyLog?.(view.logShown.join("\n"));
       break;

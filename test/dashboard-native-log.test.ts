@@ -67,26 +67,39 @@ const many = (env: string, tracker: Tracker, count: number, from = 0) => {
 };
 
 describe("log tab", () => {
-  it("should switch with 3 and with a click on its title", () => {
+  it("should have two tabs, log first, switched with 1 and 2 or a click", () => {
     const { draw, press, view, send } = setup();
-    expect(draw()).toContain("3 log");
-
-    press("3");
+    const text = draw();
+    expect(text).toContain("1 log");
+    expect(text).toContain("2 response");
+    expect(text).not.toContain("events");
     expect(view.bottom).toBe("log");
 
+    press("2");
+    expect(view.bottom).toBe("response");
     press("1");
-    expect(view.bottom).toBe("events");
-    draw();
-    const title = view.bottomTitles.find((entry) => entry.tab === "log");
-    send(mouse("press", (title?.x ?? 0) + 2, view.bottomBox.y));
     expect(view.bottom).toBe("log");
+
+    draw();
+    const title = view.bottomTitles.find((entry) => entry.tab === "response");
+    send(mouse("press", (title?.x ?? 0) + 2, view.bottomBox.y));
+    expect(view.bottom).toBe("response");
+  });
+
+  it("should not open a tab with 3", () => {
+    const { press, view, draw } = setup();
+    press("1");
+
+    expect(view.bottom).toBe("log");
+    expect(draw()).not.toContain("3 ");
+    expect(view.bottomTitles.map((entry) => entry.tab)).toEqual(["log", "response"]);
   });
 
   it("should show one line per result with status and body, newest last", () => {
     const { tracker, draw, press } = setup();
     tracker.record("local", [http("api", "first\n  body"), http("web", "down", false)], 1);
     tracker.record("local", [http("api", "second")], 2);
-    press("3");
+    press("1");
 
     const lines = draw().split("\n");
     const at = (text: string) => lines.findIndex((line) => line.includes(text));
@@ -98,7 +111,7 @@ describe("log tab", () => {
   it("should follow the newest line until scrolled up, and End follows again", () => {
     const { tracker, draw, press, view } = setup();
     many("local", tracker, 100);
-    press("3");
+    press("1");
     expect(draw()).toContain("body 99");
 
     press("pageup");
@@ -116,7 +129,7 @@ describe("log tab", () => {
   it("should scroll with the wheel and follow again at the bottom", () => {
     const { tracker, draw, press, send, view } = setup();
     many("local", tracker, 100);
-    press("3");
+    press("1");
     draw();
     const { x, y } = view.bottomBox;
 
@@ -132,7 +145,7 @@ describe("log tab", () => {
     const { tracker, draw, press, view } = setup(["dev", "prod"]);
     tracker.record("dev", [http("api", "from dev")], 1);
     tracker.record("prod", [http("api", "from prod")], 2);
-    press("3");
+    press("1");
 
     const all = draw();
     expect(all).toContain("api dev 200 from dev");
@@ -165,7 +178,7 @@ describe("log tab", () => {
     });
     const { tracker, draw, press } = setup();
     tracker.record("local", [result], 1);
-    press("3");
+    press("1");
     for (let i = 0; i < 5; i++) draw();
 
     expect(reads).toBe(1);
@@ -184,14 +197,14 @@ describe("log tab", () => {
   it("should copy the visible lines as plain text with y", () => {
     const { tracker, draw, press, copied, view } = setup();
     tracker.record("local", [http("api", "one"), http("web", "two", false)], 1);
-    press("3");
+    press("1");
     draw();
     press("y");
 
     expect(copied).toHaveLength(1);
     expect(copied[0]?.split("\n")).toEqual([
-      expect.stringMatching(/^\d\d:\d\d:\d\d api local 200 one$/),
-      expect.stringMatching(/^\d\d:\d\d:\d\d web local HTTP 503 two$/),
+      expect.stringMatching(/^ {2}\d\d:\d\d:\d\d api local 200 one$/),
+      expect.stringMatching(/^> \d\d:\d\d:\d\d web local HTTP 503 two$/),
     ]);
     expect(copied[0]).not.toContain("\u001b");
     expect(view.logShown).toHaveLength(2);
@@ -200,7 +213,7 @@ describe("log tab", () => {
   it("should not copy from another tab", () => {
     const { tracker, press, copied, view } = setup();
     tracker.record("local", [http("api", "one")], 1);
-    press("y");
+    press("2", "y");
 
     expect(copied).toEqual([]);
     expect(view.status?.text).toContain("log tab");
@@ -209,9 +222,88 @@ describe("log tab", () => {
   it("should leave b and c on the last response", () => {
     const { tracker, press, view } = setup();
     tracker.record("local", [http("api", "one")], 1);
-    press("3", "b");
+    press("1", "b");
 
     expect(view.status).toBeUndefined();
     expect(view.bottom).toBe("log");
+  });
+
+  describe("changes of state", () => {
+    const flip = (tracker: Tracker, states: boolean[]) => {
+      for (const [i, ok] of states.entries())
+        tracker.record("local", [http("api", `r${i}`, ok)], i);
+    };
+    const linesOf = (text: string) => text.split("\n").filter((line) => /r\d/.test(line));
+
+    it("should mark the first failure and each flip, and leave the other lines blank", () => {
+      const { tracker, draw } = setup();
+      flip(tracker, [true, true, false, false, true]);
+
+      const lines = linesOf(draw());
+      expect(lines.map((line) => /▶ \d\d:/.test(line))).toEqual([false, false, true, false, true]);
+      expect(lines[0]).toMatch(/│ {3}\d\d:\d\d:\d\d api/);
+    });
+
+    it("should not mark a first result that is up", () => {
+      const { tracker, draw } = setup();
+      flip(tracker, [true]);
+
+      expect(draw()).not.toContain("▶");
+    });
+
+    it("should mark a change with > in ASCII mode", () => {
+      const { tracker, view } = setup();
+      flip(tracker, [true, false]);
+      const screen = new Screen(110, 30, "truecolor");
+      screen.ascii = true;
+      renderDashboard(screen, { x: 0, y: 0, w: 110, h: 30 }, tracker, view, 0);
+
+      const text = screen.toPlainText();
+      expect(text).not.toContain("▶");
+      expect(linesOf(text).map((line) => /> \d\d:/.test(line))).toEqual([false, true]);
+    });
+
+    it("should show only the changes with f, say so, and toggle back", () => {
+      const { tracker, draw, press, view } = setup();
+      flip(tracker, [true, false, false, true, true]);
+
+      press("f");
+      const only = draw();
+      expect(view.logChanges).toBe(true);
+      expect(only).toContain("changes only");
+      expect(linesOf(only)).toHaveLength(2);
+      expect(linesOf(only).every((line) => line.includes("▶"))).toBe(true);
+
+      press("f");
+      const all = draw();
+      expect(all).not.toContain("changes only");
+      expect(linesOf(all)).toHaveLength(5);
+    });
+
+    it("should keep following the newest change while f is on", () => {
+      const { tracker, draw, press } = setup();
+      for (let i = 0; i < 80; i++) tracker.record("local", [http("api", `r${i}`, i % 2 === 0)], i);
+      press("f");
+      expect(draw()).toContain("r79");
+
+      press("pageup");
+      const away = draw();
+      expect(away).not.toContain("r79");
+
+      tracker.record("local", [http("api", "r80", true)], 80);
+      press("end");
+      expect(draw()).toContain("r80");
+    });
+
+    it("should not rebuild the filtered lines when drawing", () => {
+      const { tracker, draw, press } = setup();
+      flip(tracker, [true, false]);
+      press("f");
+      draw();
+      const before = tracker.changes.toArray();
+      draw();
+
+      expect(tracker.changes.toArray()).toBe(before);
+    });
   });
 });

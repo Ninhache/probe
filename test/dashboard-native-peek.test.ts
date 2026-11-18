@@ -74,13 +74,13 @@ function setup(...results: CheckResult[]) {
 }
 
 describe("the tabs of the box under the graph", () => {
-  it("opens on the events and names both tabs in its border", () => {
+  it("opens on the log and names both tabs in its border", () => {
     const { draw, view } = setup(http("api"));
     const text = draw();
 
-    expect(text).toContain("1 events");
+    expect(text).toContain("1 log");
     expect(text).toContain("2 response");
-    expect(view.bottom).toBe("events");
+    expect(view.bottom).toBe("log");
     expect(text).not.toContain("HTTP/1.1 200 OK");
   });
 
@@ -91,28 +91,28 @@ describe("the tabs of the box under the graph", () => {
     expect(draw()).toContain("HTTP/1.1 200 OK");
 
     press("1");
-    expect(view.bottom).toBe("events");
+    expect(view.bottom).toBe("log");
     expect(draw()).not.toContain("HTTP/1.1 200 OK");
   });
 
   it("switches with a click on a title", () => {
     const { send, draw, view } = setup(http("api"));
-    const [events, response] = view.bottomTitles;
-    if (!events || !response) throw new Error("no title drawn");
+    const [logTab, response] = view.bottomTitles;
+    if (!logTab || !response) throw new Error("no title drawn");
 
     send(mouse("press", response.x + 2, view.bottomBox.y));
     expect(view.bottom).toBe("response");
     expect(draw()).toContain("HTTP/1.1 200 OK");
 
-    send(mouse("press", events.x + 2, view.bottomBox.y));
-    expect(view.bottom).toBe("events");
+    send(mouse("press", logTab.x + 2, view.bottomBox.y));
+    expect(view.bottom).toBe("log");
   });
 
   it("does not take a click that is not on a title", () => {
     const { send, view } = setup(http("api"));
     send(mouse("press", view.bottomBox.x + view.bottomBox.w - 2, view.bottomBox.y));
 
-    expect(view.bottom).toBe("events");
+    expect(view.bottom).toBe("log");
   });
 });
 

@@ -73,7 +73,7 @@ describe("history", () => {
     tracker.record("local", [result("acme", false, 0, "timeout")], 3);
     tracker.record("local", [result("acme", false, 0, "timeout")], 4);
     tracker.record("local", [result("acme", true)], 5);
-    expect(tracker.events.toArray().map((e) => [e.at, e.ok, e.detail])).toEqual([
+    expect(tracker.changes.toArray().map((e) => [e.at, e.ok, e.detail])).toEqual([
       [3, false, "timeout"],
       [5, true, undefined],
     ]);
@@ -86,7 +86,7 @@ describe("history", () => {
       [result("acme", false, 0, "refused"), { ...result("globex", true), skipped: true }],
       1,
     );
-    expect(tracker.events.toArray()).toHaveLength(1);
+    expect(tracker.changes.toArray()).toHaveLength(1);
     expect(tracker.services()).toEqual(["acme", "globex"]);
   });
 
@@ -169,11 +169,11 @@ describe("dashboard view", () => {
     expect(text).toContain("╭─┤¹ services├");
     expect(text).toContain("┤latency · acme@local├");
     expect(text).toContain(`┤uptime · SLO ${SLO_PERCENT}%├`);
-    expect(text).toContain("┤1 events├");
+    expect(text).toContain("┤1 log├");
     expect(text).toMatch(/all\s+local\s+prod/);
     expect(text).toMatch(/acme\s+● up\s+● up/);
     expect(text).toMatch(/initech\s+· -\s+● down/);
-    expect(text).toMatch(/initech prod DOWN \(refused\)/);
+    expect(text).toMatch(/▶ \d\d:\d\d:\d\d initech prod refused/);
     expect(text).toContain("100.0%");
   });
 

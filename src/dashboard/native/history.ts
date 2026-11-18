@@ -15,14 +15,6 @@ export interface Sample {
   detail?: string;
 }
 
-export interface Transition {
-  at: number;
-  service: string;
-  env: string;
-  ok: boolean;
-  detail?: string;
-}
-
 /** One check result as a line of the log tab. */
 export interface LogEntry {
   at: number;
@@ -33,6 +25,8 @@ export interface LogEntry {
   detail?: string;
   /** The body on one line, cut: built once, when the result is recorded. */
   preview: string;
+  /** The service went up or down with this result. */
+  change: boolean;
 }
 
 /** The body of a result as one line. The body was masked when it was checked, so no secret is in it. */
@@ -46,7 +40,6 @@ export function bodyPreview(body: string | undefined): string {
 }
 
 export const HISTORY_SIZE = 600;
-export const EVENTS_SIZE = 200;
 
 /** Fixed-size history: memory stays bounded however long the dashboard runs. */
 export class Ring<T> {
@@ -109,8 +102,9 @@ const keyOf = (service: string, env: string) => `${env}\u0000${service}`;
 
 /** What the dashboard remembers: a bounded history per service and environment, and the up/down transitions. */
 export class Tracker {
-  readonly events = new Ring<Transition>(EVENTS_SIZE);
   readonly log = new Ring<LogEntry>(LOG_SIZE);
+  /** The log lines where a service changed state, kept apart so filtering to them costs nothing per draw. */
+  readonly changes = new Ring<LogEntry>(LOG_SIZE);
   private readonly series = new Map<string, Ring<Sample>>();
   private readonly known = new Set<string>();
   private readonly results = new Map<string, CheckResult>();
@@ -149,8 +143,8 @@ export class Tracker {
     this.series.clear();
     this.known.clear();
     this.results.clear();
-    this.events.clear();
     this.log.clear();
+    this.changes.clear();
   }
 
   /** Forget the services of an environment that are not in `names` any more: removed or undone. */
@@ -193,17 +187,18 @@ export class Tracker {
         ? undefined
         : (result.error ?? (result.status ? String(result.status) : undefined));
       ring.push({ ok: result.ok, latencyMs: result.latencyMs, at, detail });
-      this.log.push({
+      const change = before ? before.ok !== result.ok : !result.ok;
+      const entry: LogEntry = {
         at,
         service: result.name,
         env,
         ok: result.ok,
         detail: result.ok ? (result.status ? String(result.status) : undefined) : detail,
         preview: bodyPreview(result.response?.body),
-      });
-      if (before ? before.ok !== result.ok : !result.ok) {
-        this.events.push({ at, service: result.name, env, ok: result.ok, detail });
-      }
+        change,
+      };
+      this.log.push(entry);
+      if (change) this.changes.push(entry);
     }
   }
 

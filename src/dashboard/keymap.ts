@@ -20,9 +20,9 @@ export type Command =
   | "open"
   | "copy"
   | "body"
-  | "events"
   | "response"
   | "log"
+  | "changes"
   | "copylog"
   | "edit"
   | "remove"
@@ -87,13 +87,20 @@ const peek = (binding: Omit<Binding, "screens" | "section">): Binding => ({
   ...binding,
 });
 
+/** The bar of the list while its log tab is open: the keys that tab adds, given up first. */
+const logBar = (binding: Omit<Binding, "screens" | "section">): Binding => ({
+  screens: ["log"],
+  section: "List",
+  ...binding,
+});
+
 const NATIVE_LIST_BINDINGS: readonly Binding[] = [
   list({
     keys: "1",
-    action: "events",
-    help: "Events tab",
+    action: "log",
+    help: "Log tab",
     barless: true,
-    command: "events",
+    command: "log",
   }),
   list({
     keys: "2",
@@ -110,11 +117,11 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     command: "body",
   }),
   list({
-    keys: "3",
-    action: "log",
-    help: "Log tab",
+    keys: "f",
+    action: "changes only",
+    help: "Log changes only",
     barless: true,
-    command: "log",
+    command: "changes",
   }),
   list({
     keys: "y",
@@ -123,20 +130,15 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     barless: true,
     command: "copylog",
   }),
-  {
-    screens: ["log"],
-    section: "List",
-    keys: "PgUp PgDn",
-    action: "scroll",
-    drop: 3,
-  },
-  { screens: ["log"], section: "List", keys: "End", action: "follow", drop: 2 },
-  { screens: ["log"], section: "List", keys: "y", action: "copy lines", drop: 1 },
-  { screens: ["log"], section: "List", keys: "1", action: "events", drop: 4 },
+  logBar({ keys: "PgUp PgDn", action: "scroll", drop: 0 }),
+  logBar({ keys: "End", action: "follow", drop: 0 }),
+  logBar({ keys: "f", action: "changes only", drop: 0 }),
+  logBar({ keys: "y", action: "copy lines", drop: 0 }),
+  logBar({ keys: "2", action: "response", drop: 0 }),
   peek({ keys: "PgUp PgDn", action: "scroll", drop: 3 }),
   peek({ keys: "u", action: "open", drop: 1 }),
   peek({ keys: "b", action: "copy body", drop: 1 }),
-  peek({ keys: "1", action: "events", drop: 4 }),
+  peek({ keys: "1", action: "log", drop: 4 }),
   list({
     keys: "n",
     action: "new environment",
@@ -349,7 +351,7 @@ const BINDINGS: readonly Binding[] = [
   ...DETAIL_BINDINGS,
   ...NATIVE_LIST_BINDINGS,
   {
-    screens: ["list", "peek", "panel", "readonly", "choose"],
+    screens: ["list", "peek", "log", "panel", "readonly", "choose"],
     section: "Outside a text field",
     keys: "?",
     action: "help",
@@ -357,7 +359,7 @@ const BINDINGS: readonly Binding[] = [
     command: "help",
   },
   {
-    screens: ["list", "peek", "panel", "readonly", "choose", "help"],
+    screens: ["list", "peek", "log", "panel", "readonly", "choose", "help"],
     section: "Outside a text field",
     keys: "q",
     action: "quit",
