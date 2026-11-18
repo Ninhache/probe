@@ -1,6 +1,11 @@
 import type { Selection } from "../../config/parameters";
 import { effectiveSelection, type ParameterChoices } from "../../config/parameters";
-import { DASHBOARD_INTERVAL_SECONDS, DEFAULT_TIMEOUT_SECONDS } from "../../constants";
+import {
+  CONFIG_FILE,
+  DASHBOARD_INTERVAL_SECONDS,
+  DEFAULT_TIMEOUT_SECONDS,
+  PROBE_DIR,
+} from "../../constants";
 import type { InputEvent } from "../../tui/input";
 import { columns, fill, type Rect, rows } from "../../tui/layout";
 import { type ListGeometry, listKey, listMouse } from "../../tui/list";
@@ -58,6 +63,10 @@ export interface ViewState {
   selection: Selection;
   /** Every parameter the config declares, with its values. */
   choices: ParameterChoices;
+  /** A parameter just written: the panel puts its cursor on it. */
+  parameterAt?: string;
+  /** Services can be added from here: the empty list says how. */
+  canAdd?: boolean;
   /** A line that replaces the help bar for a few seconds: the outcome of an action. */
   status?: { text: string; at: number };
   /** The bar of the keymap that fits the modal on top. */
@@ -219,6 +228,14 @@ export function renderDashboard(
     },
   );
 
+  if (data.length === 0 && view.canAdd && !fieldValue(view.filter))
+    screen.text(
+      padded.x,
+      padded.y + 1,
+      "no service: press a to add one",
+      { fg: t.muted },
+      padded.w,
+    );
   drawDetail(screen, { graphArea, gaugeArea }, tracker, service, env);
   drawEvents(screen, logArea, tracker, env);
   if (view.filtering) {
@@ -335,8 +352,10 @@ export interface ViewActions {
   timeout?(service: string, seconds: number | undefined): void;
   settings?(settings: DashboardSettings): void;
   parameter?(name: string, value: string): void;
-  /** The keys that edit the files; absent when nothing can write them. */
+  /** The keys that edit the files. */
   edit?: Editor;
+  /** Draws again after something that did not come from a key. */
+  redraw?(): void;
 }
 
 /** The environment a service is looked at in: the tab's, or the first one that has it. */
@@ -445,8 +464,15 @@ export function runCommand(
       view.modals.push(optionsPanel(view, actions));
       break;
     case "parameters":
-      if (Object.keys(view.choices).length === 0) say(view, "no parameters in this config");
-      else view.modals.push(parametersPanel(view, actions));
+      if (Object.keys(view.choices).length > 0 || actions.edit?.parameters)
+        view.modals.push(parametersPanel(view, actions));
+      else
+        say(
+          view,
+          tabNames(tracker).length > 2
+            ? "No parameter declared"
+            : `${PROBE_DIR}/${CONFIG_FILE} declares no parameter`,
+        );
       break;
     case "detail":
       if (service !== undefined && env !== undefined)

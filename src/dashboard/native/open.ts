@@ -145,6 +145,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     ),
   });
   const editing = liveEditing(options.config, options);
+  view.canAdd = editing.writeService !== undefined;
   // The writes and the undos replace the config: a pass reads it as it is when it starts.
   const live: NativeDashboardOptions = {
     ...options,
@@ -217,7 +218,15 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       editing,
       fileOf: (env) => sources.get(env)?.file,
       redraw: () => app.requestRender(),
-      changed: () => {
+      declaredIn: (name) =>
+        [...loaded]
+          .filter(([, declared]) => Object.hasOwn(declared.parameters ?? {}, name))
+          .flatMap(([env]) => sources.get(env)?.file ?? []),
+      changed: (restart) => {
+        if (restart) {
+          tracker.reset();
+          known.clear();
+        }
         view.choices = merge();
         tracker.retain(LOCAL_ENVIRONMENT, new Set(Object.keys(editing.config().services)));
         monitor.refresh();
@@ -234,6 +243,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
           quit: () => app.stop(),
           refresh: () => monitor.refresh(),
           edit,
+          redraw: () => app.requestRender(),
           open: (service, env) =>
             void run(env, (cfg) => system(cfg).onOpen(service, view.selection)),
           copy: (service, env) =>

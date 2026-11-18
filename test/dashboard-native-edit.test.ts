@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
+import type { ParameterWrite } from "../src/commands/parameter-writes";
 import type { ServiceWrite } from "../src/commands/service-writes";
 import { reference } from "../src/config/headers";
+import { parameterChoices } from "../src/config/parameters";
 import type { Config } from "../src/config/schema";
+import type { ParameterWriteOutcome } from "../src/dashboard/Dashboard";
 import { type EditCallbacks, liveEditing, timeoutsOf } from "../src/dashboard/editing";
 import { createEditor } from "../src/dashboard/native/editor";
 import { Tracker } from "../src/dashboard/native/history";
@@ -54,6 +57,7 @@ function setup({ edits = {}, config = initial, environments = [] }: Options = {}
   };
   const editing = liveEditing(config, callbacks);
   const view = initialView({
+    choices: parameterChoices(config),
     timeouts: timeoutsOf(config),
   });
   const tracker = new Tracker(["local", ...environments]);
@@ -63,12 +67,14 @@ function setup({ edits = {}, config = initial, environments = [] }: Options = {}
     view,
     tracker,
     editing,
-    changed: () => {
+    changed: (restart) => {
       tracker.retain("local", new Set(Object.keys(editing.config().services)));
-      changed();
+      if (restart) view.choices = parameterChoices(editing.config());
+      changed(restart);
     },
     redraw: () => {},
     fileOf: (env) => (env === "local" ? undefined : `${env}.yml`),
+    declaredIn: () => ["prod.yml"],
   });
   const calls: string[] = [];
   const actions: ViewActions = { quit: () => calls.push("quit"), refresh: () => {}, edit };
@@ -398,5 +404,262 @@ describe("command palette", () => {
     const frame = draw(110, 14);
     expect(frame).toContain("Quit");
     expect(frame).not.toContain("Check now");
+  });
+});
+
+describe("variables of a service", () => {
+  const keyed = {
+    ...initial,
+    services: {
+      ...initial.services,
+      api: {
+        ...initial.services.api,
+        headers: {
+          Authorization: `Bearer ${reference("API_TOKEN")}`,
+          "X-Api-Key": reference("KEY"),
+          Cookie: reference("SID"),
+        },
+      },
+    },
+  } as Config;
+  const sources = async (names: readonly string[]) =>
+    Object.fromEntries(
+      names.map((name) => [
+        name,
+        { KEY: "local", SID: "environment" }[name as "KEY" | "SID"] as never,
+      ]),
+    );
+  const DOWN = `${ESC}[B`;
+  const SECRET = "variable-secret";
+
+  const open = (edits: Partial<EditCallbacks> = {}) => {
+    const test = setup({ config: keyed, edits: { variableSources: sources, ...edits } });
+    test.press(ENTER);
+    return test;
+  };
+
+  it("lists the variables of a service in its panel, with where each is set", async () => {
+    const test = open();
+    await tick();
+    const frame = test.draw();
+    expect(frame).toMatch(/API_TOKEN\s+not set/);
+    expect(frame).toMatch(/KEY\s+set in local\.yml/);
+    expect(frame).toMatch(/SID\s+set in the environment/);
+    test.press(DOWN);
+    expect(test.draw()).toMatch(/API_TOKEN\s+not set · ↵ sets it/);
+    test.press(DOWN);
+    expect(test.draw()).toMatch(/KEY\s+set in local\.yml · ↵ changes it/);
+  });
+
+  it("takes the value of a variable on enter, never drawn", async () => {
+    const onVariableWrite = vi.fn(async () => undefined);
+    const test = open({ onVariableWrite });
+    await tick();
+    test.press(`${DOWN}${DOWN}${ENTER}`);
+    expect(test.draw()).toContain("Value of KEY: ");
+    expect(test.draw()).toContain("not shown, kept in .probe/local.yml on this machine only");
+    test.press(SECRET);
+    const typed = test.draw();
+    expect(typed).toContain(`Value of KEY: ${"•".repeat(SECRET.length)}`);
+    expect(typed).not.toContain(SECRET);
+    test.press(ENTER);
+    await tick();
+    const done = test.draw();
+    expect(onVariableWrite).toHaveBeenCalledWith("KEY", SECRET);
+    expect(done).toContain("Kept KEY in .probe/local.yml, for this machine only");
+    expect(done).not.toContain(SECRET);
+  });
+
+  it("keeps nothing for an empty value or on escape", async () => {
+    const onVariableWrite = vi.fn(async () => undefined);
+    const test = open({ onVariableWrite });
+    await tick();
+    test.press(`${DOWN}${DOWN}${ENTER}${ENTER}`);
+    expect(test.draw()).toContain("KEY expects a value");
+    test.press(`abc${ESC}`);
+    expect(test.draw()).not.toContain("Value of KEY");
+    expect(onVariableWrite).not.toHaveBeenCalled();
+  });
+
+  it("does not say a value is kept when keeping it failed", async () => {
+    const test = open({ onVariableWrite: async () => ".probe/local.yml is broken" });
+    await tick();
+    test.press(`${DOWN}${DOWN}${ENTER}${SECRET}${ENTER}`);
+    await tick();
+    const frame = test.draw();
+    expect(frame).toContain("not saved: .probe/local.yml is broken");
+    expect(frame).not.toContain("Kept KEY");
+    expect(frame).not.toContain(SECRET);
+  });
+
+  it("says a variable of the environment is not changed here", async () => {
+    const test = open({ onVariableWrite: async () => undefined });
+    await tick();
+    test.press(`${DOWN.repeat(3)}${ENTER}`);
+    const frame = test.draw();
+    expect(frame).toContain("SID comes from the environment, which is read first");
+    expect(frame).not.toContain("Value of SID");
+  });
+
+  it("changes no timeout with the arrows on a variable", async () => {
+    const test = open({ onVariableWrite: async () => undefined });
+    await tick();
+    test.press(`${DOWN}${ESC}[C`);
+    expect(test.view.timeouts.api).toBeUndefined();
+  });
+});
+
+describe("parameters", () => {
+  const tenants: Config = {
+    ...initial,
+    parameters: { env: { values: ["dev", "prod"], strategy: { kind: "query", name: "env" } } },
+  } as Config;
+  const DOWN = `${ESC}[B`;
+
+  const withWriter = (config: Config = tenants, answer?: () => ParameterWriteOutcome) => {
+    const writes: ParameterWrite[] = [];
+    const onParameterWrite = vi.fn(async (write: ParameterWrite) => {
+      writes.push(write);
+      if (answer) return answer();
+      const parameters = { ...editing.config().parameters } as Record<string, never>;
+      if (write.kind === "remove") delete parameters[write.name];
+      else parameters[write.name] = write.parameter as never;
+      return { config: { ...editing.config(), parameters } as Config };
+    });
+    const test = setup({ config, edits: { onParameterWrite } });
+    const { editing } = test;
+    return { ...test, writes };
+  };
+
+  it("opens the panel with nothing declared, to add the first one", () => {
+    const { press, draw } = withWriter(initial);
+    press("p");
+    expect(draw()).toContain("None yet: a adds one");
+    press("a");
+    expect(draw()).toContain("add a parameter");
+  });
+
+  it("says where the parameters are when none can be written", () => {
+    const { press, draw } = setup();
+    press("p");
+    expect(draw().split("\n").at(-1)).toContain(".probe/config.yml declares no parameter");
+  });
+
+  it("adds a parameter, then starts the measures again", async () => {
+    const { press, draw, writes, changed, view } = withWriter();
+    press("pa");
+    press(`tenant${DOWN}acme, globex${ENTER}`);
+    await tick();
+    expect(writes).toEqual([
+      {
+        kind: "add",
+        name: "tenant",
+        parameter: { values: ["acme", "globex"], strategy: { kind: "query", name: "tenant" } },
+      },
+    ]);
+    const frame = draw();
+    expect(frame).toContain("Added tenant");
+    expect(frame).toContain("┤parameters├");
+    expect(changed).toHaveBeenCalledWith(true);
+    expect(view.modals.depth).toBe(1);
+  });
+
+  it("refuses a name that is taken and values that are missing", async () => {
+    const { press, draw, writes } = withWriter();
+    press(`pa${"env"}${ENTER}`);
+    expect(draw()).toContain("env already exists");
+    expect(writes).toEqual([]);
+    press(`x${DOWN}${ENTER}`);
+    expect(draw()).toContain("One value or more, e.g. acme, globex");
+    expect(writes).toEqual([]);
+  });
+
+  it("edits the parameter under the cursor", async () => {
+    const { press, draw, writes } = withWriter();
+    press("pe");
+    const form = draw();
+    expect(form).toContain("edit env");
+    expect(form).toContain("dev, prod");
+    press(`, qa${ENTER}`);
+    await tick();
+    expect(writes[0]).toMatchObject({ kind: "edit", name: "env" });
+    expect(draw()).toContain("Saved env");
+  });
+
+  it("asks before removing a parameter", async () => {
+    const { press, draw, writes } = withWriter();
+    press("pd");
+    expect(draw()).toContain("Remove the parameter env from the config?");
+    press("n");
+    expect(writes).toEqual([]);
+    press("d");
+    press("y");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "env" }]);
+    expect(draw()).toContain("Removed env");
+  });
+
+  it("asks before dropping addresses, and writes again once confirmed", async () => {
+    let answers = 0;
+    const { press, draw, writes } = withWriter(tenants, () => {
+      answers += 1;
+      return answers === 1
+        ? { saved: false, drops: ["api dev"] }
+        : { saved: true, config: tenants };
+    });
+    press(`pe${ENTER}`);
+    await tick();
+    expect(draw()).toContain("Remove 1 address: api dev?");
+    press("y");
+    await tick();
+    expect(writes[1]).toMatchObject({ kind: "edit", confirmed: true });
+  });
+
+  it("goes back to the form when the drops are refused", async () => {
+    const { press, draw, writes } = withWriter(tenants, () => ({
+      saved: false,
+      drops: ["api dev"],
+    }));
+    press(`pe${ENTER}`);
+    await tick();
+    press("n");
+    expect(draw()).toContain("edit env");
+    expect(writes).toHaveLength(1);
+  });
+
+  it("shows what the write refused, on the form", async () => {
+    const { press, draw } = withWriter(tenants, () => ({
+      saved: false,
+      problem: { field: "values", message: "dev is not a value" },
+    }));
+    press(`pe${ENTER}`);
+    await tick();
+    expect(draw()).toContain("dev is not a value");
+  });
+
+  it("does not say a parameter is saved when it was not", async () => {
+    const { press, draw } = withWriter(tenants, () => ({ saved: false, failure: "disk is full" }));
+    press(`pe${ENTER}`);
+    await tick();
+    const frame = draw();
+    expect(frame).toContain("not saved: disk is full");
+    expect(frame).not.toContain("Saved env");
+  });
+
+  it("says which file declares a parameter that config.yml does not", () => {
+    const { press, draw, view } = withWriter();
+    view.choices = { ...view.choices, zone: ["eu"] };
+    press(`p${DOWN}`);
+    press("l");
+    press("e");
+    expect(draw()).toContain("zone is not in .probe/config.yml: change it in prod.yml");
+  });
+});
+
+describe("an empty list", () => {
+  it("says how to add the first service", () => {
+    const { view, draw } = setup({ config: { schemaVersion: 1, services: {} } as Config });
+    view.canAdd = true;
+    expect(draw()).toContain("no service: press a to add one");
   });
 });

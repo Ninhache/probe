@@ -216,7 +216,7 @@ describe("parameters", () => {
   it("says so when the config declares none", () => {
     const { press, draw } = setup();
     press("p");
-    expect(draw().split("\n").at(-1)).toContain("no parameters");
+    expect(draw().split("\n").at(-1)).toContain(".probe/config.yml declares no parameter");
   });
 
   it("offers the parameter binding in the bar only with parameters", () => {

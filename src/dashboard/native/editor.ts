@@ -1,10 +1,14 @@
+import type { ParameterWrite } from "../../commands/parameter-writes";
 import type { ServiceWrite } from "../../commands/service-writes";
-import { LOCAL_FILE, PROBE_DIR } from "../../constants";
+import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../../constants";
 import type { Secrets } from "../Dashboard";
 import type { Editing } from "../editing";
+import type { VariableRow } from "../variables";
 import { confirmModal } from "./confirm";
 import type { Tracker } from "./history";
+import { parameterFormModal } from "./parameter-form";
 import { serviceFormModal } from "./service-form";
+import { variableModal } from "./variable-modal";
 import { say, type ViewState } from "./view";
 
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
@@ -18,14 +22,28 @@ export interface Editor {
   remove(service: string): void;
   undo(): void;
   redo(): void;
+  /** The keys of the parameters panel; absent when no writer was given. */
+  parameters?: {
+    add(): void;
+    edit(name: string): void;
+    remove(name: string): void;
+  };
+  /** The variables the headers of a service send; absent when none can be looked up. */
+  variables?: {
+    load(service: string): Promise<VariableRow[]>;
+    /** `done` runs once the value is kept: the rows are then looked up again. */
+    set(row: VariableRow, done: () => void): void;
+  };
 }
 
 export interface EditorDeps {
   view: ViewState;
   tracker: Tracker;
   editing: Editing;
-  /** The files changed: the services and parameters are read again and a pass starts. */
-  changed(): void;
+  /** The files changed: the services and parameters are read again and a pass starts. `restart` also forgets what was measured. */
+  changed(restart?: boolean): void;
+  /** The files of the other environments that declare this parameter. */
+  declaredIn(parameter: string): string[];
   redraw(): void;
   /** The file an environment comes from, when it is not the local config. */
   fileOf(env: string): string | undefined;
@@ -38,12 +56,13 @@ export function createEditor({
   changed,
   redraw,
   fileOf,
-}: EditorDeps): Editor | undefined {
-  const { writeService } = editing;
-  if (!writeService) return undefined;
+  declaredIn,
+}: EditorDeps): Editor {
+  const { writeService, writeParameter, variables, writeVariable } = editing;
 
   const write = async (change: ServiceWrite, done: string, secrets?: Secrets) => {
-    const outcome = await writeService(change, secrets);
+    const outcome = await writeService?.(change, secrets);
+    if (!outcome) return;
     if (outcome.saved) {
       const kept = Object.keys(secrets ?? {});
       const told =
@@ -63,6 +82,34 @@ export function createEditor({
   };
 
   const context = { editing, stack: view.modals, redraw, write };
+
+  // Another value is another target: the latencies and the states start again.
+  const parameterWritten = (name: string, done: string) => {
+    say(view, done);
+    view.parameterAt = name;
+    changed(true);
+  };
+  const parameterContext = {
+    editing,
+    stack: view.modals,
+    redraw,
+    async write(change: ParameterWrite, done: string) {
+      const outcome = await writeParameter?.(change);
+      if (!outcome || outcome.drops || outcome.problem) return outcome;
+      if (outcome.failure) say(view, `not saved: ${outcome.failure}`);
+      if (outcome.saved) parameterWritten(change.name, done);
+      return outcome;
+    },
+  };
+  // Only the parameters of config.yml are written here: one an environment declares says its file.
+  const ownParameter = (name: string) => {
+    if (editing.parameterFields(name)) return true;
+    say(
+      view,
+      `${name} is not in ${PROBE_DIR}/${CONFIG_FILE}: change it in ${declaredIn(name).join(", ")}`,
+    );
+    return false;
+  };
   const history = async (way: "undo" | "redo") => {
     const outcome = await editing[way]?.();
     if (!outcome) return;
@@ -78,13 +125,15 @@ export function createEditor({
       const file = env === undefined ? undefined : fileOf(env);
       return file === undefined ? undefined : `${env} is not edited here: change ${file}`;
     },
-    add: () => view.modals.push(serviceFormModal(context)),
+    add() {
+      if (writeService) view.modals.push(serviceFormModal(context));
+    },
     edit(service) {
-      if (!editing.serviceFields(service)) return;
+      if (!writeService || !editing.serviceFields(service)) return;
       view.modals.push(serviceFormModal(context, service));
     },
     remove(service) {
-      if (!editing.config().services[service]) return;
+      if (!writeService || !editing.config().services[service]) return;
       view.modals.push(
         confirmModal(
           `remove ${service}`,
@@ -95,5 +144,52 @@ export function createEditor({
     },
     undo: () => void history("undo"),
     redo: () => void history("redo"),
+    parameters: writeParameter && {
+      add: () => view.modals.push(parameterFormModal(parameterContext)),
+      edit(name) {
+        if (ownParameter(name)) view.modals.push(parameterFormModal(parameterContext, name));
+      },
+      remove(name) {
+        if (!ownParameter(name)) return;
+        view.modals.push(
+          confirmModal(
+            `remove ${name}`,
+            `Remove the parameter ${name} from the config?`,
+            () =>
+              void writeParameter({ kind: "remove", name }).then((outcome) => {
+                if (outcome.failure) say(view, `not saved: ${outcome.failure}`);
+                if (outcome.problem) say(view, outcome.problem.message);
+                else if (outcome.saved) parameterWritten(name, `Removed ${name}`);
+                redraw();
+              }),
+          ),
+        );
+      },
+    },
+    variables: variables && {
+      load: (service) => variables.serviceVariables(service),
+      set({ name, source }, done) {
+        if (!writeVariable) return;
+        if (source === "environment")
+          return say(view, `${name} comes from the environment, which is read first`);
+        view.modals.push(
+          variableModal(name, (value) => {
+            void writeVariable(name, value).then((failure) => {
+              say(
+                view,
+                failure
+                  ? `not saved: ${failure}`
+                  : `Kept ${name} in ${LOCAL}, for this machine only`,
+              );
+              if (!failure) {
+                changed();
+                done();
+              }
+              redraw();
+            });
+          }),
+        );
+      },
+    },
   };
 }
