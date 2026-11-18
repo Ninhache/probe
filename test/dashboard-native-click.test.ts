@@ -425,3 +425,39 @@ describe("hover", () => {
     expect(view.hover?.layer ?? 1).toBe(1);
   });
 });
+
+describe("the environment tabs", () => {
+  const header = (screen: Screen) => screen.toPlainText().split("\n")[0] ?? "";
+  const tabHits = (view: ViewState) => view.hits.toArray().filter((h) => h.action === "env");
+
+  it("should be hidden, and do nothing, with a single environment", () => {
+    const { send, view, draw } = setup();
+
+    expect(header(draw())).not.toMatch(/\ball\b|\blocal\b/);
+    expect(tabHits(view)).toEqual([]);
+    for (const name of ["tab", "right", "left", "l", "h"]) send(key(name));
+    expect(view.tab).toBe(0);
+    expect(header(draw())).not.toMatch(/\ball\b|\blocal\b/);
+  });
+
+  it("should come back with two environments, and answer to keys and clicks", () => {
+    const { send, view, draw, tracker } = setup({}, ["local", "prod"]);
+
+    expect(header(draw())).toMatch(/all\s+local\s+prod/);
+    send(key("right"));
+    expect(view.tab).toBe(1);
+    const prod = tabHits(view).find((h) => h.ref === 2);
+    send(click((prod?.x ?? 0) + 1, prod?.y ?? 0));
+    expect(view.tab).toBe(2);
+    expect(tracker.environments).toEqual(["local", "prod"]);
+  });
+
+  it("should appear when an environment is added to a single one", () => {
+    const { tracker, view, draw } = setup();
+    expect(tabHits(view)).toEqual([]);
+
+    tracker.add("prod");
+    expect(header(draw())).toMatch(/all\s+local\s+prod/);
+    expect(tabHits(view).length).toBe(3);
+  });
+});
