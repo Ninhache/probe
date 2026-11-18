@@ -333,3 +333,19 @@ describe("log tab", () => {
     });
   });
 });
+
+describe("parameter change", () => {
+  it("should keep the service rows and the log when the measures are reset", () => {
+    const { tracker, draw } = setup();
+    tracker.record("local", [http("api", "before"), http("web", "before")], 0);
+
+    tracker.reset();
+
+    const text = draw();
+    expect(tracker.services("local")).toEqual(["api", "web"]);
+    expect(text).toContain("api");
+    expect(text).toContain("web");
+    expect(tracker.log.toArray()).toHaveLength(2);
+    expect(tracker.result("api", "local")).toBeUndefined();
+  });
+});

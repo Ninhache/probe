@@ -138,13 +138,14 @@ export class Tracker {
     return this.results.get(keyOf(service, env));
   }
 
-  /** Forget everything: another parameter value is another target. */
+  /**
+   * Forget the measures: another parameter value is another target. The service names stay so the list
+   * does not empty until the next pass, and the log stays because it is what was answered so far.
+   */
   reset(): void {
+    for (const key of this.series.keys()) this.known.add(key);
     this.series.clear();
-    this.known.clear();
     this.results.clear();
-    this.log.clear();
-    this.changes.clear();
   }
 
   /** Forget the services of an environment that are not in `names` any more: removed or undone. */
