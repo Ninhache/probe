@@ -1,6 +1,9 @@
 import type { InputEvent } from "../../tui/input";
-import { columns, contains, fill, type Rect, rows } from "../../tui/layout";
+import { columns, fill, type Rect, rows } from "../../tui/layout";
+import { type ListGeometry, listKey, listMouse } from "../../tui/list";
+import { ModalStack } from "../../tui/modal";
 import type { Screen } from "../../tui/screen";
+import { drawField, fieldKey, fieldValue, type TextField, textField } from "../../tui/textfield";
 import { defaultTheme as t } from "../../tui/theme";
 import {
   box,
@@ -14,6 +17,7 @@ import {
   tabs,
 } from "../../tui/widgets";
 import { pad } from "../../tui/width";
+import { drawHelpBar, helpModal } from "./help";
 import { type SeriesStats, statsOf, type Tracker } from "./history";
 
 /** Uptime the services are held to, in percent. Not configurable on purpose. */
@@ -31,6 +35,12 @@ export interface ViewState {
   offset: number;
   tableBody: Rect;
   frame: number;
+  /** Name filter, typed after "/". Kept when the field is closed with Enter. */
+  filter: TextField;
+  filtering: boolean;
+  modals: ModalStack;
+  /** The whole screen, as of the last frame: modals are sized from it. */
+  area: Rect;
 }
 
 export const initialView = (): ViewState => ({
@@ -38,6 +48,10 @@ export const initialView = (): ViewState => ({
   offset: 0,
   tableBody: { x: 0, y: 0, w: 0, h: 0 },
   frame: 0,
+  filter: textField(),
+  filtering: false,
+  modals: new ModalStack(),
+  area: { x: 0, y: 0, w: 0, h: 0 },
 });
 
 const tabNames = (tracker: Tracker) => [ALL, ...tracker.environments];
@@ -45,7 +59,8 @@ const activeEnv = (tracker: Tracker, view: ViewState) =>
   view.tab === 0 ? undefined : tracker.environments[view.tab - 1];
 
 export function visibleServices(tracker: Tracker, view: ViewState): string[] {
-  return tracker.services(activeEnv(tracker, view));
+  const wanted = fieldValue(view.filter).toLowerCase();
+  return tracker.services(activeEnv(tracker, view)).filter((n) => n.toLowerCase().includes(wanted));
 }
 
 export function selectedIndex(tracker: Tracker, view: ViewState): number {
@@ -73,7 +88,13 @@ export function renderDashboard(
   view: ViewState,
   now = Date.now(),
 ): void {
-  const [header = area, body = area, footer = area] = rows(area, [1, fill(), 1]);
+  view.area = area;
+  const [header = area, body = area, filterRow = area, footer = area] = rows(area, [
+    1,
+    fill(),
+    view.filtering ? 1 : 0,
+    1,
+  ]);
   const [left = body, right = body] = columns(body, ["55%", fill()]);
   const [graphArea = right, gaugeArea = right, logArea = right] = rows(right, [
     fill(2),
@@ -103,7 +124,7 @@ export function renderDashboard(
   const inner = box(screen, left, {
     title: "services",
     hotkey: "¹ ",
-    footer: `${list.length} services`,
+    footer: filterNote(view, list.length),
     color: t.borderFocus,
     titleColor: t.title,
     hotkeyColor: t.accent,
@@ -151,7 +172,20 @@ export function renderDashboard(
 
   drawDetail(screen, { graphArea, gaugeArea }, tracker, service, env);
   drawEvents(screen, logArea, tracker, env);
-  drawHints(screen, footer);
+  if (view.filtering) {
+    const label = screen.text(1, filterRow.y, "filter ", { fg: t.accent, bold: true });
+    view.filter = drawField(screen, 1 + label, filterRow.y, area.w - label - 2, view.filter, {
+      fg: t.fg,
+    });
+  }
+  const barScreen = view.modals.depth > 0 ? "help" : view.filtering ? "filter" : "list";
+  drawHelpBar(screen, footer, { screen: barScreen, grid: tracker.environments.length > 1 });
+  view.modals.draw(screen, area);
+}
+
+function filterNote(view: ViewState, count: number): string {
+  const text = fieldValue(view.filter);
+  return text && !view.filtering ? `${count} services · filter: ${text}` : `${count} services`;
 }
 
 function drawDetail(
@@ -228,20 +262,6 @@ function drawEvents(screen: Screen, area: Rect, tracker: Tracker, env: string | 
   });
 }
 
-function drawHints(screen: Screen, footer: Rect): void {
-  const hints: [string, string][] = [
-    ["j/k", "select"],
-    ["tab", "environment"],
-    ["r", "check now"],
-    ["q", "quit"],
-  ];
-  let x = 1;
-  for (const [key, label] of hints) {
-    x += screen.text(x, footer.y, key, { fg: t.accent, bold: true }) + 1;
-    x += screen.text(x, footer.y, label, { fg: t.muted }) + 2;
-  }
-}
-
 export interface ViewActions {
   quit(): void;
   refresh(): void;
@@ -254,32 +274,52 @@ export function handleInput(
   view: ViewState,
   actions: ViewActions,
 ): void {
+  if (view.modals.depth > 0) {
+    if (event.kind === "key" && event.name === "q" && !event.ctrl && !event.alt) actions.quit();
+    else view.modals.handle(event);
+    return;
+  }
   const list = visibleServices(tracker, view);
-  const move = (delta: number) => {
+  const geometry: ListGeometry = { count: list.length, body: view.tableBody };
+  const select = (next: { selected: number; offset: number }) => {
     if (list.length === 0) return;
-    const next = Math.max(0, Math.min(list.length - 1, selectedIndex(tracker, view) + delta));
-    view.selected = list[next];
+    view.selected = list[next.selected];
+    view.offset = next.offset;
   };
+  const current = { selected: Math.max(0, selectedIndex(tracker, view)), offset: view.offset };
   if (event.kind === "mouse") {
-    if (event.action === "wheel-up") move(-1);
-    else if (event.action === "wheel-down") move(1);
-    else if (
-      event.action === "press" &&
-      event.button === "left" &&
-      contains(view.tableBody, event.x, event.y)
-    ) {
-      const picked = list[view.offset + event.y - view.tableBody.y];
-      if (picked !== undefined) view.selected = picked;
-    }
+    select(listMouse(current, event, geometry));
+    return;
+  }
+  if (view.filtering) {
+    typeFilter(event, view, () => select(listKey(current, event, geometry)));
     return;
   }
   if (event.ctrl || event.alt) return;
-  if (event.name === "q" || event.name === "escape") actions.quit();
-  else if (event.name === "up" || event.name === "k") move(-1);
-  else if (event.name === "down" || event.name === "j") move(1);
-  else if (event.name === "tab") {
-    const count = tabNames(tracker).length;
-    view.tab = (view.tab + (event.shift ? count - 1 : 1)) % count;
+  const environments = tabNames(tracker).length;
+  const cycle = (by: number) => {
+    view.tab = (view.tab + by + environments) % environments;
     view.offset = 0;
-  } else if (event.name === "r") actions.refresh();
+  };
+  if (event.name === "q") actions.quit();
+  else if (event.name === "escape") {
+    if (fieldValue(view.filter)) view.filter = textField();
+    else actions.quit();
+  } else if (event.name === "?") view.modals.push(helpModal(view.area, environments > 2));
+  else if (event.name === "/") view.filtering = true;
+  else if (event.name === "tab") cycle(event.shift ? -1 : 1);
+  else if (event.name === "right" || event.name === "l") cycle(1);
+  else if (event.name === "left" || event.name === "h") cycle(-1);
+  else if (event.name === "r") actions.refresh();
+  else select(listKey(current, event, geometry));
+}
+
+function typeFilter(event: InputEvent, view: ViewState, move: () => void): void {
+  if (event.kind !== "key") return;
+  if (event.name === "escape") {
+    view.filter = textField();
+    view.filtering = false;
+  } else if (event.name === "enter") view.filtering = false;
+  else if (event.name === "up" || event.name === "down") move();
+  else view.filter = fieldKey(view.filter, event);
 }

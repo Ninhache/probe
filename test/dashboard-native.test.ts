@@ -259,3 +259,76 @@ describe("dashboard view", () => {
     expect(screen.toPlainText()).toContain("0 services");
   });
 });
+
+describe("help bar, help overlay and filter", () => {
+  const draw = (tracker: Tracker, view = initialView(), w = 100, h = 30) => {
+    const screen = new Screen(w, h, "truecolor");
+    renderDashboard(screen, { x: 0, y: 0, w, h }, tracker, view, 0);
+    return screen.toPlainText().split("\n");
+  };
+  const run = (tracker: Tracker, view: ReturnType<typeof initialView>, ...names: string[]) => {
+    for (const name of names) handleInput(key(name), tracker, view, actions());
+  };
+
+  it("draws the keymap's bar at the bottom and drops bindings when narrow", () => {
+    const wide = draw(sample()).at(-1) ?? "";
+    expect(wide).toContain("↑↓ jk move");
+    expect(wide).toContain("/ filter");
+    const narrow = draw(sample(), initialView(), 70, 16).at(-1) ?? "";
+    expect(narrow.trim().length).toBeLessThan(wide.trim().length);
+    expect(narrow).toContain("q quit");
+    expect(narrow).not.toContain(": commands");
+  });
+
+  it("opens the help modal on ? and closes it with Esc, with the bar following", () => {
+    const tracker = sample();
+    const view = initialView();
+    draw(tracker, view);
+    run(tracker, view, "?");
+    const rows = draw(tracker, view);
+    expect(rows.join("\n")).toContain("┤help├");
+    expect(rows.join("\n")).toContain("Filter by name");
+    expect(rows.at(-1)).toContain("? esc close");
+    run(tracker, view, "j", "escape");
+    expect(view.modals.depth).toBe(0);
+    expect(view.selected).toBeUndefined();
+    expect(draw(tracker, view).join("\n")).not.toContain("┤help├");
+  });
+
+  it("quits from the help modal and does not leak other keys to the list", () => {
+    const tracker = sample();
+    const view = initialView();
+    draw(tracker, view);
+    run(tracker, view, "?");
+    const a = actions();
+    handleInput(key("q"), tracker, view, a);
+    handleInput(key("r"), tracker, view, a);
+    expect(a.calls).toEqual({ quit: 1, refresh: 0 });
+  });
+
+  it("filters services by name after /, keeps it on Enter and clears it on Esc", () => {
+    const tracker = sample();
+    const view = initialView();
+    draw(tracker, view);
+    run(tracker, view, "/", "g", "l");
+    expect(visibleServices(tracker, view)).toEqual(["globex"]);
+    expect(draw(tracker, view).at(-2)).toContain("filter gl");
+    expect(draw(tracker, view).at(-1)).toContain("↵ keep");
+    run(tracker, view, "enter");
+    expect(view.filtering).toBe(false);
+    expect(draw(tracker, view).join("\n")).toContain("1 services · filter: gl");
+    run(tracker, view, "backspace");
+    expect(view.filtering).toBe(false);
+    run(tracker, view, "/", "escape");
+    expect(visibleServices(tracker, view)).toHaveLength(3);
+  });
+
+  it("types q and other command keys into the filter instead of running them", () => {
+    const tracker = sample();
+    const view = initialView();
+    const a = actions();
+    for (const name of ["/", "q", "r"]) handleInput(key(name), tracker, view, a);
+    expect(a.calls).toEqual({ quit: 0, refresh: 0 });
+    expect(visibleServices(tracker, view)).toEqual([]);
+  });
+});
