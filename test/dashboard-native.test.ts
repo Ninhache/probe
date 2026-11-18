@@ -169,7 +169,7 @@ describe("dashboard view", () => {
     expect(text).toContain("╭─┤¹ services├");
     expect(text).toContain("┤latency · acme@local├");
     expect(text).toContain(`┤uptime · SLO ${SLO_PERCENT}%├`);
-    expect(text).toContain("┤events├");
+    expect(text).toContain("┤1 events├");
     expect(text).toMatch(/all\s+local\s+prod/);
     expect(text).toMatch(/acme\s+● up\s+● up/);
     expect(text).toMatch(/initech\s+· -\s+● down/);

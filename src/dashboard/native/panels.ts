@@ -1,3 +1,4 @@
+import type { CheckResult } from "../../checkers/types";
 import { effectiveSelection, type ParameterChoices } from "../../config/parameters";
 import { LOCAL_FILE } from "../../constants";
 import type { InputEvent } from "../../tui/input";
@@ -8,7 +9,7 @@ import { defaultTheme as t } from "../../tui/theme";
 import { pad } from "../../tui/width";
 import { detailLines } from "../detail";
 import type { Screen as KeymapScreen } from "../keymap";
-import { responseLines, responseProblem, responseText } from "../response";
+import { NO_RESPONSE, responseLines, responseProblem, responseText } from "../response";
 import { SETTING_ROWS, stepChoice, stepServiceTimeout } from "../settings";
 import type { VariableRow } from "../variables";
 import { LOCAL_ENVIRONMENT, type Tracker } from "./history";
@@ -25,7 +26,7 @@ const SOURCES = { environment: "set in the environment", local: `set in ${LOCAL_
 /** A modal and the keymap screen whose bindings the help bar shows while it is open. */
 export type Panel = Modal & { bar: KeymapScreen };
 
-const tones = { good: t.ok, bad: t.err, dim: t.muted } as const;
+export const tones = { good: t.ok, bad: t.err, dim: t.muted } as const;
 const seconds = (ms: number) => `${ms / 1000}s`;
 const row = (screen: Screen, inner: Rect, i: number, label: string, value: string, on: boolean) => {
   const style = on ? { fg: t.title, bg: t.selectedBg, bold: true } : { fg: t.fg };
@@ -41,6 +42,33 @@ function folds(text: string, width: number): string[] {
   return Array.from({ length: Math.ceil(letters.length / width) }, (_, i) =>
     letters.slice(i * width, (i + 1) * width).join(""),
   );
+}
+
+export interface ResponseRow {
+  text: string;
+  tone?: keyof typeof tones;
+}
+
+/** The lines of a response: its status, its headers, a blank, the body, whole, folded to `fit`. */
+export function responseRows(result: CheckResult, fit: number): ResponseRow[] {
+  const { head, body, note } = responseLines(result);
+  const folded = (text: string, tone?: ResponseRow["tone"]) =>
+    folds(text, fit).map((piece) => ({ text: piece, tone }));
+  return [
+    ...head.flatMap((text, i) => folded(text, i === 0 ? (result.ok ? "good" : "bad") : "dim")),
+    { text: "" },
+    ...body.flatMap((text) => folded(text)),
+    ...(note ? [{ text: note, tone: "dim" as const }] : []),
+  ];
+}
+
+/** Copies only the body of a response, as it is on screen: the status line says how it went. */
+export function copyBody(view: ViewState, actions: ViewActions, result: CheckResult | undefined) {
+  const problem = responseProblem(result);
+  if (problem || !result) return say(view, problem ?? NO_RESPONSE);
+  const body = result.response?.body;
+  if (!body) return say(view, "The response has no body to copy");
+  actions.copyResponse?.(body, result.response?.bodyCut === true, "body");
 }
 
 /** A row whose value moves with ←→: drawn `‹ value ›`. */
@@ -94,19 +122,9 @@ export function detailPanel(
   // The frame and its border take two rows each way.
   const room = Math.max(1, area.h - 4);
   const responseWidth = Math.min(RESPONSE_WIDTH, area.w - MARGIN * 2);
-  const rows = (): { text: string; tone?: "good" | "bad" | "dim" }[] => {
+  const rows = (): ResponseRow[] => {
     const result = tracker.result(service, env);
-    if (!result) return [];
-    const { head, body, note } = responseLines(result);
-    const fit = responseWidth - 2 - PAD * 2;
-    const folded = (text: string, tone?: "good" | "bad" | "dim") =>
-      folds(text, fit).map((piece) => ({ text: piece, tone }));
-    return [
-      ...head.flatMap((text, i) => folded(text, i === 0 ? (result.ok ? "good" : "bad") : "dim")),
-      { text: "" },
-      ...body.flatMap((text) => folded(text)),
-      ...(note ? [{ text: note, tone: "dim" as const }] : []),
-    ];
+    return result ? responseRows(result, responseWidth - 2 - PAD * 2) : [];
   };
   const respond = () => {
     const problem = responseProblem(tracker.result(service, env));
@@ -130,7 +148,7 @@ export function detailPanel(
       return writable ? "detail" : "readonly";
     },
     get footer() {
-      if (responding) return "↑↓ PgUp PgDn scroll · c copy · r back · esc";
+      if (responding) return "↑↓ PgUp PgDn scroll · c copy · b body · r back · esc";
       return writable
         ? "←→ timeout · s skip · u open · c copy · r response · esc"
         : "u open · c copy · r response · esc";
@@ -197,6 +215,7 @@ export function detailPanel(
         };
         if (event.name in keys) scroll(keys[event.name] as number);
         else if (event.name === "r") responding = false;
+        else if (event.name === "b") copyBody(view, actions, tracker.result(service, env));
         else if (event.name === "c") {
           const result = tracker.result(service, env);
           const text = result && responseText(result);

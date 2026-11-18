@@ -937,7 +937,10 @@ export function Dashboard({
       case "quit":
         return exit();
       case "environment":
-        // Only the native screen offers it: the keymap leaves it out of this one.
+      case "events":
+      case "response":
+      case "body":
+        // Only the native screen offers them: the keymap leaves them out of this one.
         return;
       default:
         return command satisfies never;

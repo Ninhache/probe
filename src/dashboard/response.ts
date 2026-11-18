@@ -5,6 +5,9 @@ export const HTTP_ONLY = "The response view is HTTP-only";
 export const NO_RESPONSE = "No response to show yet";
 
 // `fetch` does not say which version of the protocol answered.
+/** What a copy takes of the last response. */
+export type ResponsePart = "response" | "body";
+
 const HTTP_VERSION = "HTTP/1.1";
 export const BODY_CUT = "body cut: the rest is not kept";
 

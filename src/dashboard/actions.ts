@@ -6,6 +6,7 @@ import type { Config } from "../config/schema";
 import { notifierName, sendNotification } from "../notify";
 import { openerCommand, openUrl } from "../open-url";
 import type { DashboardProps } from "./Dashboard";
+import type { ResponsePart } from "./response";
 
 const NOTIFICATION_TITLE = "probe";
 
@@ -30,7 +31,7 @@ export function serviceActions(
   config: (selection?: Selection) => Config,
   deps: ActionDeps = system(),
 ): Required<Pick<DashboardProps, "onOpen" | "onCopy" | "onNotify">> & {
-  onCopyResponse(text: string, cut: boolean): Promise<string>;
+  onCopyResponse(text: string, cut: boolean, part?: ResponsePart): Promise<string>;
 } {
   const service = (name: string, selection?: Selection) => config(selection).services[name];
   const gone = (name: string) => `${name} is no longer in the config`;
@@ -56,11 +57,11 @@ export function serviceActions(
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy with. The command:\n${command}`;
     },
-    async onCopyResponse(text, cut) {
+    async onCopyResponse(text, cut, part = "response") {
       if (await deps.copyText(text))
-        return cut ? "Copied the response, its body cut" : "Copied the response";
+        return cut ? `Copied the ${part}, its body cut` : `Copied the ${part}`;
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
-      return `No ${tools.join(" or ")} to copy the response with`;
+      return `No ${tools.join(" or ")} to copy the ${part} with`;
     },
     async onNotify(message) {
       if (await deps.notify(NOTIFICATION_TITLE, message)) return undefined;

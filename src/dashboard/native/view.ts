@@ -14,6 +14,7 @@ import type { Screen } from "../../tui/screen";
 import { drawField, fieldKey, fieldValue, type TextField, textField } from "../../tui/textfield";
 import { defaultTheme as t } from "../../tui/theme";
 import {
+  BORDERS,
   box,
   type Cell,
   graph,
@@ -25,14 +26,25 @@ import {
   tabs,
 } from "../../tui/widgets";
 import { pad } from "../../tui/width";
+import { detailLines } from "../detail";
 import { type Command, keyCommand } from "../keymap";
 import { fromEngineKey } from "../keys";
+import { HTTP_ONLY, NO_RESPONSE, type ResponsePart } from "../response";
 import type { DashboardSettings } from "../settings";
 import type { Editor } from "./editor";
 import { drawHelpBar, helpModal } from "./help";
 import { LOCAL_ENVIRONMENT, type SeriesStats, statsOf, type Tracker } from "./history";
 import { paletteModal } from "./palette";
-import { detailPanel, optionsPanel, type Panel, parametersPanel } from "./panels";
+import {
+  copyBody,
+  detailPanel,
+  optionsPanel,
+  type Panel,
+  parametersPanel,
+  type ResponseRow,
+  responseRows,
+  tones as TONES,
+} from "./panels";
 
 /** Uptime the services are held to, in percent. Not configurable on purpose. */
 export const SLO_PERCENT = 99;
@@ -41,7 +53,27 @@ const GRAPH_MAX_MS = 300;
 const ALL = "all";
 const STATUS_MAX_WIDTH = 10;
 
+/** The tabs of the box under the graph: what it shows. */
+export type BottomTab = "events" | "response";
+const BOTTOM_TABS: readonly { tab: BottomTab; key: string }[] = [
+  { tab: "events", key: "1" },
+  { tab: "response", key: "2" },
+];
+/** Rows a PgUp or PgDn moves the response tab by, besides the page: the wheel moves this many. */
+const PEEK_WHEEL_ROWS = 3;
+
 export interface ViewState {
+  /** The tab of the box under the graph, kept across redraws. */
+  bottom: BottomTab;
+  /** First row of the response tab that is shown. */
+  bottomTop: number;
+  /** The most the response tab can scroll, as of the last frame. */
+  bottomMax: number;
+  /** The box and its tab titles, as of the last frame: clicks are matched against them. */
+  bottomBox: Rect;
+  bottomTitles: { tab: BottomTab; x: number; w: number }[];
+  /** `service@env` the response tab showed last: another one starts at the top. */
+  peeked?: string;
   /** Index of the active tab: 0 is "all", then one per environment. */
   tab: number;
   /** Followed by name, so a service keeps the selection while rows move. */
@@ -101,6 +133,11 @@ export const initialView = (init: ViewInit = {}): ViewState => ({
   choices: {},
   ...init,
   tab: 0,
+  bottom: "events",
+  bottomTop: 0,
+  bottomMax: 0,
+  bottomBox: { x: 0, y: 0, w: 0, h: 0 },
+  bottomTitles: [],
   offset: 0,
   tableBody: { x: 0, y: 0, w: 0, h: 0 },
   frame: 0,
@@ -246,7 +283,7 @@ export function renderDashboard(
       padded.w,
     );
   drawDetail(screen, { graphArea, gaugeArea }, tracker, service, env);
-  drawEvents(screen, logArea, tracker, env);
+  drawBottom(screen, logArea, tracker, view, service, env);
   if (view.filtering) {
     const label = screen.text(1, filterRow.y, "filter ", { fg: t.accent, bold: true });
     view.filter = drawField(screen, 1 + label, filterRow.y, area.w - label - 2, view.filter, {
@@ -258,7 +295,9 @@ export function renderDashboard(
       ? ((view.modals.top as Partial<Panel> | undefined)?.bar ?? view.bar ?? "help")
       : view.filtering
         ? "filter"
-        : "list";
+        : view.bottom === "response"
+          ? "peek"
+          : "list";
   if (view.status && now - view.status.at < STATUS_MS) {
     const text = view.status.text.replaceAll("\n", " · ");
     screen.text(1, footer.y, text, { fg: t.warn }, area.w - 2);
@@ -333,8 +372,78 @@ function drawDetail(
     screen.text(barX, h.y + 1, met ? "meets the SLO" : "below the SLO", { fg: met ? t.ok : t.err });
 }
 
-function drawEvents(screen: Screen, area: Rect, tracker: Tracker, env: string | undefined): void {
-  const l = box(screen, area, { title: "events", color: t.border, titleColor: t.title });
+/** What the response tab says about the selected service: its last response, or why not. */
+function peekRows(
+  tracker: Tracker,
+  view: ViewState,
+  service: string | undefined,
+  env: string | undefined,
+  width: number,
+): ResponseRow[] {
+  const dim = (text: string): ResponseRow[] => [{ text, tone: "dim" }];
+  if (service === undefined || env === undefined) return dim("no service");
+  const at = `${service}@${env}`;
+  if (view.peeked !== at) view.bottomTop = 0;
+  view.peeked = at;
+  const result = tracker.result(service, env);
+  if (!result) return dim(NO_RESPONSE);
+  if (result.type !== "http") {
+    const history = (tracker.history(service, env)?.toArray() ?? []).map((s) => s.latencyMs);
+    return [
+      ...dim(HTTP_ONLY),
+      ...detailLines(result, history, { unicode: true, width, room: Number.MAX_SAFE_INTEGER }),
+    ];
+  }
+  return responseRows(result, width);
+}
+
+/** The box under the graph: its tab titles sit in the top border, the active one in accent. */
+function drawBottom(
+  screen: Screen,
+  area: Rect,
+  tracker: Tracker,
+  view: ViewState,
+  service: string | undefined,
+  env: string | undefined,
+): void {
+  const focus = service === undefined ? undefined : focusEnv(tracker, view, service);
+  const shown =
+    view.bottom === "response" ? peekRows(tracker, view, service, focus, area.w - 4) : [];
+  const room = Math.max(0, area.h - 2);
+  view.bottomMax = Math.max(0, shown.length - room);
+  view.bottomTop = Math.min(view.bottomTop, view.bottomMax);
+  const l = box(screen, area, {
+    color: t.border,
+    footer:
+      view.bottomMax > 0
+        ? `${view.bottomTop + 1}-${Math.min(view.bottomTop + room, shown.length)}/${shown.length}`
+        : undefined,
+  });
+  view.bottomBox = area;
+  view.bottomTitles = [];
+  let x = area.x + 2;
+  for (const { tab, key } of BOTTOM_TABS) {
+    const label = `${key} ${tab}`;
+    if (x + label.length + 2 >= area.x + area.w - 1) break;
+    const style = tab === view.bottom ? { fg: t.accent, bold: true } : { fg: t.muted };
+    screen.set(x, area.y, BORDERS.rounded.l, { fg: t.border });
+    screen.text(x + 1, area.y, label, style);
+    screen.set(x + 1 + label.length, area.y, BORDERS.rounded.r, { fg: t.border });
+    view.bottomTitles.push({ tab, x, w: label.length + 2 });
+    x += label.length + 2;
+  }
+  if (view.bottom === "response") {
+    shown.slice(view.bottomTop, view.bottomTop + l.h).forEach((line, i) => {
+      screen.text(
+        l.x + 1,
+        l.y + i,
+        line.text,
+        { fg: line.tone ? TONES[line.tone] : t.fg },
+        l.w - 2,
+      );
+    });
+    return;
+  }
   const entries = tracker.events
     .toArray()
     .filter((event) => env === undefined || event.env === env)
@@ -357,8 +466,8 @@ export interface ViewActions {
   refresh(): void;
   open?(service: string, env: string): void;
   copy?(service: string, env: string): void;
-  /** Copies the text of a response: `cut` when its body is not all there. */
-  copyResponse?(text: string, cut: boolean): void;
+  /** Copies the text of a response, or only its body: `cut` when the body is not all there. */
+  copyResponse?(text: string, cut: boolean, part?: ResponsePart): void;
   skip?(service: string, skip: boolean): void;
   timeout?(service: string, seconds: number | undefined): void;
   settings?(settings: DashboardSettings): void;
@@ -404,6 +513,7 @@ export function handleInput(
   };
   const current = { selected: Math.max(0, selectedIndex(tracker, view)), offset: view.offset };
   if (event.kind === "mouse") {
+    if (peekMouse(event, view)) return;
     select(listMouse(current, event, geometry));
     return;
   }
@@ -422,6 +532,10 @@ export function handleInput(
     else actions.quit();
     return;
   }
+  if (view.bottom === "response" && (event.name === "pageup" || event.name === "pagedown")) {
+    scrollPeek(view, (event.name === "pageup" ? -1 : 1) * Math.max(1, view.bottomBox.h - 2));
+    return;
+  }
   const typed = fromEngineKey(event).input;
   const command =
     event.name === "enter" ? keyCommand("", true, true) : keyCommand(typed, false, true);
@@ -431,6 +545,35 @@ export function handleInput(
   else if (event.name === "right" || event.name === "l") cycle(1);
   else if (event.name === "left" || event.name === "h") cycle(-1);
   else select(listKey(current, event, geometry));
+}
+
+const scrollPeek = (view: ViewState, by: number) => {
+  view.bottomTop = Math.max(0, Math.min(view.bottomMax, view.bottomTop + by));
+};
+
+const showBottom = (view: ViewState, tab: BottomTab) => {
+  if (view.bottom !== tab) view.bottomTop = 0;
+  view.bottom = tab;
+};
+
+/** A click on a tab title, or the wheel over the response tab. True when the event was for the box. */
+function peekMouse(event: InputEvent, view: ViewState): boolean {
+  if (event.kind !== "mouse") return false;
+  if (event.action === "press" && event.button === "left") {
+    const title = view.bottomTitles.find(
+      ({ x, w }) => event.y === view.bottomBox.y && event.x >= x && event.x < x + w,
+    );
+    if (!title) return false;
+    showBottom(view, title.tab);
+    return true;
+  }
+  const { x, y, w, h } = view.bottomBox;
+  const over = event.x >= x && event.x < x + w && event.y >= y && event.y < y + h;
+  if (!over || view.bottom !== "response") return false;
+  if (event.action === "wheel-up") scrollPeek(view, -PEEK_WHEEL_ROWS);
+  else if (event.action === "wheel-down") scrollPeek(view, PEEK_WHEEL_ROWS);
+  else return false;
+  return true;
 }
 
 const openPalette = (view: ViewState) =>
@@ -489,6 +632,17 @@ export function runCommand(
     case "detail":
       if (service !== undefined && env !== undefined)
         view.modals.push(detailPanel(view.area, tracker, view, service, env, actions));
+      break;
+    case "events":
+    case "response":
+      showBottom(view, command);
+      break;
+    case "body":
+      copyBody(
+        view,
+        actions,
+        service === undefined || env === undefined ? undefined : tracker.result(service, env),
+      );
       break;
     case "open":
     case "copy":

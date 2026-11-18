@@ -10,6 +10,7 @@ export type Screen =
   | "confirm"
   | "detail"
   | "response"
+  | "peek"
   | "help";
 
 export type Command =
@@ -17,6 +18,9 @@ export type Command =
   | "detail"
   | "open"
   | "copy"
+  | "body"
+  | "events"
+  | "response"
   | "edit"
   | "remove"
   | "add"
@@ -60,7 +64,7 @@ interface Binding {
 }
 
 const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
-  screens: ["list"],
+  screens: ["list", "peek"],
   section: "List",
   ...binding,
 });
@@ -79,7 +83,43 @@ const response = (binding: Omit<Binding, "screens" | "section" | "native">): Bin
   ...binding,
 });
 
+/** The bar of the list while its response tab is open: the keys that tab adds. */
+const peek = (binding: Omit<Binding, "screens" | "section" | "native">): Binding => ({
+  screens: ["peek"],
+  section: "List",
+  native: true,
+  ...binding,
+});
+
 const NATIVE_LIST_BINDINGS: readonly Binding[] = [
+  list({
+    keys: "1",
+    action: "events",
+    help: "Events tab",
+    barless: true,
+    command: "events",
+    native: true,
+  }),
+  list({
+    keys: "2",
+    action: "response",
+    help: "Response tab",
+    barless: true,
+    command: "response",
+    native: true,
+  }),
+  list({
+    keys: "b",
+    action: "copy body",
+    help: "Copy the response body",
+    barless: true,
+    command: "body",
+    native: true,
+  }),
+  peek({ keys: "PgUp PgDn", action: "scroll", drop: 3 }),
+  peek({ keys: "u", action: "open", drop: 1 }),
+  peek({ keys: "b", action: "copy body", drop: 1 }),
+  peek({ keys: "1", action: "events", drop: 4 }),
   list({
     keys: "n",
     action: "new environment",
@@ -107,6 +147,7 @@ const DETAIL_BINDINGS: readonly Binding[] = [
   detail({ keys: "esc", action: "close", help: "Close" }),
   response({ keys: "↑↓", ascii: "arrows", action: "scroll", help: "Scroll", drop: 3 }),
   response({ keys: "c", action: "copy response", help: "Copy the response", drop: 1 }),
+  response({ keys: "b", action: "copy body", help: "Copy the body", drop: 1 }),
   response({ keys: "r", action: "details", help: "Back to the detail", drop: 2 }),
   response({ keys: "esc", action: "close", help: "Close" }),
 ];
@@ -316,7 +357,7 @@ const BINDINGS: readonly Binding[] = [
   ...DETAIL_BINDINGS,
   ...NATIVE_LIST_BINDINGS,
   {
-    screens: ["list", "panel", "readonly", "choose"],
+    screens: ["list", "peek", "panel", "readonly", "choose"],
     section: "Outside a text field",
     keys: "?",
     action: "help",
@@ -324,7 +365,7 @@ const BINDINGS: readonly Binding[] = [
     command: "help",
   },
   {
-    screens: ["list", "panel", "readonly", "choose", "help"],
+    screens: ["list", "peek", "panel", "readonly", "choose", "help"],
     section: "Outside a text field",
     keys: "q",
     action: "quit",
