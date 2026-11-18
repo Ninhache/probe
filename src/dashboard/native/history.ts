@@ -1,4 +1,7 @@
 import type { CheckResult } from "../../checkers/types";
+import { LOCAL_ENVIRONMENT } from "../../constants";
+
+export { LOCAL_ENVIRONMENT };
 
 export interface Sample {
   ok: boolean;
@@ -23,6 +26,10 @@ export class Ring<T> {
   private readonly items: T[] = [];
 
   constructor(readonly capacity: number) {}
+
+  clear(): void {
+    this.items.length = 0;
+  }
 
   push(value: T): void {
     this.items.push(value);
@@ -78,6 +85,7 @@ export class Tracker {
   readonly events = new Ring<Transition>(EVENTS_SIZE);
   private readonly series = new Map<string, Ring<Sample>>();
   private readonly known = new Set<string>();
+  private readonly results = new Map<string, CheckResult>();
 
   constructor(
     readonly environments: readonly string[],
@@ -87,11 +95,24 @@ export class Tracker {
   /** Service names seen so far, in the order they first appeared, then sorted. */
   services(env?: string): string[] {
     const names = new Set<string>();
-    for (const key of this.series.keys()) {
+    for (const key of [...this.series.keys(), ...this.known]) {
       const [at, service] = key.split("\u0000") as [string, string];
       if (env === undefined || env === at) names.add(service);
     }
     return [...names].sort();
+  }
+
+  /** The last full result (request, response...) of a service in an environment. */
+  result(service: string, env: string): CheckResult | undefined {
+    return this.results.get(keyOf(service, env));
+  }
+
+  /** Forget everything: another parameter value is another target. */
+  reset(): void {
+    this.series.clear();
+    this.known.clear();
+    this.results.clear();
+    this.events.clear();
   }
 
   history(service: string, env: string): Ring<Sample> | undefined {
@@ -108,6 +129,7 @@ export class Tracker {
   record(env: string, results: readonly CheckResult[], at = Date.now()): void {
     for (const result of results) {
       const key = keyOf(result.name, env);
+      this.results.set(key, result);
       if (result.skipped) {
         this.known.add(key);
         continue;

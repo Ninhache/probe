@@ -29,6 +29,13 @@ export class Monitor {
     }
   }
 
+  /** Same checks, another pace. */
+  setInterval(intervalMs: number): void {
+    this.options.intervalMs = intervalMs;
+    for (const timer of this.timers) clearInterval(timer);
+    this.timers = this.checks.map((check) => setInterval(() => void this.run(check), intervalMs));
+  }
+
   stop(): void {
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
