@@ -25,7 +25,7 @@ import {
 } from "./commands/parameter-writes";
 import rm from "./commands/rm";
 import { type ServiceWrite, type ServiceWritten, writeService } from "./commands/service-writes";
-import { secondsToMs, stdoutTerminal } from "./commands/shared";
+import { noServices, secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
 import variable from "./commands/var";
@@ -57,6 +57,7 @@ import {
   COMPLETE_COMMAND,
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
+  EXIT_DOWN,
   EXIT_ERROR,
   LOCAL_FILE,
   PROBE_DIR,
@@ -111,6 +112,10 @@ const main = defineCommand({
       description: "Seconds between two refreshes of the dashboard (probe alone, on a terminal)",
       default: String(DASHBOARD_INTERVAL_SECONDS),
     },
+    once: {
+      type: "boolean",
+      description: "Check once, print a table and exit (native screen: PROBE_TUI=native)",
+    },
   },
   subCommands: { ...commands, completion: completionCommand(commands) },
 });
@@ -145,6 +150,7 @@ function notifyUpdate(rawArgs: string[]): void {
 }
 
 const INTERVAL_OPTION = "--interval";
+const ONCE_OPTION = "--once";
 
 function dashboardInterval(rawArgs: string[]): string | undefined | null {
   const [first, second, ...rest] = rawArgs;
@@ -156,22 +162,47 @@ function dashboardInterval(rawArgs: string[]): string | undefined | null {
 }
 
 // The interactive libraries are imported here only: every other path starts without them.
-async function openedDashboard(rawArgs: string[]): Promise<boolean> {
+async function openedDashboard(allArgs: string[]): Promise<boolean> {
+  const native = process.env.PROBE_TUI === "native";
+  // `--once` belongs to the native screen: the ink one does not know it.
+  const once = native && allArgs.includes(ONCE_OPTION);
+  const rawArgs = once ? allArgs.filter((arg) => arg !== ONCE_OPTION) : allArgs;
   const interval = dashboardInterval(rawArgs);
   if (interval === null) return false;
   const asked = interval !== undefined;
   const askedMs = asked ? secondsToMs(INTERVAL_OPTION, interval) : undefined;
-  if (!isInteractive(process.stdin, process.stdout, process.env)) {
+  const interactive = isInteractive(process.stdin, process.stdout, process.env);
+  // Nobody to draw for, or one pass asked for: a table, then the exit code.
+  const plain = native && (once || !interactive);
+  if (!interactive && !plain) {
     if (!asked) return false;
     throw new ProbeError(
       "USAGE",
       `${INTERVAL_OPTION} sets the refresh of the dashboard, which needs an interactive terminal.`,
     );
   }
-  const paths = asked ? requireProbeDir(process.cwd()) : findProbeDir(process.cwd());
+  const paths = asked || once ? requireProbeDir(process.cwd()) : findProbeDir(process.cwd());
   if (!paths) return false;
   const { config } = await loadConfig(paths);
   const environments = await listEnvironments(paths);
+  if (plain) {
+    const { oncePass } = await import("./dashboard/native/once");
+    const { environmentSource: source } = await import("./dashboard/sources");
+    const settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
+    const { text, down } = await oncePass({
+      config,
+      variables: await loadVariables(paths),
+      skipped: await readSkippedServices(paths),
+      selection: await readDashboardSelection(paths),
+      timeoutMs: settings.timeoutMs,
+      environments: environments.map((name) => source(paths, name)),
+      terminal: stdoutTerminal(),
+      empty: noServices(paths),
+    });
+    console.log(text);
+    if (down) process.exitCode = EXIT_DOWN;
+    return true;
+  }
   if (Object.keys(config.services).length === 0 && environments.length === 0) {
     if (!asked) return false;
     throw new ProbeError("USAGE", "No services yet. Add one: probe add api -p 3000");
