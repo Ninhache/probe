@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { DOUBLE_CLICK_MS } from "../src/constants";
+import { paletteEntries } from "../src/dashboard/keymap";
 import { Tracker } from "../src/dashboard/native/history";
 import {
   handleInput,
@@ -10,7 +11,7 @@ import {
   type ViewState,
 } from "../src/dashboard/native/view";
 import { HitMap, registerHints } from "../src/tui/hits";
-import type { InputEvent } from "../src/tui/input";
+import { coalesceMoves, type InputEvent, parseInput } from "../src/tui/input";
 import { Screen } from "../src/tui/screen";
 
 const W = 160;
@@ -19,7 +20,7 @@ const H = 34;
 const click = (
   x: number,
   y: number,
-  action: "press" | "release" | "drag" | "wheel-up" | "wheel-down" = "press",
+  action: "press" | "release" | "drag" | "move" | "wheel-up" | "wheel-down" = "press",
   button: "left" | "right" | "none" = action === "press" ? "left" : "none",
 ): InputEvent => ({ kind: "mouse", action, button, x, y, raw: "" });
 const key = (name: string): InputEvent =>
@@ -47,16 +48,18 @@ function setup(init: Partial<ViewState> = {}, environments = ["local"]) {
     quit: () => calls.push("quit"),
     refresh: () => calls.push("refresh"),
     open: (service) => calls.push(`open ${service}`),
+    parameter: (name, value) => calls.push(`${name}=${value}`),
   };
-  const draw = (ascii = false) => {
-    const screen = new Screen(W, H, "truecolor");
+  const draw = (ascii = false, mode: "truecolor" | "none" = "truecolor") => {
+    const screen = new Screen(W, H, mode);
     screen.ascii = ascii;
     renderDashboard(screen, { x: 0, y: 0, w: W, h: H }, tracker, view, 0);
     return screen;
   };
   const send = (event: InputEvent) => {
-    handleInput(event, tracker, view, actions);
+    const frame = handleInput(event, tracker, view, actions);
     draw();
+    return frame;
   };
   draw();
   const hit = (input: string, row = H - 1) =>
@@ -301,5 +304,124 @@ describe("a log line", () => {
 
     send(click(line?.x ?? 0, line?.y ?? 0, "wheel-up"));
     expect(view.logFollow).toBe(false);
+  });
+});
+
+describe("the click on a stepper and on a row of the palette", () => {
+  it("should step a value from its chevron, like the arrow", () => {
+    const { send, view, calls } = setup();
+    send(key("p"));
+    const next = view.hits.toArray().find((h) => h.layer === 1 && h.input.endsWith("\x1b[C"));
+    expect(next).toBeDefined();
+
+    send(click(next?.x ?? 0, next?.y ?? 0));
+    expect(calls).toEqual(["zone=us"]);
+  });
+
+  it("should run the row that is clicked, whichever the cursor is on", () => {
+    const { send, view, calls } = setup();
+    send(key(":"));
+    const at = paletteEntries(true, "").findIndex((entry) => entry.command === "check");
+    const rows = view.hits
+      .toArray()
+      .filter((h) => h.layer === 1 && h.w > 20 && h.input.endsWith("\r"));
+    expect(rows.length).toBe(paletteEntries(true, "").length);
+
+    send(click((rows[at]?.x ?? 0) + 3, rows[at]?.y ?? 0));
+    expect(calls).toEqual(["refresh"]);
+    expect(view.modals.depth).toBe(0);
+  });
+});
+
+describe("hover", () => {
+  it("should read a motion with no button as a move, and a drag as a drag", () => {
+    expect(parseInput("\x1b[<35;10;5M")[0]).toMatchObject({ action: "move", x: 9, y: 4 });
+    expect(parseInput("\x1b[<32;10;5M")[0]).toMatchObject({ action: "drag", button: "left" });
+  });
+
+  it("should keep only the last of the moves read together", () => {
+    const events = parseInput("\x1b[<35;1;1M\x1b[<35;2;1M\x1b[<0;2;1M\x1b[<35;3;1M\x1b[<35;4;1M");
+
+    expect(
+      coalesceMoves(events).map((e) => (e.kind === "mouse" ? `${e.action}${e.x}` : "")),
+    ).toEqual(["move1", "press1", "move3"]);
+  });
+
+  it("should cost no frame to move inside a region, and one to cross into another", () => {
+    const { send, hit, view } = setup();
+    const a = hit("p");
+    const b = hit("/");
+    expect(a && b).toBeTruthy();
+
+    let frames = send(click((a?.x ?? 0) + 1, a?.y ?? 0, "move")) ? 1 : 0;
+    for (let i = 0; i < 1000; i++)
+      if (send(click((a?.x ?? 0) + (i % (a?.w ?? 1)), a?.y ?? 0, "move"))) frames++;
+    expect(frames).toBe(1);
+    expect(view.hover?.input).toBe("p");
+
+    expect(send(click(b?.x ?? 0, b?.y ?? 0, "move"))).toBe(true);
+    expect(view.hover?.input).toBe("/");
+  });
+
+  it("should cost no frame to move over nothing, and one to leave a region", () => {
+    const { send, hit } = setup();
+    const a = hit("p");
+    expect(send(click(0, 3, "move"))).toBe(false);
+    send(click(a?.x ?? 0, a?.y ?? 0, "move"));
+    expect(send(click(0, 3, "move"))).toBe(true);
+    expect(send(click(1, 3, "move"))).toBe(false);
+  });
+
+  it("should draw the region under the pointer in reverse video, even without color", () => {
+    for (const mode of ["truecolor", "none"] as const) {
+      const { view, draw, hit } = setup();
+      draw(false, mode);
+      const a = hit("p");
+      view.hover = a && { ...a };
+      const hovered = draw(false, mode).flush();
+      view.hover = undefined;
+      const plain = draw(false, mode).flush();
+
+      expect(hovered).toContain(";7m");
+      expect(plain).not.toContain(";7m");
+    }
+  });
+
+  it("should not light up the log lines", () => {
+    const { send, view } = setup();
+    const line = view.hits.toArray().find((h) => h.action === "log");
+    expect(send(click(line?.x ?? 0, line?.y ?? 0, "move"))).toBe(false);
+    expect(view.hover).toBeUndefined();
+  });
+
+  it("should forget the hover when a modal opens, a key is pressed, the window loses focus or the screen resizes", () => {
+    const { send, view, hit, draw } = setup();
+    const move = () => {
+      const a = hit("p");
+      send(click(a?.x ?? 0, a?.y ?? 0, "move"));
+      expect(view.hover).toBeDefined();
+    };
+    move();
+    send(key("?"));
+    expect(view.hover).toBeUndefined();
+    send(key("escape"));
+
+    move();
+    send(parseInput("\x1b[O")[0] as InputEvent);
+    expect(view.hover).toBeUndefined();
+
+    move();
+    const screen = new Screen(W - 10, H, "truecolor");
+    renderDashboard(screen, { x: 0, y: 0, w: W - 10, h: H }, setup().tracker, view, 0);
+    expect(view.hover).toBeUndefined();
+    draw();
+  });
+
+  it("should only light up what the topmost layer shows", () => {
+    const { send, view, hit } = setup();
+    const a = hit("p");
+    send(key("?"));
+    send(click(a?.x ?? 0, a?.y ?? 0, "move"));
+    expect(view.hover?.layer ?? 1).toBe(1);
   });
 });

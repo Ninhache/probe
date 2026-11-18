@@ -17,7 +17,10 @@ export const ansi = {
   /** Synchronized output (DEC 2026): the terminal shows the frame only once it is complete, no tearing. */
   syncStart: `${ESC}?2026h`,
   syncEnd: `${ESC}?2026l`,
-  /** Mouse: 1000 = clicks, 1002 = drag, 1006 = SGR encoding (no 223-column limit). */
-  mouseOn: `${ESC}?1000h${ESC}?1002h${ESC}?1006h`,
-  mouseOff: `${ESC}?1006l${ESC}?1002l${ESC}?1000l`,
+  /**
+   * Mouse: 1000 = clicks, 1002 = drag, 1003 = motion with no button (hover), 1006 = SGR encoding (no
+   * 223-column limit). 1004 = focus in and out: the way to know the pointer left the window.
+   */
+  mouseOn: `${ESC}?1000h${ESC}?1002h${ESC}?1003h${ESC}?1004h${ESC}?1006h`,
+  mouseOff: `${ESC}?1006l${ESC}?1004l${ESC}?1003l${ESC}?1002l${ESC}?1000l`,
 } as const;

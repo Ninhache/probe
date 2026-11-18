@@ -107,6 +107,16 @@ export class Screen {
       for (let x = r.x; x < r.x + r.w; x++) this.put(x, y, ch, s);
   }
 
+  /** Shows `w` cells in reverse video, whatever their colors: the cell under the pointer. */
+  invert(x: number, y: number, w: number): void {
+    if (y < 0 || y >= this.height) return;
+    for (let c = Math.max(0, x); c < Math.min(this.width, x + w); c++) {
+      const i = y * this.width + c;
+      const s = this.sgrs[i] ?? PLAIN;
+      this.sgrs[i] = `${s.slice(0, -1)};7m`;
+    }
+  }
+
   private put(x: number, y: number, ch: string, s: string): number {
     if (this.ascii) ch = asciiGlyph(ch);
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;

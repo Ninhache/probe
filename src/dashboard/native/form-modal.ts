@@ -157,6 +157,7 @@ export function formModal(options: FormOptions): FormModal {
             { fg: t.accent },
             active,
             room,
+            first + i - row,
           );
           return;
         }

@@ -33,6 +33,15 @@ export function paletteModal(choose: (command: Command) => void): Panel {
         const on = first + row === at;
         const style = on ? { fg: t.title, bg: t.selectedBg, bold: true } : { fg: t.fg };
         const y = inner.y + 1 + row;
+        // A click on a row runs it: the keys that bring the cursor there, then enter.
+        const move = first + row - at;
+        screen.hits.add(
+          inner.x,
+          y,
+          inner.w,
+          "key",
+          `${(move < 0 ? "\x1b[A" : "\x1b[B").repeat(Math.abs(move))}\r`,
+        );
         screen.fill({ x: inner.x, y, w: inner.w, h: 1 }, " ", style);
         screen.text(inner.x + 1, y, pad(entry.label, inner.w - KEYS_WIDTH - 2), style, inner.w - 2);
         screen.text(

@@ -147,10 +147,21 @@ const stepRow = (
   value: string,
   reach: Reach,
   on: boolean,
+  rows = 0,
 ) => {
   row(screen, inner, i, label, "", on);
   const style = { fg: t.accent, ...(on ? { bg: t.selectedBg, bold: true } : {}) };
-  drawStepper(screen, inner.x + PAD + 14, inner.y + i, value, reach, style, on, inner.w - PAD - 14);
+  drawStepper(
+    screen,
+    inner.x + PAD + 14,
+    inner.y + i,
+    value,
+    reach,
+    style,
+    on,
+    inner.w - PAD - 14,
+    rows,
+  );
 };
 
 /** What `detailLines` says about a service, for every service type, plus its timeout and skip. */
@@ -255,6 +266,7 @@ export function detailPanel(
           next: stepServiceTimeout(timeout, 1) !== timeout,
         },
         at < 0,
+        -(at + 1),
       );
       row(screen, inner, first + 1, "skip", view.skipped.has(service) ? "yes" : "no", false);
       found.forEach(({ name, source }, i) => {
@@ -340,7 +352,7 @@ export function optionsPanel(view: ViewState, actions: ViewActions): Panel {
       for (const [i, each] of SETTING_ROWS.entries()) {
         const now = view.settings[each.key];
         const reach = reachAt(each.choicesMs.indexOf(now), each.choicesMs.length);
-        stepRow(screen, inner, i, each.label, seconds(now), reach, i === at);
+        stepRow(screen, inner, i, each.label, seconds(now), reach, i === at, i - at);
       }
       const on = view.settings.notify === true;
       stepRow(
@@ -351,6 +363,7 @@ export function optionsPanel(view: ViewState, actions: ViewActions): Panel {
         on ? "on" : "off",
         { previous: on, next: !on },
         at === rows - 1,
+        rows - 1 - at,
       );
     },
     onEvent(event: InputEvent) {
@@ -405,7 +418,7 @@ export function parametersPanel(view: ViewState, actions: ViewActions): Panel {
       for (const [i, name] of names(view.choices).entries()) {
         const values = view.choices[name] ?? [];
         const reach = reachAt(values.indexOf(now[name] as string), values.length);
-        stepRow(screen, inner, i, name, now[name] ?? "", reach, i === at);
+        stepRow(screen, inner, i, name, now[name] ?? "", reach, i === at, i - at);
       }
     },
     onEvent(event: InputEvent) {

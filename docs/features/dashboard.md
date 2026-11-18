@@ -36,12 +36,21 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
   - click a service to select it, double-click it to open its detail;
   - click an environment tab to switch to it;
   - click a log line to select its service and show its response;
-  - click the request URL in the detail of a service to open it, like `u`.
-    The wheel scrolls the lists, the log and the response. While a panel is open, it takes every click: a click
-    outside it does nothing. A drag, a right click or the wheel over a hint does nothing. Probe does not ask the
-    terminal for mouse movement, so a hint does not light up under the pointer. To select text with the mouse,
-    hold `Shift` (`Option` on macOS in some terminals) while dragging: how the terminal lets you bypass the
-    mouse depends on the terminal.
+  - click the request URL in the detail of a service to open it, like `u`;
+  - click `‹` or `›` next to a value in a form or a panel to step it, like the arrow keys;
+  - click a row of the command palette (`:`) to run it.
+
+  The wheel scrolls the lists, the log and the response. While a panel is open, it takes every click: a click
+  outside it does nothing. A drag, a right click or the wheel over a hint does nothing.
+
+  Hover: a hint or button under the pointer is shown in reverse video (with or without color). That needs a
+  terminal that reports mouse motion (any-event tracking, mode 1003); in tmux, set `set -g mouse on`. In a
+  terminal that never sends motion nothing lights up, and clicks still work. The highlight is dropped when the
+  pointer leaves the window (where the terminal reports the focus), when a key is pressed, when a panel opens
+  and on resize.
+
+  To select text with the mouse, hold `Shift` (`Option` on macOS in some terminals) while dragging: how the
+  terminal lets you bypass the mouse depends on the terminal.
 
 ## Keys
 

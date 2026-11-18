@@ -7,7 +7,7 @@ import {
   DOUBLE_CLICK_MS,
   PROBE_DIR,
 } from "../../constants";
-import { HitMap, registerHints } from "../../tui/hits";
+import { type Hit, HitMap, registerHints, sameHit } from "../../tui/hits";
 import { type InputEvent, parseInput } from "../../tui/input";
 import { columns, fill, type Rect, rows } from "../../tui/layout";
 import { type ListGeometry, listKey, listMouse } from "../../tui/list";
@@ -81,6 +81,8 @@ export interface ViewState {
   hits: HitMap;
   /** The log lines on screen, as of the last frame: a click on a line picks one. */
   logEntries: LogEntry[];
+  /** The region under the pointer, as of the last motion: drawn in reverse video. Only set by hover. */
+  hover?: Hit;
   /** The last left click, for a double-click. */
   lastClick?: { at: number; x: number; y: number };
   /** The log tab shows only the lines where a service changed state. */
@@ -207,6 +209,8 @@ export function renderDashboard(
   view: ViewState,
   now = Date.now(),
 ): void {
+  // A resize moves every region: the pointer's last place means nothing.
+  if (view.area.w !== area.w || view.area.h !== area.h) view.hover = undefined;
   view.area = area;
   const [header = area, body = area, filterRow = area, footer = area] = rows(area, [
     1,
@@ -340,6 +344,14 @@ export function renderDashboard(
   }
   view.modals.draw(screen, area);
   view.hits = screen.hits;
+  const over = view.hover;
+  // Under a modal the hovered region is no longer reachable: nothing lights up.
+  if (
+    over &&
+    over.layer === view.modals.depth &&
+    sameHit(screen.hits.at(over.x, over.y, over.layer), over)
+  )
+    screen.invert(over.x, over.y, over.w);
 }
 
 function filterNote(view: ViewState, count: number): string {
@@ -574,18 +586,39 @@ export function focusEnv(tracker: Tracker, view: ViewState, service: string): st
   );
 }
 
-/** Applies one input event to the view. */
+/** Focus reports (mode 1004), kept as "unknown" keys by the parser: nothing acts on them but the hover. */
+const FOCUS_IN = "\x1b[I";
+const FOCUS_OUT = "\x1b[O";
+
+/**
+ * Applies one input event to the view. Returns whether the screen needs a new frame: always, except
+ * for pointer motion that stays in the region it was in, or over nothing, which costs no frame.
+ */
 export function handleInput(
   event: InputEvent,
   tracker: Tracker,
   view: ViewState,
   actions: ViewActions,
-): void {
-  if (event.kind === "mouse" && clickRegion(event, tracker, view, actions)) return;
+): boolean {
+  if (event.kind === "mouse" && event.action === "move") return hoverAt(event.x, event.y, view);
+  // A key, a click or the window losing the focus: the pointer is no longer known to be there.
+  view.hover = undefined;
+  if (event.kind === "key" && (event.raw === FOCUS_IN || event.raw === FOCUS_OUT)) return true;
+  if (event.kind === "mouse" && clickRegion(event, tracker, view, actions)) return true;
   const said = view.status;
   dispatch(event, tracker, view, actions);
   // What an action said lasts until the next key, unless that key said something itself.
   if (event.kind === "key" && view.status === said) view.status = undefined;
+  return true;
+}
+
+/** Hover follows the pointer from region to region; the log lines are not buttons, they do not light up. */
+function hoverAt(x: number, y: number, view: ViewState): boolean {
+  const found = view.hits.at(x, y, view.modals.depth);
+  const next = found && found.action !== "log" ? found : undefined;
+  if (next === undefined ? view.hover === undefined : sameHit(view.hover, next)) return false;
+  view.hover = next && { ...next };
+  return true;
 }
 
 /**

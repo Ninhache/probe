@@ -1,6 +1,6 @@
 import { ansi } from "./ansi";
 import { detectColorMode } from "./color";
-import { type InputEvent, parseInput } from "./input";
+import { coalesceMoves, type InputEvent, parseInput } from "./input";
 import type { Rect } from "./layout";
 import { Screen } from "./screen";
 import { Terminal } from "./terminal";
@@ -8,6 +8,7 @@ import { Terminal } from "./terminal";
 export type AppOptions = {
   /** Draw the whole UI from current state. Called on each frame; must be fast and side-effect free. */
   render: (screen: Screen, area: Rect) => void;
+  /** Called for each event. Pointer motion does not ask for a frame: call `app.requestRender()` when it matters. */
   onInput?: (ev: InputEvent, app: App) => void;
   /** Called after the terminal is restored (stop timers, close sockets...). */
   onStop?: () => void;
@@ -63,7 +64,8 @@ export class App {
       this.requestRender();
     });
     this.terminal.onData((data) => {
-      for (const ev of parseInput(data)) {
+      let needsFrame = false;
+      for (const ev of coalesceMoves(parseInput(data))) {
         if (ev.kind === "key" && ev.ctrl && ev.name === "c") return this.stop();
         if (ev.kind === "key" && ev.ctrl && ev.name === "z") {
           this.terminal.suspend(() => {
@@ -73,8 +75,10 @@ export class App {
           return;
         }
         this.opts.onInput?.(ev, this);
+        // Motion asks for a frame itself, only when the hovered region changed.
+        if (!(ev.kind === "mouse" && ev.action === "move")) needsFrame = true;
       }
-      this.requestRender();
+      if (needsFrame) this.requestRender();
     });
     if (this.opts.tickMs) this.tick = setInterval(() => this.requestRender(), this.opts.tickMs);
     this.renderNow();

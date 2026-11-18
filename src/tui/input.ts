@@ -10,7 +10,8 @@ export type Key = {
 };
 export type Mouse = {
   kind: "mouse";
-  action: "press" | "release" | "drag" | "wheel-up" | "wheel-down";
+  /** "move" is the pointer moving with no button down: it only comes with mouse mode 1003. */
+  action: "press" | "release" | "drag" | "move" | "wheel-up" | "wheel-down";
   button: "left" | "middle" | "right" | "none";
   /** 0-based, same coordinates as Screen. */
   x: number;
@@ -98,7 +99,9 @@ function mouse(m: RegExpExecArray): Mouse {
         ? "wheel-down"
         : "wheel-up"
       : b & 32
-        ? "drag"
+        ? (b & 3) === 3
+          ? "move"
+          : "drag"
         : m[4] === "m"
           ? "release"
           : "press";
@@ -144,4 +147,13 @@ export function parseInput(data: string): InputEvent[] {
     i += g.length;
   }
   return events;
+}
+
+/**
+ * Motion floods the input: of several moves in a row only the last one matters, so the others are
+ * dropped. Clicks, wheel and keys are never dropped.
+ */
+export function coalesceMoves(events: InputEvent[]): InputEvent[] {
+  const isMove = (e: InputEvent | undefined) => e?.kind === "mouse" && e.action === "move";
+  return events.filter((e, i) => !(isMove(e) && isMove(events[i + 1])));
 }

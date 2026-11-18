@@ -312,8 +312,8 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         view.frame = app.frame;
         renderDashboard(screen, area, tracker, view);
       },
-      onInput: (event) =>
-        handleInput(event, tracker, view, {
+      onInput: (event) => {
+        const frame = handleInput(event, tracker, view, {
           quit: () => app.stop(),
           refresh: () => monitor.refresh(),
           edit,
@@ -362,7 +362,10 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             monitor.invalidate();
             monitor.refresh();
           },
-        }),
+        });
+        // Motion asks for a frame only when the hovered region changed; the other events always do.
+        if (frame && event.kind === "mouse" && event.action === "move") app.requestRender();
+      },
       onStop: () => {
         monitor.stop();
         focus.stop();

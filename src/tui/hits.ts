@@ -67,6 +67,21 @@ export class HitMap {
   }
 }
 
+/** Whether two regions are the same one, drawn at the same place for the same thing. */
+export function sameHit(a: Hit | undefined, b: Hit | undefined): boolean {
+  return (
+    a !== undefined &&
+    b !== undefined &&
+    a.layer === b.layer &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.w === b.w &&
+    a.action === b.action &&
+    a.input === b.input &&
+    a.ref === b.ref
+  );
+}
+
 /** What each word of a hint is on the keyboard: the input the terminal would send for it. */
 const NAMED: Readonly<Record<string, string>> = {
   "↵": "\r",
