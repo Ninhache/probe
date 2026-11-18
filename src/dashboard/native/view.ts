@@ -38,12 +38,12 @@ import { paletteModal } from "./palette";
 import {
   copyBody,
   detailPanel,
+  drawRow,
   optionsPanel,
   type Panel,
   parametersPanel,
   type ResponseRow,
   responseRows,
-  tones as TONES,
 } from "./panels";
 
 /** Uptime the services are held to, in percent. Not configurable on purpose. */
@@ -434,13 +434,7 @@ function drawBottom(
   }
   if (view.bottom === "response") {
     shown.slice(view.bottomTop, view.bottomTop + l.h).forEach((line, i) => {
-      screen.text(
-        l.x + 1,
-        l.y + i,
-        line.text,
-        { fg: line.tone ? TONES[line.tone] : t.fg },
-        l.w - 2,
-      );
+      drawRow(screen, l.x + 1, l.y + i, line, l.w - 2);
     });
     return;
   }
@@ -467,7 +461,7 @@ export interface ViewActions {
   open?(service: string, env: string): void;
   copy?(service: string, env: string): void;
   /** Copies the text of a response, or only its body: `cut` when the body is not all there. */
-  copyResponse?(text: string, cut: boolean, part?: ResponsePart): void;
+  copyResponse?(text: string, cut: boolean, part?: ResponsePart, formatted?: boolean): void;
   skip?(service: string, skip: boolean): void;
   timeout?(service: string, seconds: number | undefined): void;
   settings?(settings: DashboardSettings): void;

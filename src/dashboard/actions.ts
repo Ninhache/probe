@@ -34,7 +34,12 @@ export function serviceActions(
   onCopy(name: string, timeout: number | undefined, selection?: Selection): Promise<string>;
   /** Resolves to a warning when no notification could be shown. */
   onNotify(message: string): Promise<string | undefined>;
-  onCopyResponse(text: string, cut: boolean, part?: ResponsePart): Promise<string>;
+  onCopyResponse(
+    text: string,
+    cut: boolean,
+    part?: ResponsePart,
+    formatted?: boolean,
+  ): Promise<string>;
 } {
   const service = (name: string, selection?: Selection) => config(selection).services[name];
   const gone = (name: string) => `${name} is no longer in the config`;
@@ -60,9 +65,11 @@ export function serviceActions(
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy with. The command:\n${command}`;
     },
-    async onCopyResponse(text, cut, part = "response") {
-      if (await deps.copyText(text))
+    async onCopyResponse(text, cut, part = "response", formatted = false) {
+      if (await deps.copyText(text)) {
+        if (formatted) return `Copied the ${part} (formatted JSON)`;
         return cut ? `Copied the ${part}, its body cut` : `Copied the ${part}`;
+      }
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy the ${part} with`;
     },

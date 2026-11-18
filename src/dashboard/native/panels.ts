@@ -1,6 +1,7 @@
 import type { CheckResult } from "../../checkers/types";
 import { effectiveSelection, type ParameterChoices } from "../../config/parameters";
 import { LOCAL_FILE } from "../../constants";
+import type { RGB } from "../../tui/color";
 import type { InputEvent } from "../../tui/input";
 import type { Rect } from "../../tui/layout";
 import type { Modal } from "../../tui/modal";
@@ -8,6 +9,7 @@ import type { Screen } from "../../tui/screen";
 import { defaultTheme as t } from "../../tui/theme";
 import { pad } from "../../tui/width";
 import { detailLines } from "../detail";
+import { foldSpans, formattedBody, type JsonKind, type JsonSpan, jsonLines } from "../json-body";
 import type { Screen as KeymapScreen } from "../keymap";
 import { NO_RESPONSE, responseLines, responseProblem, responseText } from "../response";
 import { SETTING_ROWS, stepChoice, stepServiceTimeout } from "../settings";
@@ -47,17 +49,43 @@ function folds(text: string, width: number): string[] {
 export interface ResponseRow {
   text: string;
   tone?: keyof typeof tones;
+  /** A line of highlighted JSON: drawn piece by piece instead of as `text`. */
+  spans?: JsonSpan[];
+}
+
+const jsonColors: Record<JsonKind, RGB> = {
+  key: t.accent,
+  string: t.ok,
+  number: t.warn,
+  boolean: t.borderFocus,
+  null: t.err,
+  punct: t.muted,
+};
+
+/** Draws a row of a response, the JSON ones in colour. */
+export function drawRow(screen: Screen, x: number, y: number, row: ResponseRow, width: number) {
+  if (!row.spans)
+    return screen.text(x, y, row.text, { fg: row.tone ? tones[row.tone] : t.fg }, width);
+  let used = 0;
+  for (const span of row.spans)
+    used += screen.text(x + used, y, span.text, { fg: jsonColors[span.kind] }, width - used);
+  return used;
 }
 
 /** The lines of a response: its status, its headers, a blank, the body, whole, folded to `fit`. */
 export function responseRows(result: CheckResult, fit: number): ResponseRow[] {
   const { head, body, note } = responseLines(result);
+  const json = jsonLines(result.response);
   const folded = (text: string, tone?: ResponseRow["tone"]) =>
     folds(text, fit).map((piece) => ({ text: piece, tone }));
   return [
     ...head.flatMap((text, i) => folded(text, i === 0 ? (result.ok ? "good" : "bad") : "dim")),
     { text: "" },
-    ...body.flatMap((text) => folded(text)),
+    ...(json
+      ? json.flatMap((line) =>
+          foldSpans(line, fit).map((spans) => ({ text: spans.map((s) => s.text).join(""), spans })),
+        )
+      : body.flatMap((text) => folded(text))),
     ...(note ? [{ text: note, tone: "dim" as const }] : []),
   ];
 }
@@ -68,7 +96,13 @@ export function copyBody(view: ViewState, actions: ViewActions, result: CheckRes
   if (problem || !result) return say(view, problem ?? NO_RESPONSE);
   const body = result.response?.body;
   if (!body) return say(view, "The response has no body to copy");
-  actions.copyResponse?.(body, result.response?.bodyCut === true, "body");
+  const formatted = formattedBody(result.response);
+  actions.copyResponse?.(
+    formatted ?? body,
+    result.response?.bodyCut === true,
+    "body",
+    formatted !== undefined,
+  );
 }
 
 /** A row whose value moves with ←→: drawn `‹ value ›`. */
@@ -162,8 +196,7 @@ export function detailPanel(
         const all = rows();
         top = Math.max(0, Math.min(top, all.length - room));
         all.slice(top, top + room).forEach((line, i) => {
-          const fg = line.tone ? tones[line.tone] : t.fg;
-          screen.text(inner.x + PAD, inner.y + i, line.text, { fg }, inner.w - PAD);
+          drawRow(screen, inner.x + PAD, inner.y + i, line, inner.w - PAD);
         });
         return;
       }

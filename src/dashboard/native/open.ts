@@ -328,9 +328,9 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
                 view.selection,
               ),
             ),
-          copyResponse: (text, cut, part) =>
+          copyResponse: (text, cut, part, formatted) =>
             void system(editing.config())
-              .onCopyResponse(text, cut, part)
+              .onCopyResponse(text, cut, part, formatted)
               .then((message) => {
                 say(view, message);
                 app.requestRender();
