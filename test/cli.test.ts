@@ -320,7 +320,8 @@ describe("probe check", () => {
   it("accepts a fractional --timeout", async () => {
     const root = await project();
     await addApi(root);
-    expect((await probe(root, "check", "--timeout", "0.1234")).code).toBe(0);
+    // Wide enough that a loaded machine still answers in time: the exact milliseconds are unit-tested.
+    expect((await probe(root, "check", "--timeout", "2.5")).code).toBe(0);
   });
 
   it("works from a sub-directory", async () => {

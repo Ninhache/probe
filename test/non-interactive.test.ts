@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
@@ -25,11 +25,10 @@ const INTERACTIVE_PACKAGES = [
 ];
 
 /**
- * Alert threshold: time `probe --version` may add to a bare `node` start, in ms.
- * Measured at about 85 ms before the interactive work (Linux, Node 24); importing ink alone costs about 330 ms.
+ * Alert threshold: bytes of JavaScript `probe --version` may load. Counted, not timed, so a loaded
+ * machine cannot fail it. About 1.3 MB at 0.23.1 (mostly zod and yaml); the dashboard chunk alone adds about 1 MB.
  */
-const STARTUP_BUDGET_MS = 250;
-const STARTUP_RUNS = 7;
+const STARTUP_BUDGET_BYTES = 2_000_000;
 
 interface Run {
   code: number;
@@ -93,10 +92,6 @@ function stable(text: string): string {
     .replaceAll(version, "VERSION");
 }
 
-function median(values: number[]): number {
-  return [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] as number;
-}
-
 describe("off a terminal", () => {
   it.each([
     ["check", ["check"]],
@@ -143,18 +138,14 @@ describe("off a terminal", () => {
 
   it("starts within the budget", async () => {
     const cwd = await tempDir();
-    const time = async (args: string[]) => {
-      const start = performance.now();
-      await node(args, cwd);
-      return performance.now() - start;
-    };
-    const bare: number[] = [];
-    const probe: number[] = [];
-    for (let run = 0; run < STARTUP_RUNS; run++) {
-      bare.push(await time(["-e", "0"]));
-      probe.push(await time([CLI, "--version"]));
-    }
+    const modules = join(cwd, "modules.txt");
+    await node(["--import", RECORDER, CLI, "--version"], cwd, { PROBE_TEST_MODULES_FILE: modules });
+    const files = new Set(
+      (await readFile(modules, "utf8")).split("\n").filter((url) => url.startsWith("file:")),
+    );
+    const sizes = await Promise.all([...files].map(async (url) => (await stat(new URL(url))).size));
 
-    expect(median(probe) - median(bare)).toBeLessThan(STARTUP_BUDGET_MS);
+    expect(files.has(pathToFileURL(CLI).href)).toBe(true);
+    expect(sizes.reduce((total, size) => total + size, 0)).toBeLessThan(STARTUP_BUDGET_BYTES);
   });
 });
