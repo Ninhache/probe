@@ -1,4 +1,5 @@
 import type { CheckResult } from "../checkers/types";
+import { JSON_FORMAT_MAX_BYTES } from "../constants";
 
 export type JsonKind = "key" | "string" | "number" | "boolean" | "null" | "punct";
 export interface JsonSpan {
@@ -10,7 +11,6 @@ type Response = NonNullable<CheckResult["response"]>;
 
 const INDENT = "  ";
 const MEDIA_JSON = /(?:\/|\+)json$/i;
-const TOKEN = /"(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*|true|false|null|[{}[\],:]/g;
 
 const contentType = (response: Response) =>
   response.headers.find(([name]) => name.toLowerCase() === "content-type")?.[1];
@@ -26,19 +26,51 @@ function valid(body: string): boolean {
   }
 }
 
-function kindOf(token: string, next: string | undefined): JsonKind {
-  if (token.startsWith('"')) return next === ":" ? "key" : "string";
-  if (token === "true" || token === "false") return "boolean";
-  if (token === "null") return "null";
-  return /^[{}[\],:]$/.test(token) ? "punct" : "number";
+const QUOTE = 34;
+const BACKSLASH = 92;
+const isSpace = (c: number) => c === 32 || c === 10 || c === 13 || c === 9;
+const isPunct = (c: number) =>
+  c === 123 || c === 125 || c === 91 || c === 93 || c === 44 || c === 58;
+
+/** The tokens of a text already known to be JSON, in one pass: each is `[start, end)`. */
+function tokens(body: string): [number, number][] {
+  const found: [number, number][] = [];
+  const n = body.length;
+  let i = 0;
+  while (i < n) {
+    const c = body.charCodeAt(i);
+    if (isSpace(c)) i++;
+    else if (isPunct(c)) found.push([i, ++i]);
+    else {
+      const start = i++;
+      if (c === QUOTE) {
+        while (i < n && body.charCodeAt(i) !== QUOTE) i += body.charCodeAt(i) === BACKSLASH ? 2 : 1;
+        i++;
+      } else {
+        while (i < n) {
+          const d = body.charCodeAt(i);
+          if (isSpace(d) || isPunct(d) || d === QUOTE) break;
+          i++;
+        }
+      }
+      found.push([start, i]);
+    }
+  }
+  return found;
+}
+
+function kindOf(first: number, text: string, colonNext: boolean): JsonKind {
+  if (first === QUOTE) return colonNext ? "key" : "string";
+  if (text === "true" || text === "false") return "boolean";
+  return text === "null" ? "null" : "number";
 }
 
 /**
- * Re-lays out a JSON text one token at a time. The text of every string and number is kept as it
- * was received, never decoded, so what the masking left in a body cannot come back (`s` stays).
+ * Re-lays out a JSON text in one linear pass. The text of every string and number is kept as it
+ * was received, never decoded, so what the masking left in a body cannot come back (`\u0073` stays).
  */
 function layout(body: string): JsonSpan[][] {
-  const tokens = body.match(TOKEN) ?? [];
+  const all = tokens(body);
   const lines: JsonSpan[][] = [[]];
   let depth = 0;
   const add = (text: string, kind: JsonKind) => lines.at(-1)?.push({ text, kind });
@@ -46,47 +78,70 @@ function layout(body: string): JsonSpan[][] {
     lines.push([]);
     if (depth > 0) add(INDENT.repeat(depth), "punct");
   };
-  tokens.forEach((token, i) => {
-    const next = tokens[i + 1];
-    if (token === "{" || token === "[") {
-      add(token, "punct");
-      if (next === "}" || next === "]") return;
+  const at = (k: number) => (all[k] ? body.charCodeAt((all[k] as [number, number])[0]) : -1);
+  for (let k = 0; k < all.length; k++) {
+    const [start, end] = all[k] as [number, number];
+    const c = body.charCodeAt(start);
+    const text = body.slice(start, end);
+    const next = at(k + 1);
+    if (c === 123 || c === 91) {
+      add(text, "punct");
+      if (next === 125 || next === 93) continue;
       depth++;
       newline();
-    } else if (token === "}" || token === "]") {
-      if (tokens[i - 1] !== "{" && tokens[i - 1] !== "[") {
+    } else if (c === 125 || c === 93) {
+      const before = at(k - 1);
+      if (before !== 123 && before !== 91) {
         depth--;
         newline();
       }
-      add(token, "punct");
-    } else if (token === ",") {
-      add(token, "punct");
+      add(text, "punct");
+    } else if (c === 44) {
+      add(text, "punct");
       newline();
-    } else if (token === ":") add(": ", "punct");
-    else add(token, kindOf(token, next));
-  });
+    } else if (c === 58) add(": ", "punct");
+    else add(text, kindOf(c, text, next === 58));
+  }
   return lines;
 }
 
-const cache = new WeakMap<Response, JsonSpan[][] | null>();
+interface View {
+  lines?: JsonSpan[][];
+  /** It is JSON by its look, but over the size cap: shown as received. */
+  tooBig?: boolean;
+}
 
-/**
- * The body of a response as pretty-printed JSON, line by line, or nothing when it is not JSON
- * or not all there. It runs on the body as kept, already masked.
- */
-export function jsonLines(response: Response | undefined): JsonSpan[][] | undefined {
-  if (!response) return undefined;
+const cache = new WeakMap<Response, View>();
+
+/** What a response body is as JSON, worked out once per response and kept. */
+function view(response: Response): View {
   const hit = cache.get(response);
-  if (hit !== undefined) return hit ?? undefined;
+  if (hit) return hit;
   const { body } = response;
-  let lines: JsonSpan[][] | null = null;
+  let found: View = {};
   if (body && !response.bodyCut && !response.bodyNote) {
     const declared = MEDIA_JSON.test(mediaType(contentType(response)));
     const sniffed = /^\s*[{[]/.test(body);
-    if ((declared || sniffed) && valid(body)) lines = layout(body);
+    if (declared || sniffed) {
+      if (Buffer.byteLength(body) > JSON_FORMAT_MAX_BYTES) found = { tooBig: true };
+      else if (valid(body)) found = { lines: layout(body) };
+    }
   }
-  cache.set(response, lines);
-  return lines ?? undefined;
+  cache.set(response, found);
+  return found;
+}
+
+/**
+ * The body of a response as pretty-printed JSON, line by line, or nothing when it is not JSON,
+ * not all there or too big. It runs on the body as kept, already masked, and only once.
+ */
+export function jsonLines(response: Response | undefined): JsonSpan[][] | undefined {
+  return response ? view(response).lines : undefined;
+}
+
+/** True when the body looks like JSON but is over the cap, so it is shown as received. */
+export function jsonTooBig(response: Response | undefined): boolean {
+  return response ? view(response).tooBig === true : false;
 }
 
 /** The pretty-printed body as text, for a copy. */
@@ -98,6 +153,7 @@ export function formattedBody(response: Response | undefined): string | undefine
 
 /** A line cut in pieces of `width` characters; a piece keeps the kinds of what it holds. */
 export function foldSpans(line: readonly JsonSpan[], width: number): JsonSpan[][] {
+  if (line.reduce((sum, span) => sum + span.text.length, 0) <= width) return [[...line]];
   const pieces: JsonSpan[][] = [[]];
   let used = 0;
   for (const span of line) {

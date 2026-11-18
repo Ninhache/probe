@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { reference } from "../src/config/headers";
+import { JSON_FORMAT_MAX_BYTES } from "../src/constants";
 import { type ActionDeps, serviceActions } from "../src/dashboard/actions";
 import { formattedBody, jsonLines } from "../src/dashboard/json-body";
 import { Tracker } from "../src/dashboard/native/history";
+import { responseRows } from "../src/dashboard/native/panels";
 import {
   handleInput,
   initialView,
@@ -223,5 +225,65 @@ describe("copying a JSON body", () => {
       "Copied the body (formatted JSON)",
     );
     expect(await actions.onCopyResponse("x", false, "body")).toBe("Copied the body");
+  });
+});
+
+const bigJson = (bytes: number) => {
+  const item = '{"id":12345,"name":"some name","tags":["a","b"],"ok":true,"none":null}';
+  return `[${Array.from({ length: Math.ceil(bytes / (item.length + 1)) }, () => item).join(",")}]`;
+};
+
+describe("the cost of a JSON body", () => {
+  it("should format a body at the cap in a short time", () => {
+    const r = response(bigJson(JSON_FORMAT_MAX_BYTES - 100), "application/json");
+    const start = performance.now();
+
+    const lines = jsonLines(r);
+    const ms = performance.now() - start;
+
+    expect(lines?.length).toBeGreaterThan(5000);
+    expect(ms).toBeLessThan(1000);
+  });
+
+  it("should not format a body over the cap, and say so", () => {
+    const r = response(bigJson(JSON_FORMAT_MAX_BYTES + 1000), "application/json");
+
+    const rows = responseRows(result(r), 100);
+
+    expect(jsonLines(r)).toBeUndefined();
+    expect(formattedBody(r)).toBeUndefined();
+    expect(rows.some((row) => row.text.startsWith("JSON not formatted: body over 256 KiB"))).toBe(
+      true,
+    );
+    expect(rows.at(-1)?.spans).toBeUndefined();
+  });
+
+  it("should format and fold once per result and width, however many draws", () => {
+    const r = response(bigJson(JSON_FORMAT_MAX_BYTES - 100), "application/json");
+    const one = result(r);
+
+    const first = responseRows(one, 100);
+
+    expect(jsonLines(r)).toBe(jsonLines(r));
+    expect(responseRows(one, 100)).toBe(first);
+    expect(responseRows(one, 80)).not.toBe(first);
+    expect(responseRows(one, 80)).toBe(responseRows(one, 80));
+  });
+
+  it("should redraw the response tab cheaply once the rows are kept", () => {
+    const { press, draw } = setup(
+      response(bigJson(JSON_FORMAT_MAX_BYTES - 100), "application/json"),
+    );
+    press("2");
+    draw();
+    const start = performance.now();
+
+    for (let i = 0; i < 100; i++) draw();
+    const ms = performance.now() - start;
+
+    expect(ms).toBeLessThan(1500);
+    console.info(
+      `100 warm redraws of a ${JSON_FORMAT_MAX_BYTES / 1024} KiB body: ${ms.toFixed(1)} ms`,
+    );
   });
 });

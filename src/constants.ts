@@ -25,6 +25,8 @@ export const RESPONSE_BODY_BYTES = 2_048;
 export const RESPONSE_BODY_WAIT_MS = 500;
 /** What the dashboard keeps of a response body in memory, to show it whole and copy it. */
 export const RESPONSE_FULL_BODY_BYTES = 1_048_576;
+/** A JSON body over this is shown as received: laying out a megabyte would stall the screen. */
+export const JSON_FORMAT_MAX_BYTES = 262_144;
 // How much of a body is searched for `contains`: a health endpoint answers far less.
 export const CONTAINS_BODY_BYTES = 1_048_576;
 export const CONTAINS_SHOWN_CHARACTERS = 40;

@@ -1,6 +1,6 @@
 import type { CheckResult } from "../../checkers/types";
 import { effectiveSelection, type ParameterChoices } from "../../config/parameters";
-import { LOCAL_FILE } from "../../constants";
+import { JSON_FORMAT_MAX_BYTES, LOCAL_FILE } from "../../constants";
 import type { RGB } from "../../tui/color";
 import type { InputEvent } from "../../tui/input";
 import type { Rect } from "../../tui/layout";
@@ -9,7 +9,14 @@ import type { Screen } from "../../tui/screen";
 import { defaultTheme as t } from "../../tui/theme";
 import { pad } from "../../tui/width";
 import { detailLines } from "../detail";
-import { foldSpans, formattedBody, type JsonKind, type JsonSpan, jsonLines } from "../json-body";
+import {
+  foldSpans,
+  formattedBody,
+  type JsonKind,
+  type JsonSpan,
+  jsonLines,
+  jsonTooBig,
+} from "../json-body";
 import type { Screen as KeymapScreen } from "../keymap";
 import { NO_RESPONSE, responseLines, responseProblem, responseText } from "../response";
 import { SETTING_ROWS, stepChoice, stepServiceTimeout } from "../settings";
@@ -39,6 +46,7 @@ const row = (screen: Screen, inner: Rect, i: number, label: string, value: strin
 
 /** A line cut in pieces of the width of the view: nothing of a long line is lost. */
 function folds(text: string, width: number): string[] {
+  if (text.length <= width) return [text];
   const letters = Array.from(text);
   if (letters.length <= width) return [text];
   return Array.from({ length: Math.ceil(letters.length / width) }, (_, i) =>
@@ -72,15 +80,40 @@ export function drawRow(screen: Screen, x: number, y: number, row: ResponseRow, 
   return used;
 }
 
-/** The lines of a response: its status, its headers, a blank, the body, whole, folded to `fit`. */
+const rowCache = new WeakMap<CheckResult, Map<number, ResponseRow[]>>();
+
+/**
+ * The lines of a response: its status, its headers, a blank, the body, whole, folded to `fit`.
+ * Worked out once per result and width: a draw only slices what is in view, so the cost of a
+ * frame does not grow with the body. The rows must not be changed.
+ */
 export function responseRows(result: CheckResult, fit: number): ResponseRow[] {
+  const byWidth = rowCache.get(result) ?? new Map<number, ResponseRow[]>();
+  rowCache.set(result, byWidth);
+  const hit = byWidth.get(fit);
+  if (hit) return hit;
+  const rows = buildRows(result, fit);
+  byWidth.set(fit, rows);
+  return rows;
+}
+
+function buildRows(result: CheckResult, fit: number): ResponseRow[] {
   const { head, body, note } = responseLines(result);
   const json = jsonLines(result.response);
   const folded = (text: string, tone?: ResponseRow["tone"]) =>
     folds(text, fit).map((piece) => ({ text: piece, tone }));
+  const big = jsonTooBig(result.response);
   return [
     ...head.flatMap((text, i) => folded(text, i === 0 ? (result.ok ? "good" : "bad") : "dim")),
     { text: "" },
+    ...(big
+      ? [
+          {
+            text: `JSON not formatted: body over ${JSON_FORMAT_MAX_BYTES / 1024} KiB`,
+            tone: "dim" as const,
+          },
+        ]
+      : []),
     ...(json
       ? json.flatMap((line) =>
           foldSpans(line, fit).map((spans) => ({ text: spans.map((s) => s.text).join(""), spans })),
