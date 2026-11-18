@@ -139,6 +139,46 @@ export const shouldNotify = (
   focused: boolean | undefined,
 ) => enabled && changes > 0 && focused !== true;
 
+export interface NotifierDeps {
+  graceMs: number;
+  enabled: () => boolean | undefined;
+  focused: () => boolean | undefined;
+  /** More than one environment is drawn: each change is named with its environment. */
+  scoped: () => boolean;
+  /** Shows the desktop notification; resolves to a warning when none could be shown. */
+  tell: (message: string) => Promise<string | undefined>;
+  warn: (warning: string) => void;
+  now?: () => number;
+}
+
+/** Turns each environment's passes into desktop notifications: nothing at start, each change once. */
+export function createNotifier({ graceMs, now = Date.now, ...deps }: NotifierDeps) {
+  const known = new Map<string, KnownStates>();
+  let warned = false;
+  return {
+    observe(env: string, results: Parameters<typeof stateChanges>[1]) {
+      const { known: after, changes } = stateChanges(
+        known.get(env) ?? new Map(),
+        results,
+        now(),
+        graceMs,
+      );
+      known.set(env, after);
+      if (!shouldNotify(deps.enabled(), changes.length, deps.focused())) return;
+      const scope = deps.scoped() ? `${env}/` : "";
+      const named = changes.map((change) => ({ ...change, name: `${scope}${change.name}` }));
+      void deps.tell(changeMessage(named)).then((warning) => {
+        // A notifier that cannot show anything would say so at every change.
+        if (!warning || warned) return;
+        warned = true;
+        deps.warn(warning);
+      });
+    },
+    /** Forgets what was known, so the next pass is a start again. */
+    reset: () => known.clear(),
+  };
+}
+
 /** The parameters of the local config, then those the environments' files declare as read last. */
 export function mergedParameters(local: Config, others: Iterable<Config>) {
   return mergedChoices([parameterChoices(local), ...[...others].map(parameterChoices)]);
@@ -178,7 +218,6 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   );
   const tracker = new Tracker(checks.map((check) => check.name));
   const sources = new Map(options.environments.map((source) => [source.name, source]));
-  const known = new Map<string, KnownStates>();
   const graceMs = NOTIFY_GRACE_SECONDS * 1000;
   const configOf = async (env: string): Promise<Config | undefined> =>
     env === LOCAL_ENVIRONMENT ? editing.config() : (await sources.get(env)?.load())?.config;
@@ -191,21 +230,16 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   const system = (cfg: Config) =>
     serviceActions((selection?: Selection) => applySelection(cfg, selection), options.deps);
   return new Promise((resolve) => {
-    const notify = (env: string, results: Parameters<typeof stateChanges>[1]) => {
-      const { known: after, changes } = stateChanges(
-        known.get(env) ?? new Map(),
-        results,
-        Date.now(),
-        graceMs,
-      );
-      known.set(env, after);
-      if (!shouldNotify(view.settings.notify, changes.length, focus.focused())) return;
-      const scope = tracker.environments.length > 1 ? `${env}/` : "";
-      const named = changes.map((change) => ({ ...change, name: `${scope}${change.name}` }));
-      void system(editing.config())
-        .onNotify(changeMessage(named))
-        .then((warning) => warning && !view.status && say(view, warning));
-    };
+    const notify = createNotifier({
+      graceMs,
+      enabled: () => view.settings.notify,
+      focused: () => focus.focused(),
+      scoped: () => tracker.environments.length > 1,
+      tell: (message) => system(editing.config()).onNotify(message),
+      warn: (warning) => {
+        if (!view.status) say(view, warning);
+      },
+    });
     const monitor = new Monitor(checks, {
       intervalMs: options.settings.intervalMs,
       onResults: (env, results) => {
@@ -215,7 +249,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             ? results.filter(({ name }) => Object.hasOwn(editing.config().services, name))
             : results;
         tracker.record(env, current);
-        notify(env, current);
+        notify.observe(env, current);
         app.requestRender();
       },
       onFailure: (env, message) => {
@@ -263,7 +297,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       changed: (restart) => {
         if (restart) {
           tracker.reset();
-          known.clear();
+          notify.reset();
         }
         view.choices = merge();
         tracker.retain(LOCAL_ENVIRONMENT, new Set(Object.keys(editing.config().services)));
@@ -316,7 +350,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             track(options.onParameterChange?.(name, value));
             // Another value is another target: the latencies and the states start again.
             tracker.reset();
-            known.clear();
+            notify.reset();
             monitor.invalidate();
             monitor.refresh();
           },
