@@ -7,7 +7,7 @@ import {
   type Selection,
 } from "../../config/parameters";
 import type { Config } from "../../config/schema";
-import { NOTIFY_GRACE_SECONDS } from "../../constants";
+import { NOTIFY_GRACE_SECONDS, RESPONSE_FULL_BODY_BYTES } from "../../constants";
 import { App } from "../../tui/app";
 import { type ActionDeps, serviceActions } from "../actions";
 import { changeMessage, type KnownStates, stateChanges } from "../changes";
@@ -72,6 +72,7 @@ export function sourceCheck(
           timeoutMs: now.settings.timeoutMs,
           signal,
           detail: true,
+          bodyBytes: RESPONSE_FULL_BODY_BYTES,
           variables: loaded,
           configFile: source.file,
           selection: now.selection,
@@ -119,6 +120,7 @@ export function environmentChecks(
                 timeoutMs: now.settings.timeoutMs,
                 signal,
                 detail: true,
+                bodyBytes: RESPONSE_FULL_BODY_BYTES,
                 variables: await variables?.(),
                 selection: now.selection,
               },
@@ -291,6 +293,13 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
                 view.selection,
               ),
             ),
+          copyResponse: (text, cut) =>
+            void system(editing.config())
+              .onCopyResponse(text, cut)
+              .then((message) => {
+                say(view, message);
+                app.requestRender();
+              }),
           skip: (service, skip) => {
             track(options.onSkipChange?.(service, skip));
             monitor.refresh();

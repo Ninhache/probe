@@ -357,6 +357,8 @@ export interface ViewActions {
   refresh(): void;
   open?(service: string, env: string): void;
   copy?(service: string, env: string): void;
+  /** Copies the text of a response: `cut` when its body is not all there. */
+  copyResponse?(text: string, cut: boolean): void;
   skip?(service: string, skip: boolean): void;
   timeout?(service: string, seconds: number | undefined): void;
   settings?(settings: DashboardSettings): void;

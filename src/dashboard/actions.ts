@@ -29,7 +29,9 @@ const system = (): ActionDeps => ({
 export function serviceActions(
   config: (selection?: Selection) => Config,
   deps: ActionDeps = system(),
-): Required<Pick<DashboardProps, "onOpen" | "onCopy" | "onNotify">> {
+): Required<Pick<DashboardProps, "onOpen" | "onCopy" | "onNotify">> & {
+  onCopyResponse(text: string, cut: boolean): Promise<string>;
+} {
   const service = (name: string, selection?: Selection) => config(selection).services[name];
   const gone = (name: string) => `${name} is no longer in the config`;
   return {
@@ -53,6 +55,12 @@ export function serviceActions(
       }
       const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy with. The command:\n${command}`;
+    },
+    async onCopyResponse(text, cut) {
+      if (await deps.copyText(text))
+        return cut ? "Copied the response, its body cut" : "Copied the response";
+      const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
+      return `No ${tools.join(" or ")} to copy the response with`;
     },
     async onNotify(message) {
       if (await deps.notify(NOTIFICATION_TITLE, message)) return undefined;

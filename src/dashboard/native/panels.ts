@@ -8,12 +8,14 @@ import { defaultTheme as t } from "../../tui/theme";
 import { pad } from "../../tui/width";
 import { detailLines } from "../detail";
 import type { Screen as KeymapScreen } from "../keymap";
+import { responseLines, responseProblem, responseText } from "../response";
 import { SETTING_ROWS, stepChoice, stepServiceTimeout } from "../settings";
 import type { VariableRow } from "../variables";
 import { LOCAL_ENVIRONMENT, type Tracker } from "./history";
-import type { ViewActions, ViewState } from "./view";
+import { say, type ViewActions, type ViewState } from "./view";
 
 const PANEL_WIDTH = 72;
+const RESPONSE_WIDTH = 120;
 const MARGIN = 2;
 const OPTIONS_WIDTH = 40;
 const PAD = 1;
@@ -30,6 +32,15 @@ const row = (screen: Screen, inner: Rect, i: number, label: string, value: strin
   screen.text(inner.x + PAD, inner.y + i, pad(label, 14), style, inner.w - PAD);
   screen.text(inner.x + PAD + 14, inner.y + i, value, { ...style, fg: t.accent }, inner.w);
 };
+
+/** A line cut in pieces of the width of the view: nothing of a long line is lost. */
+function folds(text: string, width: number): string[] {
+  const letters = Array.from(text);
+  if (letters.length <= width) return [text];
+  return Array.from({ length: Math.ceil(letters.length / width) }, (_, i) =>
+    letters.slice(i * width, (i + 1) * width).join(""),
+  );
+}
 
 /** What `detailLines` says about a service, for every service type, plus its timeout and skip. */
 export function detailPanel(
@@ -61,14 +72,67 @@ export function detailPanel(
       ? detailLines(result, history, { unicode: true, width: width - 2 - PAD * 2, room })
       : [{ id: "wait", text: "no result yet", tone: "dim" as const }];
   };
+  // The response view: the whole of the last answer, scrolled instead of cut.
+  let responding = false;
+  let top = 0;
+  // The frame and its border take two rows each way.
+  const room = Math.max(1, area.h - 4);
+  const responseWidth = Math.min(RESPONSE_WIDTH, area.w - MARGIN * 2);
+  const rows = (): { text: string; tone?: "good" | "bad" | "dim" }[] => {
+    const result = tracker.result(service, env);
+    if (!result) return [];
+    const { head, body, note } = responseLines(result);
+    const fit = responseWidth - 2 - PAD * 2;
+    const folded = (text: string, tone?: "good" | "bad" | "dim") =>
+      folds(text, fit).map((piece) => ({ text: piece, tone }));
+    return [
+      ...head.flatMap((text, i) => folded(text, i === 0 ? (result.ok ? "good" : "bad") : "dim")),
+      { text: "" },
+      ...body.flatMap((text) => folded(text)),
+      ...(note ? [{ text: note, tone: "dim" as const }] : []),
+    ];
+  };
+  const respond = () => {
+    const problem = responseProblem(tracker.result(service, env));
+    if (problem) say(view, problem);
+    else {
+      responding = true;
+      top = 0;
+    }
+  };
+  const scroll = (to: number) => {
+    top = Math.max(0, Math.min(to, rows().length - room));
+  };
   return {
-    title: `${service}@${env}`,
-    bar: writable ? "detail" : "readonly",
-    footer: writable ? "←→ timeout · s skip · u open · c copy · esc" : "u open · c copy · esc",
+    get title() {
+      if (!responding) return `${service}@${env}`;
+      const total = rows().length;
+      return `${service}@${env} · response ${Math.min(top + 1, total)}-${Math.min(top + room, total)}/${total}`;
+    },
+    get bar() {
+      if (responding) return "response";
+      return writable ? "detail" : "readonly";
+    },
+    get footer() {
+      if (responding) return "↑↓ PgUp PgDn scroll · c copy · r back · esc";
+      return writable
+        ? "←→ timeout · s skip · u open · c copy · r response · esc"
+        : "u open · c copy · r response · esc";
+    },
     get size() {
+      if (responding) return { w: responseWidth, h: area.h - 2 };
       return { w: width, h: Math.min(area.h - 2, lines().length + extra() + 3) };
     },
     draw(screen, inner) {
+      if (responding) {
+        const all = rows();
+        top = Math.max(0, Math.min(top, all.length - room));
+        all.slice(top, top + room).forEach((line, i) => {
+          const fg = line.tone ? tones[line.tone] : t.fg;
+          screen.text(inner.x + PAD, inner.y + i, line.text, { fg }, inner.w - PAD);
+        });
+        return;
+      }
       const shown = lines();
       shown.forEach((line, i) => {
         if (i >= inner.h - extra()) return;
@@ -102,6 +166,28 @@ export function detailPanel(
     },
     onEvent(event: InputEvent) {
       if (event.kind !== "key" || event.ctrl || event.alt) return event.kind === "mouse";
+      if (responding) {
+        const keys: Record<string, number> = {
+          up: top - 1,
+          down: top + 1,
+          pageup: top - room,
+          pagedown: top + room,
+          home: 0,
+          end: Number.MAX_SAFE_INTEGER,
+        };
+        if (event.name in keys) scroll(keys[event.name] as number);
+        else if (event.name === "r") responding = false;
+        else if (event.name === "c") {
+          const result = tracker.result(service, env);
+          const text = result && responseText(result);
+          if (text !== undefined) actions.copyResponse?.(text, result?.response?.bodyCut === true);
+        } else return false;
+        return true;
+      }
+      if (event.name === "r") {
+        respond();
+        return true;
+      }
       if (event.name === "enter") {
         const variable = found[at];
         if (!variable) return "close";

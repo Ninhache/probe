@@ -9,6 +9,7 @@ export type Screen =
   | "input"
   | "confirm"
   | "detail"
+  | "response"
   | "help";
 
 export type Command =
@@ -69,6 +70,13 @@ const detail = (binding: Omit<Binding, "screens" | "section" | "native">): Bindi
   ...binding,
 });
 
+const response = (binding: Omit<Binding, "screens" | "section" | "native">): Binding => ({
+  screens: ["response"],
+  section: "Service detail",
+  native: true,
+  ...binding,
+});
+
 const NATIVE_LIST_BINDINGS: readonly Binding[] = [
   list({
     keys: "n",
@@ -85,7 +93,20 @@ const DETAIL_BINDINGS: readonly Binding[] = [
   detail({ keys: "s", action: "skip", help: "Skip the service", drop: 2 }),
   detail({ keys: "u", action: "open", help: "Open its URL", drop: 1 }),
   detail({ keys: "c", action: "copy", help: "Copy curl command", drop: 1 }),
+  {
+    screens: ["detail", "readonly"],
+    section: "Service detail",
+    native: true,
+    keys: "r",
+    action: "response",
+    help: "Full response",
+    drop: 2,
+  },
   detail({ keys: "esc", action: "close", help: "Close" }),
+  response({ keys: "↑↓", ascii: "arrows", action: "scroll", help: "Scroll", drop: 3 }),
+  response({ keys: "c", action: "copy response", help: "Copy the response", drop: 1 }),
+  response({ keys: "r", action: "details", help: "Back to the detail", drop: 2 }),
+  response({ keys: "esc", action: "close", help: "Close" }),
 ];
 
 const BINDINGS: readonly Binding[] = [
