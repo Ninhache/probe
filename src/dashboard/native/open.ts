@@ -11,10 +11,12 @@ import { NOTIFY_GRACE_SECONDS } from "../../constants";
 import { App } from "../../tui/app";
 import { type ActionDeps, serviceActions } from "../actions";
 import { changeMessage, type KnownStates, stateChanges } from "../changes";
+import { type EditCallbacks, liveEditing } from "../editing";
 import { type FocusWatch, watchFocus } from "../focus";
 import type { Saved } from "../saves";
 import type { DashboardSettings } from "../settings";
 import type { EnvironmentSource } from "../sources";
+import { createEditor } from "./editor";
 import { LOCAL_ENVIRONMENT, Tracker } from "./history";
 import { type EnvironmentCheck, Monitor } from "./monitor";
 import { handleInput, initialView, renderDashboard, say, type ViewState } from "./view";
@@ -24,7 +26,7 @@ export { LOCAL_ENVIRONMENT };
 const MIN_SIZE = { w: 70, h: 16 };
 const TICK_MS = 1000;
 
-export interface NativeDashboardOptions {
+export interface NativeDashboardOptions extends EditCallbacks {
   config: Config;
   environments: readonly EnvironmentSource[];
   settings: DashboardSettings;
@@ -47,44 +49,50 @@ export interface NativeDashboardOptions {
 export type LiveState = Pick<ViewState, "settings" | "skipped" | "timeouts" | "selection">;
 
 export function environmentChecks(
-  { config, environments, settings, selection, variables, skipped }: NativeDashboardOptions,
+  options: NativeDashboardOptions,
   live: () => LiveState = () => ({
-    settings,
-    selection: selection ?? {},
-    skipped: skipped ?? new Set(),
+    settings: options.settings,
+    selection: options.selection ?? {},
+    skipped: options.skipped ?? new Set(),
     timeouts: {},
   }),
   onLoaded: (env: string, declared: Config) => void = () => {},
 ): EnvironmentCheck[] {
-  const local: EnvironmentCheck[] =
-    Object.keys(config.services).length === 0
-      ? []
-      : [
-          {
-            name: LOCAL_ENVIRONMENT,
-            run: async (signal) => {
-              const now = live();
-              const services = Object.fromEntries(
-                Object.entries(config.services).map(([name, service]) => [
-                  name,
-                  { ...service, timeout: now.timeouts[name] },
-                ]),
-              );
-              return runChecks(
-                { ...config, services },
-                [],
-                {
-                  timeoutMs: now.settings.timeoutMs,
-                  signal,
-                  detail: true,
-                  variables: await variables?.(),
-                  selection: now.selection,
-                },
-                now.skipped,
-              );
-            },
+  const { environments, variables } = options;
+  // A screen that can add services keeps its own tab, empty or not.
+  const hasLocal =
+    Object.keys(options.config.services).length > 0 ||
+    environments.length === 0 ||
+    options.onServiceWrite !== undefined;
+  const local: EnvironmentCheck[] = !hasLocal
+    ? []
+    : [
+        {
+          name: LOCAL_ENVIRONMENT,
+          run: async (signal) => {
+            const now = live();
+            const { config } = options;
+            const services = Object.fromEntries(
+              Object.entries(config.services).map(([name, service]) => [
+                name,
+                { ...service, timeout: now.timeouts[name] },
+              ]),
+            );
+            return runChecks(
+              { ...config, services },
+              [],
+              {
+                timeoutMs: now.settings.timeoutMs,
+                signal,
+                detail: true,
+                variables: await variables?.(),
+                selection: now.selection,
+              },
+              now.skipped,
+            );
           },
-        ];
+        },
+      ];
   return [
     ...local,
     ...environments.map(
@@ -136,11 +144,19 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       Object.entries(options.config.services).map(([name, { timeout }]) => [name, timeout]),
     ),
   });
+  const editing = liveEditing(options.config, options);
+  // The writes and the undos replace the config: a pass reads it as it is when it starts.
+  const live: NativeDashboardOptions = {
+    ...options,
+    get config() {
+      return editing.config();
+    },
+  };
   const loaded = new Map<string, Config>();
   // Parameters an environment's file declares join the local ones, as on the ink screen.
-  const merge = () => mergedParameters(options.config, loaded.values());
+  const merge = () => mergedParameters(editing.config(), loaded.values());
   const checks = environmentChecks(
-    options,
+    live,
     () => view,
     (env, declared) => {
       loaded.set(env, declared);
@@ -152,7 +168,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   const known = new Map<string, KnownStates>();
   const graceMs = NOTIFY_GRACE_SECONDS * 1000;
   const configOf = async (env: string): Promise<Config | undefined> =>
-    env === LOCAL_ENVIRONMENT ? options.config : (await sources.get(env)?.load())?.config;
+    env === LOCAL_ENVIRONMENT ? editing.config() : (await sources.get(env)?.load())?.config;
   const focus = options.focus ?? watchFocus(process.stdin, process.stdout);
   const track = (saved: Saved | undefined) => void saved?.then((why) => why && say(view, why));
   const system = (cfg: Config) =>
@@ -169,15 +185,20 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       if (!shouldNotify(view.settings.notify, changes.length, focus.focused())) return;
       const scope = tracker.environments.length > 1 ? `${env}/` : "";
       const named = changes.map((change) => ({ ...change, name: `${scope}${change.name}` }));
-      void system(options.config)
+      void system(editing.config())
         .onNotify(changeMessage(named))
         .then((warning) => warning && !view.status && say(view, warning));
     };
     const monitor = new Monitor(checks, {
       intervalMs: options.settings.intervalMs,
       onResults: (env, results) => {
-        tracker.record(env, results);
-        notify(env, results);
+        // A pass that began before a removal still reports the service.
+        const current =
+          env === LOCAL_ENVIRONMENT
+            ? results.filter(({ name }) => Object.hasOwn(editing.config().services, name))
+            : results;
+        tracker.record(env, current);
+        notify(env, current);
         app.requestRender();
       },
       onFailure: (env, message) => {
@@ -190,6 +211,19 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       say(view, cfg ? await work(cfg) : `${env} cannot be read`);
       app.requestRender();
     };
+    const edit = createEditor({
+      view,
+      tracker,
+      editing,
+      fileOf: (env) => sources.get(env)?.file,
+      redraw: () => app.requestRender(),
+      changed: () => {
+        view.choices = merge();
+        tracker.retain(LOCAL_ENVIRONMENT, new Set(Object.keys(editing.config().services)));
+        monitor.refresh();
+        app.requestRender();
+      },
+    });
     const app: App = new App({
       render: (screen, area) => {
         view.frame = app.frame;
@@ -199,6 +233,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         handleInput(event, tracker, view, {
           quit: () => app.stop(),
           refresh: () => monitor.refresh(),
+          edit,
           open: (service, env) =>
             void run(env, (cfg) => system(cfg).onOpen(service, view.selection)),
           copy: (service, env) =>

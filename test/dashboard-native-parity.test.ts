@@ -166,14 +166,6 @@ describe("actions", () => {
     expect(view.modals.depth).toBe(1);
   });
 
-  it("tells a placeholder key is not in this screen yet", () => {
-    const { press, draw } = setup();
-    for (const name of ["a", "e", "d", "z", ":"]) {
-      press(name);
-      expect(draw().split("\n").at(-1)).toContain("not yet in this screen");
-    }
-  });
-
   it("replaces the bar with an outcome, then gives it back", () => {
     const { view, tracker, draw } = setup();
     say(view, "Copied: curl x\nnote", 0);

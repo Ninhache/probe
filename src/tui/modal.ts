@@ -13,6 +13,8 @@ export interface Modal {
   /** First look at an event. true = handled, "close" = handled and close, false = Esc closes, the rest is ignored. */
   onEvent?(event: InputEvent, inner: Rect): boolean | "close";
   footer?: string;
+  /** A text field is open: letters are typed, none of them (`q`) acts on the screen. */
+  typing?: boolean;
 }
 
 /** Where a modal of the wanted size lands: centered, never larger than the screen. */

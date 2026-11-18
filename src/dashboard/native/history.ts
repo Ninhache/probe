@@ -115,6 +115,17 @@ export class Tracker {
     this.events.clear();
   }
 
+  /** Forget the services of an environment that are not in `names` any more: removed or undone. */
+  retain(env: string, names: ReadonlySet<string>): void {
+    const gone = (key: string) => {
+      const [at, service] = key.split("\u0000") as [string, string];
+      return at === env && !names.has(service);
+    };
+    for (const key of [...this.series.keys()].filter(gone)) this.series.delete(key);
+    for (const key of [...this.known].filter(gone)) this.known.delete(key);
+    for (const key of [...this.results.keys()].filter(gone)) this.results.delete(key);
+  }
+
   history(service: string, env: string): Ring<Sample> | undefined {
     return this.series.get(keyOf(service, env));
   }

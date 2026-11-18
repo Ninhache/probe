@@ -20,9 +20,13 @@ import {
   tabs,
 } from "../../tui/widgets";
 import { pad } from "../../tui/width";
+import { type Command, keyCommand } from "../keymap";
+import { fromEngineKey } from "../keys";
 import type { DashboardSettings } from "../settings";
+import type { Editor } from "./editor";
 import { drawHelpBar, helpModal } from "./help";
 import { LOCAL_ENVIRONMENT, type SeriesStats, statsOf, type Tracker } from "./history";
+import { paletteModal } from "./palette";
 import { detailPanel, optionsPanel, type Panel, parametersPanel } from "./panels";
 
 /** Uptime the services are held to, in percent. Not configurable on purpose. */
@@ -58,6 +62,8 @@ export interface ViewState {
   status?: { text: string; at: number };
   /** The bar of the keymap that fits the modal on top. */
   bar?: Panel["bar"];
+  /** A command a modal chose and closed on: run once it is gone. */
+  queued?: Command;
 }
 
 export type ViewInit = Partial<
@@ -65,7 +71,6 @@ export type ViewInit = Partial<
 >;
 
 const STATUS_MS = 6000;
-const NOT_HERE = "not yet in this screen";
 
 /** Show the outcome of an action in place of the bar. */
 export function say(view: ViewState, text: string, at = Date.now()): void {
@@ -223,7 +228,11 @@ export function renderDashboard(
     });
   }
   const barScreen =
-    view.modals.depth > 0 ? (view.bar ?? "help") : view.filtering ? "filter" : "list";
+    view.modals.depth > 0
+      ? ((view.modals.top as Partial<Panel> | undefined)?.bar ?? view.bar ?? "help")
+      : view.filtering
+        ? "filter"
+        : "list";
   if (view.status && now - view.status.at < STATUS_MS) {
     const text = view.status.text.replaceAll("\n", " · ");
     screen.text(1, footer.y, text, { fg: t.warn }, area.w - 2);
@@ -326,6 +335,8 @@ export interface ViewActions {
   timeout?(service: string, seconds: number | undefined): void;
   settings?(settings: DashboardSettings): void;
   parameter?(name: string, value: string): void;
+  /** The keys that edit the files; absent when nothing can write them. */
+  edit?: Editor;
 }
 
 /** The environment a service is looked at in: the tab's, or the first one that has it. */
@@ -336,8 +347,6 @@ export function focusEnv(tracker: Tracker, view: ViewState, service: string): st
   );
 }
 
-const PLACEHOLDER_KEYS = ["a", "e", "d", "z", ":"];
-
 /** Applies one input event to the view. */
 export function handleInput(
   event: InputEvent,
@@ -346,9 +355,14 @@ export function handleInput(
   actions: ViewActions,
 ): void {
   if (view.modals.depth > 0) {
-    if (event.kind === "key" && event.name === "q" && !event.ctrl && !event.alt) actions.quit();
+    const typing = view.modals.top?.typing === true;
+    if (event.kind === "key" && event.name === "q" && !event.ctrl && !event.alt && !typing)
+      actions.quit();
     else view.modals.handle(event);
     if (view.modals.depth === 0) view.bar = undefined;
+    const queued = view.queued;
+    view.queued = undefined;
+    if (queued) runCommand(queued, tracker, view, actions);
     return;
   }
   const list = visibleServices(tracker, view);
@@ -373,43 +387,94 @@ export function handleInput(
     view.tab = (view.tab + by + environments) % environments;
     view.offset = 0;
   };
-  if (event.name === "q") actions.quit();
-  else if (event.name === "escape") {
+  if (event.name === "escape") {
     if (fieldValue(view.filter)) view.filter = textField();
     else actions.quit();
-  } else if (event.name === "?") {
-    view.bar = "help";
-    view.modals.push(helpModal(view.area, environments > 2));
-  } else if (event.name === "enter") {
-    const service = list[geometry.count === 0 ? 0 : current.selected];
-    const env = service === undefined ? undefined : focusEnv(tracker, view, service);
-    if (service === undefined || env === undefined) return;
-    const panel = detailPanel(view.area, tracker, view, service, env, actions);
-    view.bar = panel.bar;
-    view.modals.push(panel);
-  } else if (event.name === "o") {
-    const panel = optionsPanel(view, actions);
-    view.bar = panel.bar;
-    view.modals.push(panel);
-  } else if (event.name === "p") {
-    if (Object.keys(view.choices).length === 0) say(view, "no parameters in this config");
-    else {
-      const panel = parametersPanel(view, actions);
-      view.bar = panel.bar;
-      view.modals.push(panel);
-    }
-  } else if (event.name === "u" || event.name === "c") {
-    const service = list[current.selected];
-    const env = service === undefined ? undefined : focusEnv(tracker, view, service);
-    if (service !== undefined && env !== undefined)
-      (event.name === "u" ? actions.open : actions.copy)?.(service, env);
-  } else if (PLACEHOLDER_KEYS.includes(event.name) || event.raw === "Z") say(view, NOT_HERE);
-  else if (event.name === "/") view.filtering = true;
+    return;
+  }
+  const typed = fromEngineKey(event).input;
+  const command = event.name === "enter" ? keyCommand("", true) : keyCommand(typed, false);
+  if (command) runCommand(command, tracker, view, actions);
+  else if (typed === ":") openPalette(view);
   else if (event.name === "tab") cycle(event.shift ? -1 : 1);
   else if (event.name === "right" || event.name === "l") cycle(1);
   else if (event.name === "left" || event.name === "h") cycle(-1);
-  else if (event.name === "r") actions.refresh();
   else select(listKey(current, event, geometry));
+}
+
+const openPalette = (view: ViewState) =>
+  view.modals.push(
+    paletteModal((command) => {
+      view.queued = command;
+    }),
+  );
+
+/** The service the cursor is on, if the list has any. */
+function selectedService(tracker: Tracker, view: ViewState): string | undefined {
+  return visibleServices(tracker, view)[Math.max(0, selectedIndex(tracker, view))];
+}
+
+/** What a command of the keymap does: the keys and the palette both come here. */
+export function runCommand(
+  command: Command,
+  tracker: Tracker,
+  view: ViewState,
+  actions: ViewActions,
+): void {
+  const service = selectedService(tracker, view);
+  const env = service === undefined ? undefined : focusEnv(tracker, view, service);
+  const elsewhere = actions.edit?.elsewhere(activeEnv(tracker, view));
+  const edit = (act: (editor: Editor, name: string) => void) => {
+    if (elsewhere) say(view, elsewhere);
+    else if (actions.edit && service !== undefined) act(actions.edit, service);
+  };
+  switch (command) {
+    case "check":
+      actions.refresh();
+      break;
+    case "quit":
+      actions.quit();
+      break;
+    case "help":
+      view.modals.push(helpModal(view.area, tabNames(tracker).length > 2));
+      break;
+    case "filter":
+      view.filtering = true;
+      break;
+    case "options":
+      view.modals.push(optionsPanel(view, actions));
+      break;
+    case "parameters":
+      if (Object.keys(view.choices).length === 0) say(view, "no parameters in this config");
+      else view.modals.push(parametersPanel(view, actions));
+      break;
+    case "detail":
+      if (service !== undefined && env !== undefined)
+        view.modals.push(detailPanel(view.area, tracker, view, service, env, actions));
+      break;
+    case "open":
+    case "copy":
+      if (service !== undefined && env !== undefined)
+        (command === "open" ? actions.open : actions.copy)?.(service, env);
+      break;
+    case "add":
+      if (elsewhere) say(view, elsewhere);
+      else actions.edit?.add();
+      break;
+    case "edit":
+      edit((editor, name) => editor.edit(name));
+      break;
+    case "remove":
+      edit((editor, name) => editor.remove(name));
+      break;
+    case "undo":
+    case "redo":
+      if (elsewhere) say(view, elsewhere);
+      else actions.edit?.[command]();
+      break;
+    default:
+      command satisfies never;
+  }
 }
 
 function typeFilter(event: InputEvent, view: ViewState, move: () => void): void {
