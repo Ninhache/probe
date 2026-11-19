@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { currentPlatform } from "../src/platform";
+import { isOnPath } from "../src/platform/on-path";
 import { inheritedEnv, makeEnv, tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -1000,7 +1001,10 @@ describe("probe (top level)", () => {
   );
 });
 
-describe("generated Makefile with real make", () => {
+const makeInstalled = await isOnPath("make");
+
+// Only where make is found on PATH, as probe itself decides: a runner without it has nothing to run.
+describe.skipIf(!makeInstalled)("generated Makefile with real make", () => {
   const make = (root: string, target: string) =>
     exec("make", [target, `PROBE=${process.execPath} ${CLI}`], root);
 
