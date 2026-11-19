@@ -21,6 +21,12 @@ export const MAX_REDIRECTS = 20;
 export const DEFAULT_MAKEFILE = "Makefile";
 
 export const DEFAULT_CHECKER_TYPE = "http";
+/** What a command service keeps of its stderr: the end of it, where the reason is. */
+export const COMMAND_STDERR_BYTES = 4_096;
+/** The reason shown for a failed command is cut at this many characters. */
+export const COMMAND_STDERR_CHARACTERS = 200;
+/** Time given to the stderr of a command that exited, when a process it left behind holds the pipe. */
+export const EXIT_DRAIN_MS = 100;
 export const DEFAULT_TIMEOUT_SECONDS = 3;
 export const DASHBOARD_INTERVAL_SECONDS = 2;
 /** Height of the latency box in the dashboard, borders included. */

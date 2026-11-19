@@ -16,6 +16,8 @@ export interface OncePass {
   skipped: ReadonlySet<string>;
   selection: Selection;
   timeoutMs: number;
+  /** The project root, where the command services run. */
+  cwd?: string;
   environments: readonly EnvironmentSource[];
   terminal: Terminal;
   glyphs?: Glyphs;
@@ -28,7 +30,7 @@ export interface OncePass {
 export async function oncePass(pass: OncePass): Promise<{ text: string; down: boolean }> {
   const run = pass.run ?? runChecks;
   const colors = createColors(pass.terminal.color);
-  const options = { timeoutMs: pass.timeoutMs, selection: pass.selection };
+  const options = { timeoutMs: pass.timeoutMs, selection: pass.selection, cwd: pass.cwd };
   const sections: { name: string; results: CheckResult[] }[] = [
     {
       name: LOCAL_ENVIRONMENT,

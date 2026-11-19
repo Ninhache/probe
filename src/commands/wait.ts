@@ -101,6 +101,7 @@ export default defineCommand({
             timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000,
             maxTimeoutMs: remainingMs,
             variables,
+            cwd: paths.root,
             configFile: configFile(paths),
             tags,
             selection,

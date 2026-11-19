@@ -10,6 +10,8 @@ export interface CheckContext {
   /** How much of a body the detail keeps: the short default when absent. */
   bodyBytes?: number;
   variables?: Variables;
+  /** Where a command runs: the project root. Absent, the directory probe was started from. */
+  cwd?: string;
 }
 
 export interface CheckResult {
@@ -20,6 +22,8 @@ export interface CheckResult {
   skipped?: true;
   target: string;
   status?: number;
+  /** The code a command service exited with; absent for a service of another type, or when none came back. */
+  exitCode?: number;
   latencyMs: number;
   error?: string;
   hint?: string;

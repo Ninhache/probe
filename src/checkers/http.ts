@@ -30,9 +30,10 @@ import type { CheckContext, CheckResult, ServiceType } from "./types";
 
 export function targetUrl(service: Service): string {
   if (service.url !== undefined) return service.url;
-  const bareIpv6 = service.host.includes(":") && !service.host.startsWith("[");
-  const host = bareIpv6 ? `[${service.host}]` : service.host;
-  return `http://${host}:${service.port}${service.path}`;
+  const name = service.host ?? "";
+  const bareIpv6 = name.includes(":") && !name.startsWith("[");
+  const host = bareIpv6 ? `[${name}]` : name;
+  return `http://${host}:${service.port}${service.path ?? ""}`;
 }
 
 const shellQuoted = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;

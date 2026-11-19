@@ -14,6 +14,8 @@ export interface RunOptions {
   detail?: boolean;
   bodyBytes?: number;
   variables?: Variables;
+  /** The project root, where the command services run. */
+  cwd?: string;
   configFile?: string;
   tags?: readonly string[];
   selection?: Selection;
@@ -55,6 +57,7 @@ export async function runChecks(
         detail: options.detail,
         bodyBytes: options.bodyBytes,
         variables: options.variables,
+        cwd: options.cwd,
       });
     }),
   );
