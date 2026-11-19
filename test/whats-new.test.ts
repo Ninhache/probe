@@ -280,8 +280,8 @@ describe("saved completion scripts", () => {
 
     expect(completionPlaces(where).map(({ path }) => path)).toEqual([
       join(home, ".zfunc", "_probe"),
-      "/xdg/config/fish/completions/probe.fish",
-      "/xdg/data/bash-completion/completions/probe",
+      join("/xdg/config", "fish", "completions", "probe.fish"),
+      join("/xdg/data", "bash-completion", "completions", "probe"),
     ]);
   });
 

@@ -17,8 +17,13 @@ export interface UpdateCache {
   checkedAt: number;
 }
 
-export function cacheDir(env: NodeJS.ProcessEnv = process.env): string {
-  return join(env.XDG_CACHE_HOME || join(homedir(), ".cache"), "probe");
+/** `XDG_CACHE_HOME`, else `%LOCALAPPDATA%` on Windows, else `~/.cache`; always with `probe` under it. */
+export function cacheDir(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const windowsCache = platform === "win32" ? env.LOCALAPPDATA : undefined;
+  return join(env.XDG_CACHE_HOME || windowsCache || join(homedir(), ".cache"), "probe");
 }
 
 export function updateCheckDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
