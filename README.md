@@ -34,6 +34,8 @@ probe runs on Windows from PowerShell or Windows Terminal, installed with npm li
   says so and points to `probe check`, which does the same.
 - For a [command service](docs/config.md#command-services), prefer the list form. A `.cmd` program (`npm`, `pnpm`)
   needs the string form.
+- Shell completion: `probe completion powershell | Out-String | Invoke-Expression` (see [completion](docs/features/completion.md)).
+- `probe doctor` names the process that holds a port, and the dashboard's notifications are Windows toasts.
 
 ## Quick start
 
