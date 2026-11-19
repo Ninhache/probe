@@ -71,13 +71,11 @@ const INHERITED = [
   "TEMP",
   "TMP",
   "TMPDIR",
-  "LANG",
-  "LC_ALL",
 ];
 
 export function inheritedEnv(): NodeJS.ProcessEnv {
   const wanted = new Set(INHERITED);
-  return Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => wanted.has(name.toUpperCase())),
-  );
+  const inherited = Object.entries(process.env).filter(([name]) => wanted.has(name.toUpperCase()));
+  // A terminal that draws Unicode, announced as each OS announces it, so that the glyphs do not depend on the host.
+  return { ...Object.fromEntries(inherited), LANG: "en_US.UTF-8", WT_SESSION: "probe-test" };
 }
