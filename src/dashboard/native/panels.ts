@@ -18,7 +18,7 @@ import {
   jsonTooBig,
 } from "../json-body";
 import type { Screen as KeymapScreen } from "../keymap";
-import { NO_RESPONSE, responseLines, responseProblem, responseText } from "../response";
+import { NO_RESPONSE, responseLines, responseProblem, responseText, traceText } from "../response";
 import { SETTING_ROWS, stepChoice, stepServiceTimeout } from "../settings";
 import type { VariableRow } from "../variables";
 import { LOCAL_ENVIRONMENT, type Tracker } from "./history";
@@ -150,6 +150,19 @@ export function copyBody(view: ViewState, actions: ViewActions, result: CheckRes
     "body",
     formatted !== undefined,
   );
+}
+
+/** Saves the whole exchange of a service to a trace file; says why not when there is nothing to save. */
+export function saveTrace(
+  view: ViewState,
+  actions: ViewActions,
+  service: string,
+  result: CheckResult | undefined,
+) {
+  const problem = responseProblem(result);
+  const text = result && traceText(result);
+  if (problem || !text) return say(view, problem ?? NO_RESPONSE);
+  actions.saveTrace?.(service, text);
 }
 
 /** A row whose value moves with ←→: drawn `‹ value ›`. */
@@ -311,6 +324,8 @@ export function detailPanel(
         if (event.name in keys) scroll(keys[event.name] as number);
         else if (event.name === "r") responding = false;
         else if (event.name === "b") copyBody(view, actions, tracker.result(service, env));
+        else if (event.name === "w")
+          saveTrace(view, actions, service, tracker.result(service, env));
         else if (event.name === "c") {
           const result = tracker.result(service, env);
           const text = result && responseText(result);

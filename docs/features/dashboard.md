@@ -70,6 +70,7 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 | `u`             | Open its URL in the browser                       |
 | `c`             | Copy its curl command                             |
 | `b`             | Copy the body of its last response                |
+| `w`             | Save its last response to a [trace file](#traces) |
 | `/`             | Filter by name; `Enter` keeps it, `Esc` clears    |
 | `p`             | Choose, add or edit [parameters](#parameters)     |
 | `v`             | List the [variables](#variables) the headers send |
@@ -144,7 +145,8 @@ On `Enter` the form asks under which variable to keep it and proposes a name (`A
 
 `Enter` shows the selected service: status, latencies of this session and, for a service that is down, what
 failed and what to try. `r` there opens the full response (status line, headers, body), scrollable with `↑` `↓`
-and `PgUp` `PgDn`. `c` copies the whole response, `b` its body, `r` goes back to the detail, `Esc` closes.
+and `PgUp` `PgDn`. `c` copies the whole response, `b` its body, `w` saves it to a [trace file](#traces), `r` goes back to the detail,
+`Esc` closes.
 
 `Request:` gives the method and the whole URL, parameters applied. `Headers sent:` lists the headers of the
 request, parameters included, as `config.yml` writes them. A variable stays `${NAME}`, never its value:
@@ -295,3 +297,20 @@ A click on it does what `n` does, and it lights up under the pointer like the ta
   and never falls back on another environment's. The timeout and skip of a service stay local.
 - A file that cannot be read shows `!` next to its name, with the reason when you select it.
 - A notification names the environment (`prod/api`).
+
+## Traces
+
+`w` saves the exchange of the selected service, from the list, its response tab or the full response view. The file is
+`.probe/traces/<service>-<YYYY-MM-DDTHH-MM-SS>.http`, in local time and with no colon. A name already taken gets `-2`,
+`-3`. It holds the request line and the headers as `config.yml` writes them, a blank line, then the status line,
+headers and body that `c` copies.
+
+- Secrets are hidden as on screen: a variable stays `${NAME}`, a header value typed in clear is starred, a response
+  header that carries a secret reads `(hidden)`. In the request line, the value of a query parameter named like a
+  secret (`token`, `key`, `secret`, `auth`, ...) and the password of a `user:password@` address read `***`.
+- The first save creates `.probe/traces/` with a `.gitignore` that holds `*`. Your own `.gitignore` is never touched,
+  and the one of the folder is never overwritten.
+- Nothing is written unless you press `w`, and nothing is cleaned up: delete the files you do not want. It is not
+  in the undo of `z`.
+- A service with no response yet, or one that is not checked over HTTP, says so and writes nothing. The notice shows
+  the path (`Saved .probe/traces/api-2026-11-19T12-04-33.http`), never the content.

@@ -29,6 +29,8 @@ const MIN_SIZE = { w: 60, h: 16 };
 const TICK_MS = 1000;
 
 export interface NativeDashboardOptions extends EditCallbacks {
+  /** Writes a trace file and returns the notice: only `w` calls it, and it is not undoable. */
+  onTraceSave?: (service: string, text: string) => Promise<string>;
   config: Config;
   environments: readonly EnvironmentSource[];
   settings: DashboardSettings;
@@ -385,6 +387,11 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
                 say(view, message);
                 app.requestRender();
               }),
+          saveTrace: (service, text) =>
+            void options.onTraceSave?.(service, text).then((message) => {
+              say(view, message);
+              app.requestRender();
+            }),
           copyLog: (text) =>
             void system(editing.config())
               .onCopyLog(text)

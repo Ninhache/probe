@@ -21,6 +21,7 @@ export type Command =
   | "open"
   | "copy"
   | "body"
+  | "trace"
   | "response"
   | "log"
   | "changes"
@@ -54,6 +55,8 @@ interface Binding {
   ascii?: string;
   action: string;
   help?: string;
+  /** What the palette calls it when the help has no line for it. */
+  palette?: string;
   section?: Section;
   /** Rank at which the bar gives it up when it is too wide, lowest first; unset: always shown. */
   drop?: number;
@@ -120,6 +123,14 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     command: "body",
   }),
   list({
+    keys: "w",
+    action: "save response",
+    // No help line: the help of the list is full. The response panel's line names the file.
+    palette: "Save the response to .probe/traces",
+    barless: true,
+    command: "trace",
+  }),
+  list({
     keys: "f",
     action: "changes only",
     help: "Log changes only",
@@ -141,6 +152,7 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
   peek({ keys: "PgUp PgDn", action: "scroll", drop: 3 }),
   peek({ keys: "u", action: "open", drop: 1 }),
   peek({ keys: "b", action: "copy body", drop: 1 }),
+  peek({ keys: "w", action: "save", drop: 1 }),
   peek({ keys: "1", action: "log", drop: 4 }),
   list({
     keys: "n",
@@ -169,6 +181,12 @@ const DETAIL_BINDINGS: readonly Binding[] = [
   response({ keys: "↑↓", ascii: "arrows", action: "scroll", help: "Scroll", drop: 3 }),
   response({ keys: "c", action: "copy response", help: "Copy the response", drop: 1 }),
   response({ keys: "b", action: "copy body", help: "Copy the body", drop: 1 }),
+  response({
+    keys: "w",
+    action: "save response",
+    help: "Save the response",
+    drop: 1,
+  }),
   response({ keys: "r", action: "details", help: "Back to the detail", drop: 2 }),
   response({ keys: "esc", action: "close", help: "Close" }),
 ];
@@ -478,9 +496,10 @@ export interface PaletteEntry {
 export function paletteEntries(unicode: boolean, query = ""): PaletteEntry[] {
   const wanted = query.trim().toLowerCase();
   return offered(true).flatMap((binding) => {
-    const { command, help, action } = binding;
-    if (!command || !help || !`${help} ${action}`.toLowerCase().includes(wanted)) return [];
-    return [{ command, label: help, keys: written(binding, unicode) }];
+    const { command, action } = binding;
+    const label = binding.help ?? binding.palette;
+    if (!command || !label || !`${label} ${action}`.toLowerCase().includes(wanted)) return [];
+    return [{ command, label, keys: written(binding, unicode) }];
   });
 }
 
