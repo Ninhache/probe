@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { onTestFinished } from "vitest";
+import { expect, onTestFinished } from "vitest";
 import { type ProbePaths, pathsFor } from "../src/config/discovery";
 
 export async function tempDir(): Promise<string> {
@@ -15,4 +15,10 @@ export async function tempProject(configYaml: string): Promise<ProbePaths> {
   await mkdir(paths.dir);
   await writeFile(paths.config, configYaml);
   return paths;
+}
+
+/** Asserts the POSIX permission bits of a file; Windows has no such modes, and reports 0o666 for every file. */
+export async function expectMode(path: string, mode: number): Promise<void> {
+  if (process.platform === "win32") return;
+  expect((await stat(path)).mode & 0o777).toBe(mode);
 }

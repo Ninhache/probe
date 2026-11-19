@@ -12,6 +12,8 @@ import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const BASH = "/bin/bash";
+// The bash tests drive a POSIX shell and a `probe` sh shim: the runner's bash.exe is WSL or Git Bash, not a stable target.
+const POSIX_ONLY = process.platform === "win32";
 const CONFIG = "schemaVersion: 1\nservices:\n  api: { port: 3000 }\n  front: { port: 5173 }\n";
 
 function onPath(binary: string): string | undefined {
@@ -210,7 +212,7 @@ describe("probe __complete services", () => {
     );
 
     expect((await probe(root, "__complete", "services")).stdout).toBe("api\n");
-    expect(await bashCompletions(root, "probe", "check", "")).toEqual(["api"]);
+    if (!POSIX_ONLY) expect(await bashCompletions(root, "probe", "check", "")).toEqual(["api"]);
     expect(existsSync(join(root, "pwned"))).toBe(false);
   });
 
@@ -250,7 +252,7 @@ describe("probe completion", () => {
   });
 });
 
-describe("bash completion", () => {
+describe.skipIf(POSIX_ONLY)("bash completion", () => {
   it("is valid for the system bash", async () => {
     const root = await tempDir();
     await writeFile(join(root, "probe.bash"), (await probe(root, "completion", "bash")).stdout);

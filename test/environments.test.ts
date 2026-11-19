@@ -18,7 +18,7 @@ import type { Config } from "../src/config/schema";
 import { type ActionDeps, serviceActions } from "../src/dashboard/actions";
 import { sourceCheck } from "../src/dashboard/native/open";
 import { environmentSource } from "../src/dashboard/sources";
-import { tempProject } from "./helpers";
+import { expectMode, tempProject } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const SECRET = "s3cr3t-value";
@@ -385,7 +385,7 @@ describe("what local.yml keeps for an environment", () => {
     expect(await writeVariable(prod, "API_KEY", SECRET)).toBe(true);
 
     expect(await readFile(local.local, "utf8")).toBe(`dashboard:\n  interval: 5\n${KEPT_FOR_PROD}`);
-    expect((await stat(local.local)).mode & 0o777).toBe(0o600);
+    await expectMode(local.local, 0o600);
   });
 
   it("forgets a value and the maps it leaves empty, and nothing else", async () => {

@@ -249,7 +249,8 @@ describe("probe add / rm / ls", () => {
     const result = await probe(root, "add", "api", "-p", "3000");
 
     expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/^probe: .*EACCES/);
+    // Windows reports a read-only file as EPERM.
+    expect(result.stderr).toMatch(/^probe: .*(EACCES|EPERM)/);
     expect(result.stderr).not.toContain("    at ");
   });
 

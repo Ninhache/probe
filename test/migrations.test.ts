@@ -97,7 +97,7 @@ describe("loadConfig with a pending v1 -> v2 migration", () => {
     expect(loaded.migratedFrom).toBe(1);
     expect(loaded.config.services.api).toMatchObject({ port: 3000, type: "http" });
     expect(messages).toEqual([
-      "probe: migrated .probe/config.yml from schema v1 to v2 (backup: .probe/config.v1.bak.yml)",
+      `probe: migrated ${join(".probe", "config.yml")} from schema v1 to v2 (backup: ${join(".probe", "config.v1.bak.yml")})`,
     ]);
   });
 
