@@ -40,6 +40,7 @@ line nor an environment.
 | `--json`              | Print `{ ok, project, services }`                      |
 | `--env <name>`        | Look at an [environment](environments.md)              |
 | `--tag <a,b>`         | Look at the services with one of these [tags](tags.md) |
+| `--set <name=value>`  | Value of a [parameter](parameters.md)                  |
 | `--timeout <seconds>` | Seconds given to each service, as in `probe check`     |
 
 With `--env`, the Makefile block is left out of the report: it lists the local services.
