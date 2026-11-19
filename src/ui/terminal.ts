@@ -37,13 +37,37 @@ function supportsHyperlinks(env: NodeJS.ProcessEnv): boolean {
   return env.TERM === "alacritty" || env.TERM === "xterm-kitty";
 }
 
+const WINDOWS_UNICODE_TERMS = new Set([
+  "xterm-256color",
+  "alacritty",
+  "rxvt-unicode",
+  "rxvt-unicode-256color",
+]);
+const WINDOWS_UNICODE_PROGRAMS = new Set(["vscode", "Terminus-Sublime"]);
+
+/** Windows has no locale variable to read: the terminals known to draw Unicode announce themselves. */
+function windowsTerminalDrawsUnicode(env: NodeJS.ProcessEnv): boolean {
+  return (
+    Boolean(env.CI || env.WT_SESSION || env.TERMINUS_SUBLIME) ||
+    env.ConEmuTask === "{cmd::Cmder}" ||
+    WINDOWS_UNICODE_PROGRAMS.has(env.TERM_PROGRAM ?? "") ||
+    WINDOWS_UNICODE_TERMS.has(env.TERM ?? "") ||
+    env.TERMINAL_EMULATOR === "JetBrains-JediTerm"
+  );
+}
+
 /**
  * Whether glyphs beyond ASCII can be drawn. `PROBE_ASCII=1` forces ASCII for a UTF-8 locale whose font
- * lacks them (a font cannot be detected); any other value leaves the locale to decide.
+ * lacks them (a font cannot be detected); any other value leaves the rest to decide. On Windows a
+ * known terminal also counts, since the console sets no UTF-8 locale; a UTF-8 locale still does.
  */
-export function supportsUnicode(env: NodeJS.ProcessEnv): boolean {
+export function supportsUnicode(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
   if (env.PROBE_ASCII === "1") return false;
   if (env.TERM === "linux") return false;
+  if (platform === "win32" && windowsTerminalDrawsUnicode(env)) return true;
   return /UTF-?8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || "");
 }
 

@@ -123,7 +123,27 @@ describe("native screen on a limited terminal", () => {
     [{ PROBE_ASCII: "0", LANG: "en_US.UTF-8" }, true],
     [{ PROBE_ASCII: "", LANG: "en_US.UTF-8" }, true],
   ])("should read the locale %j as unicode: %s", (env, unicode) => {
-    expect(supportsUnicode(env)).toBe(unicode);
+    expect(supportsUnicode(env, "linux")).toBe(unicode);
+  });
+
+  it.each([
+    [{ WT_SESSION: "1" }, true],
+    [{ CI: "true" }, true],
+    [{ TERM_PROGRAM: "vscode" }, true],
+    [{ TERM_PROGRAM: "Apple_Terminal" }, false],
+    [{ TERM: "xterm-256color" }, true],
+    [{ TERM: "xterm" }, false],
+    [{ ConEmuTask: "{cmd::Cmder}" }, true],
+    [{ TERMINAL_EMULATOR: "JetBrains-JediTerm" }, true],
+    [{}, false],
+    [{ WT_SESSION: "1", PROBE_ASCII: "1" }, false],
+    [{ LANG: "en_US.UTF-8" }, true],
+  ])("should read the windows terminal %j as unicode: %s", (env, unicode) => {
+    expect(supportsUnicode(env, "win32")).toBe(unicode);
+  });
+
+  it("should ignore the windows terminals elsewhere", () => {
+    expect(supportsUnicode({ WT_SESSION: "1" }, "linux")).toBe(false);
   });
 });
 
