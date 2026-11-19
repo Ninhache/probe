@@ -79,6 +79,15 @@ export function dashboardWrites(paths: ProbePaths, initial: DashboardSettings) {
         }
         return saveLocal(() => keepVariable(target, name, value));
       },
+      onVariableRemove: async (name: string, env?: string) => {
+        let target = paths;
+        try {
+          target = await environmentPaths(paths, env);
+        } catch (error) {
+          return (error as Error).message;
+        }
+        return saveLocal(() => writeVariable(target, name, undefined));
+      },
       onSettingsChange: (next: DashboardSettings) => {
         const changed = changedPreferences(settings, next);
         settings = next;

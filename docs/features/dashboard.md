@@ -56,32 +56,33 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 
 ## Keys
 
-| Key             | What it does                                   |
-| --------------- | ---------------------------------------------- |
-| `↑` `↓` `j` `k` | Move                                           |
-| `←` `→` `h` `l` | Change environment                             |
-| `r`             | Check now                                      |
-| `Enter`         | Open the detail of the selected service        |
-| `1` `2`         | Log tab, response tab                          |
-| `PgUp` `PgDn`   | Scroll the log or the response tab             |
-| `End`           | Follow the newest line of the log tab          |
-| `f`             | Log tab: only the changes of state, or all     |
-| `y`             | Copy the lines on screen of the log tab        |
-| `u`             | Open its URL in the browser                    |
-| `c`             | Copy its curl command                          |
-| `b`             | Copy the body of its last response             |
-| `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
-| `p`             | Choose, add or edit [parameters](#parameters)  |
-| `a`             | Add a service                                  |
-| `e`             | Edit the selected service                      |
-| `d`             | Remove the selected service, after a question  |
-| `n`             | Create an [environment](#several-environments) |
-| `z`             | Undo the last change to `config.yml`           |
-| `Z`             | Redo what `z` undid                            |
-| `:`             | Find a command by what it does; `Enter` runs   |
-| `o`             | Options: interval, timeout and notifications   |
-| `?`             | Every key, scrolling; `?` or `Esc` closes      |
-| `q`             | Quit                                           |
+| Key             | What it does                                      |
+| --------------- | ------------------------------------------------- |
+| `↑` `↓` `j` `k` | Move                                              |
+| `←` `→` `h` `l` | Change environment                                |
+| `r`             | Check now                                         |
+| `Enter`         | Open the detail of the selected service           |
+| `1` `2`         | Log tab, response tab                             |
+| `PgUp` `PgDn`   | Scroll the log or the response tab                |
+| `End`           | Follow the newest line of the log tab             |
+| `f`             | Log tab: only the changes of state, or all        |
+| `y`             | Copy the lines on screen of the log tab           |
+| `u`             | Open its URL in the browser                       |
+| `c`             | Copy its curl command                             |
+| `b`             | Copy the body of its last response                |
+| `/`             | Filter by name; `Enter` keeps it, `Esc` clears    |
+| `p`             | Choose, add or edit [parameters](#parameters)     |
+| `v`             | List the [variables](#variables) the headers send |
+| `a`             | Add a service                                     |
+| `e`             | Edit the selected service                         |
+| `d`             | Remove the selected service, after a question     |
+| `n`             | Create an [environment](#several-environments)    |
+| `z`             | Undo the last change to `config.yml`              |
+| `Z`             | Redo what `z` undid                               |
+| `:`             | Find a command by what it does; `Enter` runs      |
+| `o`             | Options: interval, timeout and notifications      |
+| `?`             | Every key, scrolling; `?` or `Esc` closes         |
+| `q`             | Quit                                              |
 
 The bar at the bottom shows the keys you need first. While you type (filter, form, command palette), `q` and
 `?` are letters.
@@ -162,6 +163,20 @@ Under it, the panel has:
   it in `.probe/local.yml`, as `probe var` does. A variable set in the environment is not changed there.
   On an environment tab, or on the column of that environment on the `all` tab, the panel has the variables
   alone: the value is kept under `envs.<name>.variables`, and "where it is set" reads that environment only.
+
+## Variables
+
+`v` lists every variable the headers of the services of the shown environment send (`${NAME}`), once each, and
+where it is set there: in the environment of the process, in `.probe/local.yml`, or not set. A value is never
+shown, not even a part of it.
+
+- `↑` `↓` choose a variable. `Enter` asks for its value, hidden, and keeps it in `.probe/local.yml`.
+- `d` removes the value from `.probe/local.yml`, after a question. The other values stay.
+- A variable set in the environment of the process is not changed: unset it there.
+- The scope is the one of the open tab: `local` writes the top-level `variables`, an environment writes
+  `envs.<name>.variables`, and nothing falls back on another environment's value. On the `all` tab, the panel
+  opens on the environment of the selected service, as the service panel does.
+- A value removed is not in the undo history: `z` never brings a secret back.
 
 ## Parameters
 
