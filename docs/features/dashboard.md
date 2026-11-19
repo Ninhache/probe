@@ -34,7 +34,7 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
   does nothing where the key would do nothing. A hint with several keys, like `PgUp PgDn`, has one target per
   key. Also:
   - click a service to select it, double-click it to open its detail;
-  - click an environment tab to switch to it;
+  - click an environment tab to switch to it (the tabs are shown from two environments);
   - click a log line to select its service and show its response;
   - click the request URL in the detail of a service to open it, like `u`;
   - click `‹` or `›` next to a value in a form or a panel to step it, like the arrow keys;
@@ -237,7 +237,9 @@ The dashboard shows `not saved: …`, and says it again when it closes.
 ## Several environments
 
 With [environments](environments.md) in `.probe/envs/`, the services table gets one column per environment,
-`local` first, and the header lists them as tabs next to `all`.
+`local` first, and the header lists them as tabs next to `all`. With a single environment (`local`, no file in
+`.probe/envs/`), `all` and `local` would be the same list: the tabs are hidden, and `←` `→` `h` `l` and `Tab`
+do nothing. They appear as soon as there are two environments, right after `n` creates one.
 
 ```
  probe   all   local   prod
