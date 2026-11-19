@@ -174,7 +174,9 @@ describe("paletteEntries", () => {
 describe("the key of the parameters", () => {
   it("should be in the bar only when the config declares parameters", () => {
     expect(helpBar("list", true, 200)).not.toContain("p parameters");
-    expect(helpBar("list", true, 200, false, true)).toContain("/ filter · p parameters · :");
+    expect(helpBar("list", true, 200, false, true)).toContain(
+      "/ filter · p parameters · v variables · :",
+    );
   });
 
   it("should leave the bar before the filter when the terminal is narrow", () => {

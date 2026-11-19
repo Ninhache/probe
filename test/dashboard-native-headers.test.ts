@@ -59,7 +59,6 @@ function open(config: Config, edits: Partial<EditCallbacks> = {}) {
     editing,
     changed: () => {},
     redraw: () => {},
-    fileOf: () => undefined,
     declaredIn: () => [],
   });
   const actions: ViewActions = { quit() {}, refresh() {}, edit };

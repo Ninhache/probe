@@ -220,6 +220,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     () => view,
     (env, declared) => {
       loaded.set(env, declared);
+      editing.observe?.(env, declared);
       view.choices = merge();
     },
   );
@@ -253,10 +254,11 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         // A pass that was under way when its environment was removed must not bring it back.
         if (!tracker.environments.includes(env)) return;
         // A pass that began before a removal still reports the service.
-        const current =
-          env === LOCAL_ENVIRONMENT
-            ? results.filter(({ name }) => Object.hasOwn(editing.config().services, name))
-            : results;
+        const declared =
+          env === LOCAL_ENVIRONMENT ? editing.config() : editing.environment?.(env)?.config();
+        const current = declared
+          ? results.filter(({ name }) => Object.hasOwn(declared.services, name))
+          : results;
         tracker.record(env, current);
         notify.observe(env, current);
         app.requestRender();
@@ -281,6 +283,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
           () => view,
           (env, declared) => {
             loaded.set(env, declared);
+            editing.observe?.(env, declared);
             view.choices = merge();
           },
         ),
@@ -316,13 +319,25 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         app.requestRender();
         return message;
       });
+    // An environment's file is the source of truth: a removal or an undo there drops the rows of its services.
+    const retainEnvironments = () => {
+      for (const [env, source] of sources)
+        void source.load().then(
+          ({ config: declared }) => {
+            loaded.set(env, declared);
+            editing.observe?.(env, declared);
+            tracker.retain(env, new Set(Object.keys(declared.services)));
+            app.requestRender();
+          },
+          () => {},
+        );
+    };
     const edit = createEditor({
       createEnvironment,
       removeEnvironment: options.onEnvironmentRemove,
       view,
       tracker,
       editing,
-      fileOf: (env) => sources.get(env)?.file,
       redraw: () => app.requestRender(),
       declaredIn: (name) =>
         [...loaded]
@@ -335,6 +350,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         }
         view.choices = merge();
         tracker.retain(LOCAL_ENVIRONMENT, new Set(Object.keys(editing.config().services)));
+        retainEnvironments();
         monitor.invalidate();
         monitor.refresh();
         void reconcileEnvironments();

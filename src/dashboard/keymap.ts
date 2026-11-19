@@ -2,6 +2,7 @@ export type Screen =
   | "list"
   | "panel"
   | "choose"
+  | "variables"
   | "readonly"
   | "filter"
   | "palette"
@@ -32,6 +33,7 @@ export type Command =
   | "filter"
   | "options"
   | "parameters"
+  | "variables"
   | "undo"
   | "redo"
   | "help"
@@ -213,6 +215,13 @@ const BINDINGS: readonly Binding[] = [
     command: "parameters",
     parameters: true,
   }),
+  list({
+    keys: "v",
+    action: "variables",
+    help: "Header variables",
+    drop: 0,
+    command: "variables",
+  }),
   list({ keys: ":", action: "commands", help: "Find a command", drop: 1 }),
   list({ keys: "o", action: "options", help: "Options", barless: true, command: "options" }),
   {
@@ -300,6 +309,35 @@ const BINDINGS: readonly Binding[] = [
     keys: "p esc",
     action: "close",
     help: "Close",
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "↑↓ jk",
+    ascii: "jk",
+    action: "move",
+    drop: 1,
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "↵",
+    ascii: "enter",
+    action: "set",
+    drop: 2,
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "d",
+    action: "remove",
+    drop: 2,
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "v esc",
+    action: "close",
   },
   {
     screens: ["filter"],

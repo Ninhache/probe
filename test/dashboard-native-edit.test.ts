@@ -85,7 +85,6 @@ function setup({ edits = {}, config = initial, environments = [], create, remove
       changed(restart);
     },
     redraw: () => {},
-    fileOf: (env) => (env === "local" ? undefined : `${env}.yml`),
     declaredIn: () => ["prod.yml"],
     removeEnvironment: remove,
     createEnvironment:
@@ -162,13 +161,6 @@ describe("removing a service", () => {
     await tick();
     expect(draw()).toContain("not saved: config.yml is read-only");
     expect(tracker.services()).toEqual(["api", "db"]);
-  });
-
-  it("says another environment is not edited here", () => {
-    const { press, draw, view } = setup({ environments: ["staging"] });
-    view.tab = 2;
-    press("d");
-    expect(draw()).toContain("staging is not edited here: change staging.yml");
   });
 });
 
@@ -1039,5 +1031,196 @@ describe("the tabs follow the environment files", () => {
     monitor.stop();
     expect(ran).toContain("dev");
     expect(ran).not.toContain("prod");
+  });
+});
+
+describe("editing on an environment tab", () => {
+  const prodConfig = {
+    schemaVersion: 1,
+    services: { globex: { url: "https://globex.example.com" } },
+  } as unknown as Config;
+
+  function inProd() {
+    const made = setup({ environments: ["prod"] });
+    made.editing.observe?.("prod", prodConfig);
+    made.tracker.record("prod", [answered("globex")], 1);
+    return made;
+  }
+
+  it("no longer refuses: d asks, then removes from the environment file", async () => {
+    const { press, draw, writes, view } = inProd();
+    view.tab = 2;
+    press("d");
+    expect(draw()).toContain("Remove globex from prod?");
+    press("y");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "globex", env: "prod" }]);
+    expect(draw()).not.toContain("is not edited here");
+  });
+
+  it("opens the form of a service with the target in its title", () => {
+    const { press, draw, view } = inProd();
+    view.tab = 2;
+    press("e");
+    expect(draw()).toContain("edit globex in prod");
+    expect(draw()).toContain("globex.example.com");
+  });
+
+  it("a adds to that environment only", async () => {
+    const { press, draw, view, writes } = inProd();
+    view.tab = 2;
+    press("a");
+    expect(draw()).toContain("add to prod");
+    press(`initech${TAB}8080${ENTER}`);
+    await tick();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ kind: "add", name: "initech", env: "prod" });
+  });
+
+  it("a on the all tab adds to local, as before", () => {
+    const { press, draw, view } = inProd();
+    expect(view.tab).toBe(0);
+    press("a");
+    expect(draw()).toContain("add a service");
+    expect(draw()).not.toContain("add to");
+  });
+
+  it("on the all tab, e and d target the column of the selected service", async () => {
+    const { press, draw, writes } = inProd();
+    // api and db answer in local, globex only in prod: the cursor goes to globex.
+    press("jjd");
+    expect(draw()).toContain("Remove globex from prod?");
+    press("y");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "globex", env: "prod" }]);
+  });
+
+  it("on the all tab, a service of local is still removed from local", async () => {
+    const { press, writes } = inProd();
+    press("dy");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "api" }]);
+  });
+
+  describe("variables in the detail panel", () => {
+    const DOWN = `${ESC}[B`;
+    const SECRET = "prod-only-secret";
+    const keyed = {
+      schemaVersion: 1,
+      services: {
+        globex: {
+          url: "https://globex.example.com",
+          headers: { Authorization: `Bearer ${reference("GLOBEX_TOKEN")}` },
+        },
+      },
+    } as unknown as Config;
+    const looked: Array<string | undefined> = [];
+    const sources = async (names: readonly string[], env?: string) => {
+      looked.push(env);
+      return env === "prod"
+        ? Object.fromEntries(names.map((name) => [name, "local" as const]))
+        : {};
+    };
+
+    function inProdWithVariables(onVariableWrite = vi.fn(async () => undefined)) {
+      looked.length = 0;
+      const made = setup({
+        environments: ["prod"],
+        edits: { variableSources: sources, onVariableWrite },
+      });
+      made.editing.observe?.("prod", keyed);
+      made.tracker.record("prod", [answered("globex")], 1);
+      return { ...made, onVariableWrite };
+    }
+
+    it("lists the variables on the tab, read in that environment's scope", async () => {
+      const { press, draw, view } = inProdWithVariables();
+      view.tab = 2;
+      press(ENTER);
+      await tick();
+      expect(draw()).toMatch(/GLOBEX_TOKEN\s+set in local\.yml/);
+      expect(looked).toContain("prod");
+      expect(draw()).not.toContain("skip");
+    });
+
+    it("sets the value under that environment, never drawn", async () => {
+      const { press, draw, view, onVariableWrite } = inProdWithVariables();
+      view.tab = 2;
+      press(ENTER);
+      await tick();
+      press(`${DOWN}${ENTER}${SECRET}`);
+      expect(draw()).not.toContain(SECRET);
+      press(ENTER);
+      await tick();
+      expect(onVariableWrite).toHaveBeenCalledWith("GLOBEX_TOKEN", SECRET, "prod");
+      const done = draw();
+      expect(done).toContain("Kept GLOBEX_TOKEN in .probe/local.yml, under envs.prod");
+      expect(done).not.toContain(SECRET);
+    });
+
+    it("targets the column of the selected service on the all tab", async () => {
+      const { press, onVariableWrite } = inProdWithVariables();
+      press("jj");
+      press(ENTER);
+      await tick();
+      press(`${DOWN}${ENTER}${SECRET}${ENTER}`);
+      await tick();
+      expect(onVariableWrite).toHaveBeenCalledWith("GLOBEX_TOKEN", SECRET, "prod");
+    });
+
+    it("shows no row of local for an environment not read yet", async () => {
+      const made = setup({ environments: ["prod"], edits: { variableSources: sources } });
+      made.tracker.record("prod", [answered("globex")], 1);
+      made.view.tab = 2;
+      made.press(ENTER);
+      await tick();
+      expect(made.draw()).not.toContain("GLOBEX_TOKEN");
+    });
+  });
+
+  it("undo and redo work from an environment tab", async () => {
+    const onUndo = vi.fn(async () => ({ undone: "Undone: edit globex" }));
+    const onRedo = vi.fn(async () => ({ undone: "Redone: edit globex" }));
+    const { press, view } = setup({ environments: ["prod"], edits: { onUndo, onRedo } });
+    view.tab = 2;
+    press("zZ");
+    await tick();
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onRedo).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a secret typed on prod for prod, and names the right files", async () => {
+    const secret = "s3cr3t-value";
+    const test = setup({
+      environments: ["prod"],
+      edits: { variableSources: async () => ({}) },
+    });
+    test.editing.observe?.("prod", prodConfig);
+    test.view.tab = 2;
+    test.press(`ainitech${TAB}8080`);
+    for (let i = 0; i < 20 && !test.draw().match(/› Header/); i += 1) test.press(TAB);
+    test.press(`Authorization: Bearer ${secret}`);
+    test.press(ENTER);
+    await tick();
+    const asking = test.draw();
+    expect(asking).toContain(".probe/envs/prod.yml gets a reference");
+    expect(asking).toContain("for prod only");
+    expect(asking).not.toContain(secret);
+    test.press(ENTER);
+    await tick();
+    await tick();
+    const frame = test.draw();
+    expect(frame).toContain("INITECH_TOKEN kept in .probe/local.yml, under envs.prod");
+    expect(frame).not.toContain(secret);
+    expect(test.kept).toEqual([{ INITECH_TOKEN: secret }]);
+    expect(test.writes[0]).toMatchObject({ kind: "add", name: "initech", env: "prod" });
+    expect(JSON.stringify(test.writes)).not.toContain(secret);
+  });
+
+  it("says so when the environment has not been read yet", () => {
+    const { press, draw, view } = setup({ environments: ["prod"] });
+    view.tab = 2;
+    press("a");
+    expect(draw()).toContain("prod is not read yet");
   });
 });

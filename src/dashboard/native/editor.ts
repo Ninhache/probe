@@ -16,11 +16,10 @@ const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
 /** What the keys that edit the files do: each opens a modal or writes, then says what happened. */
 export interface Editor {
-  /** Says why this environment is not edited here, if it is not. */
-  elsewhere(env: string | undefined): string | undefined;
-  add(): void;
-  edit(service: string): void;
-  remove(service: string): void;
+  /** `env` is the environment whose file is written; absent or local, it is config.yml. */
+  add(env?: string): void;
+  edit(service: string, env?: string): void;
+  remove(service: string, env?: string): void;
   undo(): void;
   redo(): void;
   /** Opens the form of a new environment; absent when none can be created. */
@@ -35,9 +34,14 @@ export interface Editor {
   };
   /** The variables the headers of a service send; absent when none can be looked up. */
   variables?: {
-    load(service: string): Promise<VariableRow[]>;
-    /** `done` runs once the value is kept: the rows are then looked up again. */
-    set(row: VariableRow, done: () => void): void;
+    /** The rows of `env`: where each is set there, never in another environment. */
+    load(service: string, env?: string): Promise<VariableRow[]>;
+    /** `done` runs once the value is kept in `env`: the rows are then looked up again. */
+    set(row: VariableRow, env: string | undefined, done: () => void): void;
+    /** Every variable the services of `env` send, where each is set there. */
+    all(env?: string): Promise<VariableRow[]>;
+    /** Asks, then removes the value `env` keeps in local.yml; `done` runs once it is gone. */
+    remove(row: VariableRow, env: string | undefined, done: () => void): void;
   };
 }
 
@@ -54,8 +58,6 @@ export interface EditorDeps {
   /** The files of the other environments that declare this parameter. */
   declaredIn(parameter: string): string[];
   redraw(): void;
-  /** The file an environment comes from, when it is not the local config. */
-  fileOf(env: string): string | undefined;
 }
 
 /** The writes of the editing keys; undefined when the command line gave no writer. */
@@ -64,39 +66,60 @@ export function createEditor({
   editing,
   changed,
   redraw,
-  fileOf,
   declaredIn,
   tracker,
   createEnvironment,
   removeEnvironment,
 }: EditorDeps): Editor {
-  const { writeService, writeParameter, variables, writeVariable } = editing;
+  const { writeService, writeParameter, variables } = editing;
 
-  const write = async (change: ServiceWrite, done: string, secrets?: Secrets) => {
-    const outcome = await writeService?.(change, secrets);
-    if (!outcome) return;
-    view.unsaved = outcome.failure;
-    if (outcome.saved) {
-      const kept = Object.keys(secrets ?? {});
-      const told =
-        kept.length > 0 && outcome.failure === undefined
-          ? `${done}, ${kept.join(", ")} kept in ${LOCAL}`
-          : done;
-      const notes = [outcome.warning ? `${told}\n${outcome.warning}` : told, outcome.failure];
-      say(view, notes.filter(Boolean).join("\n"));
-      if (change.kind === "remove") {
-        // A service added later under the same name starts without the timeout of this one.
-        const { [change.name]: _, ...others } = view.timeouts;
-        view.timeouts = others;
-      }
-      changed();
-    } else if (outcome.failure) say(view, `not saved: ${outcome.failure}`);
-    redraw();
+  /** The editing of config.yml, or of the file of `env`; says why when that file is not there to edit. */
+  const target = (
+    env: string | undefined,
+    tell = true,
+  ): { edits: Editing; env?: string } | undefined => {
+    if (env === undefined || env === LOCAL_ENVIRONMENT) return { edits: editing };
+    const edits = editing.environment?.(env);
+    if (edits) return { edits, env };
+    if (tell) say(view, `${env} is not read yet: try again in a moment`);
+    return undefined;
   };
 
-  const context = { editing, stack: view.modals, redraw, write };
+  /** Where the values of `env` are kept: local.yml, under its own key unless it is the top level. */
+  const placeOf = (env?: string) => (env === undefined ? LOCAL : `${LOCAL}, under envs.${env}`);
 
-  // Another value is another target: the latencies and the states start again.
+  const writer =
+    (edits: Editing, env?: string) =>
+    async (change: ServiceWrite, done: string, secrets?: Secrets) => {
+      const outcome = await edits.writeService?.(change, secrets);
+      if (!outcome) return;
+      view.unsaved = outcome.failure;
+      if (outcome.saved) {
+        const kept = Object.keys(secrets ?? {});
+        const where = env === undefined ? LOCAL : `${LOCAL}, under envs.${env}`;
+        const told =
+          kept.length > 0 && outcome.failure === undefined
+            ? `${done}, ${kept.join(", ")} kept in ${where}`
+            : done;
+        const notes = [outcome.warning ? `${told}\n${outcome.warning}` : told, outcome.failure];
+        say(view, notes.filter(Boolean).join("\n"));
+        if (change.kind === "remove" && env === undefined) {
+          const { [change.name]: _, ...others } = view.timeouts;
+          view.timeouts = others;
+        }
+        changed();
+      } else if (outcome.failure) say(view, `not saved: ${outcome.failure}`);
+      redraw();
+    };
+
+  const contextOf = (edits: Editing, env?: string) => ({
+    editing: edits,
+    stack: view.modals,
+    redraw,
+    write: writer(edits, env),
+    target: env,
+  });
+
   const parameterWritten = (name: string, done: string) => {
     say(view, done);
     view.parameterAt = name;
@@ -135,24 +158,36 @@ export function createEditor({
     redraw();
   };
   return {
-    elsewhere: (env) => {
-      const file = env === undefined ? undefined : fileOf(env);
-      return file === undefined ? undefined : `${env} is not edited here: change ${file}`;
+    add(env) {
+      const found = writeService && target(env);
+      if (found) view.modals.push(serviceFormModal(contextOf(found.edits, found.env)));
     },
-    add() {
-      if (writeService) view.modals.push(serviceFormModal(context));
+    edit(service, env) {
+      const found = writeService && target(env);
+      if (!found) return;
+      if (!found.edits.serviceFields(service)) {
+        if (found.env) say(view, `${service} is not in ${found.env}`);
+        return;
+      }
+      view.modals.push(serviceFormModal(contextOf(found.edits, found.env), service));
     },
-    edit(service) {
-      if (!writeService || !editing.serviceFields(service)) return;
-      view.modals.push(serviceFormModal(context, service));
-    },
-    remove(service) {
-      if (!writeService || !editing.config().services[service]) return;
+    remove(service, env) {
+      const found = writeService && target(env);
+      if (!found) return;
+      if (!found.edits.config().services[service]) {
+        if (found.env) say(view, `${service} is not in ${found.env}`);
+        return;
+      }
+      const where = found.env === undefined ? "the config" : found.env;
       view.modals.push(
         confirmModal(
           `remove ${service}`,
-          `Remove ${service} from the config?`,
-          () => void write({ kind: "remove", name: service }, `Removed ${service}`),
+          `Remove ${service} from ${where}?`,
+          () =>
+            void writer(found.edits, found.env)(
+              { kind: "remove", name: service },
+              `Removed ${service}`,
+            ),
         ),
       );
     },
@@ -228,20 +263,51 @@ export function createEditor({
       },
     },
     variables: variables && {
-      load: (service) => variables.serviceVariables(service),
-      set({ name, source }, done) {
-        if (!writeVariable) return;
+      // An environment not read yet has no rows: the local ones would say where a value is set for another file.
+      load: async (service, env) =>
+        (await target(env, false)?.edits.variables?.serviceVariables(service)) ?? [],
+      all: async (env) => (await target(env, false)?.edits.variables?.allVariables()) ?? [],
+      remove({ name, source }, env, done) {
+        const found = target(env);
+        const remove = found?.edits.removeVariable;
+        if (!found || !remove) return;
+        if (source === "environment")
+          return say(view, `${name} comes from the environment: unset it there`);
+        if (source === undefined) return say(view, `${name} has no value in ${LOCAL}`);
+        const where = placeOf(found.env);
+        view.modals.push(
+          confirmModal(
+            `remove ${name}`,
+            `Remove the value of ${name} from ${where}?`,
+            () =>
+              void remove(name).then((failure) => {
+                view.unsaved = failure;
+                say(view, failure ? `not saved: ${failure}` : `Removed ${name} from ${where}`);
+                if (!failure) {
+                  changed();
+                  done();
+                }
+                redraw();
+              }),
+          ),
+        );
+      },
+      set({ name, source }, env, done) {
+        const found = target(env);
+        const write = found?.edits.writeVariable;
+        if (!found || !write) return;
         if (source === "environment")
           return say(view, `${name} comes from the environment, which is read first`);
+        const where = placeOf(found.env);
         view.modals.push(
           variableModal(name, (value) => {
-            void writeVariable(name, value).then((failure) => {
+            void write(name, value).then((failure) => {
               view.unsaved = failure;
               say(
                 view,
                 failure
                   ? `not saved: ${failure}`
-                  : `Kept ${name} in ${LOCAL}, for this machine only`,
+                  : `Kept ${name} in ${where}, for this machine only`,
               );
               if (!failure) {
                 changed();

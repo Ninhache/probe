@@ -120,7 +120,6 @@ describe("a service type", () => {
         editing,
         changed: () => {},
         redraw: () => {},
-        fileOf: () => undefined,
         declaredIn: () => [],
       });
       const actions: ViewActions = { quit() {}, refresh() {}, edit };
