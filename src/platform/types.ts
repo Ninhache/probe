@@ -26,6 +26,8 @@ export interface Platform {
     name: string;
     /** Title and text are arguments, never part of a script. */
     command(title: string, text: string): string[];
+    /** For a tool that cannot take them as arguments: variables of the child process only, merged over ours. */
+    env?(title: string, text: string): Record<string, string>;
   };
   /** The host name `file:` URLs carry so that a terminal over ssh opens no file of the wrong machine. */
   localFileHost(): string | undefined;
