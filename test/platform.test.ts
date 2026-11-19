@@ -109,6 +109,8 @@ describe("posix platforms", () => {
   it("should allow ss on Linux only", () => {
     expect(linux.hasSs).toBe(true);
     expect(mac.hasSs).toBe(false);
+    expect(linux.hasNetstat).toBe(false);
+    expect(platformFor("win32").hasNetstat).toBe(true);
   });
 });
 

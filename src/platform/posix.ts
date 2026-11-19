@@ -56,6 +56,7 @@ function linuxLike(name: NodeJS.Platform): Platform {
     pathEntries: (env) => (env.PATH ?? "").split(":").filter(Boolean),
     programNames: (program) => [program],
     hasSs: name === "linux",
+    hasNetstat: false,
     executableName: async (pid) => (name === "linux" ? procExecutableName(pid) : undefined),
   };
 }

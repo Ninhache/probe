@@ -10,7 +10,9 @@ import {
   listenerOwners,
   parseDockerInspect,
   parseLsof,
+  parseNetstat,
   parseSs,
+  parseTasklist,
   publishingContainers,
   type RunCommand,
   runCommand,
@@ -53,6 +55,62 @@ const INSPECT = [
   '/demo-dns|exited|{"53/udp":[{"HostIp":"","HostPort":"53"}]}',
   "/demo-job|created|null",
 ].join("\n");
+
+const NETSTAT_EN = [
+  "",
+  "Active Connections",
+  "",
+  "  Proto  Local Address          Foreign Address        State           PID",
+  "  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1012",
+  "  TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       4242",
+  "  TCP    127.0.0.1:3000         127.0.0.1:50422        ESTABLISHED     4242",
+  "  TCP    [::]:5432              [::]:0                 LISTENING       880",
+  "  TCP    [::1]:5173             [::]:0                 LISTENING       9100",
+  "  UDP    0.0.0.0:5353           *:*                                    2200",
+  "  UDP    [::]:5353              *:*                                    2200",
+].join("\r\n");
+const NETSTAT_FR = [
+  "Connexions actives",
+  "",
+  "  Proto  Adresse locale         Adresse distante       \u00c9tat           PID",
+  "  TCP    0.0.0.0:8080           0.0.0.0:0              \u00c9COUTE         3344",
+  "  TCP    192.168.1.20:49700     20.50.1.1:443          \u00c9TABLIE        3344",
+  "  TCP    [::]:9000              [::]:0                 \u00c9COUTE         3345",
+].join("\r\n");
+const TASKLIST = [
+  '"System Idle Process","0","Services","0","8 K"',
+  '"node.exe","4242","Console","1","45,120 K"',
+  '"postgres.exe","880","Services","0","12 K"',
+  '"My App.EXE","9100","Console","1","9 K"',
+  "",
+].join("\r\n");
+
+describe("windows parsers", () => {
+  it("keeps the listening TCP sockets, IPv4 and IPv6, and nothing else", () => {
+    expect([...parseNetstat(NETSTAT_EN)]).toEqual([
+      [135, 1012],
+      [3000, 4242],
+      [5432, 880],
+      [5173, 9100],
+    ]);
+  });
+
+  it("tells a listener without reading the state word, which is translated", () => {
+    expect([...parseNetstat(NETSTAT_FR)]).toEqual([
+      [8080, 3344],
+      [9000, 3345],
+    ]);
+  });
+
+  it("reads the image name and the pid from the first two CSV fields", () => {
+    expect([...parseTasklist(TASKLIST)]).toEqual([
+      [0, "System Idle Process"],
+      [4242, "node"],
+      [880, "postgres"],
+      [9100, "My App"],
+    ]);
+  });
+});
 
 describe("parsers", () => {
   it("reads the process of each listening port from lsof", () => {
@@ -108,6 +166,29 @@ describe("lookups", () => {
       reason: "lsof not found",
     });
     expect(run.calls.map(([command]) => command)).toEqual(["lsof"]);
+  });
+
+  it("names the owner on Windows with netstat then tasklist, without lsof", async () => {
+    const run = fakeRun({ netstat: done(NETSTAT_EN), tasklist: done(TASKLIST) });
+    const lookup = await listenerOwners(run, platformFor("win32"));
+    expect(lookup.state === "done" && lookup.owners.get(3000)).toEqual({ name: "node", pid: 4242 });
+    expect(lookup.state === "done" && lookup.owners.get(5173)).toEqual({
+      name: "My App",
+      pid: 9100,
+    });
+    expect(run.calls).toEqual([
+      ["netstat", "-ano"],
+      ["tasklist", "/FO", "CSV", "/NH"],
+    ]);
+  });
+
+  it("keeps the pid when tasklist does not answer, and skips when netstat does not", async () => {
+    const half = await listenerOwners(fakeRun({ netstat: done(NETSTAT_FR) }), platformFor("win32"));
+    expect(half.state === "done" && half.owners.get(8080)?.pid).toBe(3344);
+    expect(await listenerOwners(fakeRun({}), platformFor("win32"))).toEqual({
+      state: "skipped",
+      reason: "netstat did not answer",
+    });
   });
 
   it("reads what lsof printed even when it exits 1", async () => {
@@ -260,6 +341,19 @@ describe("on this machine", () => {
     const lookup = await listenerOwners(runCommand, currentPlatform);
     if (lookup.state === "skipped") return skip(lookup.reason);
     expect(lookup.owners.get(port)?.pid).toBe(process.pid);
+  });
+
+  it("names node and its pid on Windows", async ({ skip }) => {
+    if (currentPlatform.name !== "win32") return skip("needs netstat and tasklist of Windows");
+    const server = createServer().listen(0, "127.0.0.1");
+    onTestFinished(() => void server.close());
+    await new Promise((ready) => server.once("listening", ready));
+    const { port } = server.address() as AddressInfo;
+    const lookup = await listenerOwners(runCommand, currentPlatform);
+    expect(lookup.state === "done" && lookup.owners.get(port)).toEqual({
+      name: "node",
+      pid: process.pid,
+    });
   });
 
   it("reports a missing command instead of throwing", async () => {

@@ -80,6 +80,7 @@ export function windowsPlatform(spawn: Spawn = nodeSpawn): Platform {
         .filter(Boolean)
         .map((extension) => `${program}${extension}`),
     hasSs: false,
+    hasNetstat: true,
     executableName: async () => undefined,
   };
 }
