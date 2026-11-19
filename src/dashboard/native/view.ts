@@ -3,6 +3,8 @@ import { effectiveSelection, type ParameterChoices } from "../../config/paramete
 import {
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
+  DASHBOARD_LATENCY_ROWS,
+  DASHBOARD_LOG_MIN_ROWS,
   DEFAULT_TIMEOUT_SECONDS,
   DOUBLE_CLICK_MS,
   PROBE_DIR,
@@ -219,10 +221,15 @@ export function renderDashboard(
     1,
   ]);
   const [left = body, right = body] = columns(body, ["55%", fill()]);
+  const gaugeRows = 4;
+  const latencyRows = Math.max(
+    0,
+    Math.min(DASHBOARD_LATENCY_ROWS, right.h - gaugeRows - DASHBOARD_LOG_MIN_ROWS),
+  );
   const [graphArea = right, gaugeArea = right, logArea = right] = rows(right, [
-    fill(2),
-    4,
-    fill(2),
+    latencyRows,
+    gaugeRows,
+    fill(),
   ]);
   const env = activeEnv(tracker, view);
   const list = visibleServices(tracker, view);
