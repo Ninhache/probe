@@ -237,4 +237,28 @@ describe("writing a service of an environment", () => {
     expect(Object.keys(scoped?.config().services ?? {})).toEqual(["acme"]);
     expect(Object.keys(editing.config().services)).toEqual(["acme"]);
   });
+
+  it("points to probe var --env, not the detail panel, for a variable prod does not have", async () => {
+    const paths = await project();
+    const { writes } = dashboardWrites(paths, SETTINGS);
+    const editing = liveEditing((await loadConfig(paths)).config, writes);
+    const prod = (
+      await loadConfig({
+        ...paths,
+        config: join(paths.dir, "envs", "prod.yml"),
+        environment: "prod",
+      })
+    ).config;
+    editing.observe?.("prod", prod);
+
+    const outcome = await editing.environment?.("prod")?.writeService?.({
+      kind: "add",
+      name: "initech",
+      fields: fields({ headers: { "X-Key": reference("INITECH_KEY") } }),
+    });
+
+    expect(outcome?.warning).toBe(
+      "INITECH_KEY not set for prod: probe var INITECH_KEY --env prod (or export it)",
+    );
+  });
 });

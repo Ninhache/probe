@@ -2,7 +2,7 @@ import type { ServiceForm } from "../../checkers/types";
 import type { ServiceWrite } from "../../commands/service-writes";
 import { hiddenHeaderLine, serviceVariables } from "../../config/headers";
 import { urlProblem } from "../../config/schema";
-import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../../constants";
+import { CONFIG_FILE, ENVIRONMENTS_DIR, LOCAL_FILE, PROBE_DIR } from "../../constants";
 import type { InputEvent } from "../../tui/input";
 import type { ModalStack } from "../../tui/modal";
 import { drawField, fieldKey, fieldValue, textField } from "../../tui/textfield";
@@ -41,6 +41,10 @@ const URL_ID = "url:";
 const NAME_ID = "name";
 const URL_PLACEHOLDER = "https://staging.example.com";
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
+
+/** The file a form writes: an environment's own file, or config.yml. */
+const fileOf = (target: string | undefined) =>
+  target === undefined ? CONFIG_FILE : `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${target}.yml`;
 
 export interface ServiceFormContext {
   editing: Editing;
@@ -178,7 +182,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
       if (!edits.variables)
         return form.problem(
           id,
-          `${secret.header} expects a reference, e.g. \${API_TOKEN}: ${CONFIG_FILE} is shared`,
+          `${secret.header} expects a reference, e.g. \${API_TOKEN}: ${fileOf(context.target)} is shared`,
         );
       return keepSecret(form, values, secret, service, id);
     }
@@ -214,7 +218,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
     void edits.variables?.variableName(service, secret.header, used).then((variable) => {
       form.busy(false);
       stack.push(
-        secretModal(secret, variable, used, service, edits, context.redraw, (chosen) => {
+        secretModal(secret, variable, used, service, edits, context, (chosen) => {
           secrets = { ...secrets, [chosen]: secret.secret };
           const next = withVariable(inkValues(values, spec), secret, chosen);
           form.set({ [id]: next.headers[secret.index] ?? "" });
@@ -245,7 +249,7 @@ function secretModal(
   taken: readonly string[],
   service: string,
   edits: Editing,
-  redraw: () => void,
+  { redraw, target }: ServiceFormContext,
   chosen: (variable: string) => void,
 ): Panel {
   let name = textField(proposed);
@@ -257,13 +261,12 @@ function secretModal(
     typing: true,
     size: { w: SECRET_WIDTH, h: 6 },
     draw(screen, inner) {
-      screen.text(
-        inner.x + 1,
-        inner.y,
-        `${CONFIG_FILE} gets a reference, ${LOCAL} the value.`,
-        { fg: t.muted },
-        inner.w - 2,
-      );
+      const lines =
+        target === undefined
+          ? [`${CONFIG_FILE} gets a reference, ${LOCAL} the value.`]
+          : [`${fileOf(target)} gets a reference,`, `${LOCAL} the value, for ${target} only.`];
+      for (const [i, line] of lines.entries())
+        screen.text(inner.x + 1, inner.y + i, line, { fg: t.muted }, inner.w - 2);
       const label = screen.text(inner.x + 1, inner.y + 2, "Variable  ", { fg: t.fg });
       name = drawField(screen, inner.x + 1 + label, inner.y + 2, inner.w - label - 2, name, {
         fg: t.fg,

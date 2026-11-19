@@ -119,6 +119,9 @@ export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing
     const found = (await edits.variableSources?.(sent, env)) ?? {};
     const unset = sent.filter((variable) => !found[variable]);
     if (!edits.variableSources || unset.length === 0) return undefined;
+    // The detail panel only sets the values of the local services.
+    if (env !== undefined)
+      return `${unset.join(", ")} not set for ${env}: probe var ${unset[0]} --env ${env} (or export it)`;
     return `${unset.join(", ")} not set: open ${name} with enter, then enter on the variable`;
   };
   /** Writes to config.yml, or to the file of `env`: the config each leaves is kept apart. */

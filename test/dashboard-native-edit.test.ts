@@ -936,6 +936,34 @@ describe("editing on an environment tab", () => {
     expect(onRedo).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a secret typed on prod for prod, and names the right files", async () => {
+    const secret = "s3cr3t-value";
+    const test = setup({
+      environments: ["prod"],
+      edits: { variableSources: async () => ({}) },
+    });
+    test.editing.observe?.("prod", prodConfig);
+    test.view.tab = 2;
+    test.press(`ainitech${TAB}8080`);
+    for (let i = 0; i < 20 && !test.draw().match(/› Header/); i += 1) test.press(TAB);
+    test.press(`Authorization: Bearer ${secret}`);
+    test.press(ENTER);
+    await tick();
+    const asking = test.draw();
+    expect(asking).toContain(".probe/envs/prod.yml gets a reference");
+    expect(asking).toContain("for prod only");
+    expect(asking).not.toContain(secret);
+    test.press(ENTER);
+    await tick();
+    await tick();
+    const frame = test.draw();
+    expect(frame).toContain("INITECH_TOKEN kept in .probe/local.yml, under envs.prod");
+    expect(frame).not.toContain(secret);
+    expect(test.kept).toEqual([{ INITECH_TOKEN: secret }]);
+    expect(test.writes[0]).toMatchObject({ kind: "add", name: "initech", env: "prod" });
+    expect(JSON.stringify(test.writes)).not.toContain(secret);
+  });
+
   it("says so when the environment has not been read yet", () => {
     const { press, draw, view } = setup({ environments: ["prod"] });
     view.tab = 2;
