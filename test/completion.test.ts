@@ -128,6 +128,7 @@ describe("completionSpec", () => {
     const options = spec.find(({ name }) => name === "add")?.options;
 
     expect(options).toEqual([
+      "--command",
       "--port",
       "--host",
       "--path",
