@@ -53,6 +53,8 @@ function linuxLike(name: NodeJS.Platform): Platform {
     clipboardTools: (env) => (env.WAYLAND_DISPLAY ? [WL_COPY, XCLIP] : [XCLIP, WL_COPY]),
     notifier: { name: "notify-send", command: NOTIFY_SEND },
     localFileHost: () => hostname(),
+    pathEntries: (env) => (env.PATH ?? "").split(":").filter(Boolean),
+    programNames: (program) => [program],
     hasSs: name === "linux",
     executableName: async (pid) => (name === "linux" ? procExecutableName(pid) : undefined),
   };

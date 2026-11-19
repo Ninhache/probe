@@ -111,3 +111,25 @@ describe("posix platforms", () => {
     expect(mac.hasSs).toBe(false);
   });
 });
+
+describe("program lookup", () => {
+  const winEnv = { Path: 'C:\\bin;"C:\\Program Files\\Git\\usr\\bin";', PATHEXT: ".EXE;.CMD" };
+
+  it("should list the PATH directories of each OS, whatever the spelling of the variable", () => {
+    expect(windows.pathEntries(winEnv)).toEqual(["C:\\bin", "C:\\Program Files\\Git\\usr\\bin"]);
+    expect(linux.pathEntries({ PATH: "/usr/bin::/bin" })).toEqual(["/usr/bin", "/bin"]);
+    expect(linux.pathEntries({})).toEqual([]);
+  });
+
+  it("should name a Windows program by the extensions of PATHEXT, never bare", () => {
+    expect(windows.programNames("make", winEnv)).toEqual(["make.EXE", "make.CMD"]);
+    expect(windows.programNames("make", {})).toEqual([
+      "make.COM",
+      "make.EXE",
+      "make.BAT",
+      "make.CMD",
+    ]);
+    expect(linux.programNames("make", {})).toEqual(["make"]);
+    expect(mac.programNames("make", {})).toEqual(["make"]);
+  });
+});

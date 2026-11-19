@@ -35,6 +35,14 @@ const POWERSHELL: ClipboardTool = [
 ];
 const CLIP: ClipboardTool = ["clip"];
 
+const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
+
+// Windows names variables without regard to case, but a copy of process.env is a plain object: `Path` is the usual spelling.
+function variable(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const key = Object.keys(env).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  return key === undefined ? undefined : env[key];
+}
+
 /** `spawn` is a parameter so that tests can see the `taskkill` call without running it. */
 export function windowsPlatform(spawn: Spawn = nodeSpawn): Platform {
   return {
@@ -60,6 +68,17 @@ export function windowsPlatform(spawn: Spawn = nodeSpawn): Platform {
     notifier: { name: "notify-send", command: NOTIFY_SEND },
     // `file://host/C:/x` is read as a share, `file:///C:/x` as the local drive.
     localFileHost: () => undefined,
+    pathEntries: (env) =>
+      (variable(env, "PATH") ?? "")
+        .split(";")
+        .map((entry) => entry.replace(/^"(.*)"$/, "$1"))
+        .filter(Boolean),
+    // A bare `make` file is not a program here: only an extension of PATHEXT makes it one.
+    programNames: (program, env) =>
+      (variable(env, "PATHEXT") || DEFAULT_PATHEXT)
+        .split(";")
+        .filter(Boolean)
+        .map((extension) => `${program}${extension}`),
     hasSs: false,
     executableName: async () => undefined,
   };

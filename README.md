@@ -26,6 +26,15 @@ npx @ninhache/probe check           # no install
 
 Use the full name with `npx`: `npx probe` is another package.
 
+## Windows
+
+probe runs on Windows from PowerShell or Windows Terminal, installed with npm like anywhere else.
+
+- The [Makefile](docs/features/makefile.md) needs `make` (Git Bash, WSL, or a make you install). Without it, probe
+  says so and points to `probe check`, which does the same.
+- For a [command service](docs/config.md#command-services), prefer the list form. A `.cmd` program (`npm`, `pnpm`)
+  needs the string form.
+
 ## Quick start
 
 1. `probe init` creates `.probe/` and offers the services it finds in the project.
