@@ -1,12 +1,12 @@
 import { execFile, spawn } from "node:child_process";
-import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { currentPlatform } from "../src/platform";
-import { tempDir } from "./helpers";
+import { makeEnv, tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const ANSI = "\u001b[";
@@ -41,7 +41,11 @@ function exec(
   });
 }
 
-const probe = (cwd: string, ...args: string[]) => exec(process.execPath, [CLI, ...args], cwd);
+// make is found, so that the Makefile messages do not depend on what the machine has installed.
+const probe = (cwd: string, ...args: string[]) =>
+  exec(process.execPath, [CLI, ...args], cwd, makeEnv(true));
+const probeWithoutMake = (cwd: string, ...args: string[]) =>
+  exec(process.execPath, [CLI, ...args], cwd, makeEnv(false));
 
 const SLOW_MS = 500;
 
@@ -834,6 +838,42 @@ describe("probe status / sync", () => {
 
     await probe(root, "sync");
     expect(await readFile(makefile, "utf8")).toContain("@$(PROBE) check api");
+  });
+
+  it("tells sync without make to use probe check, and still writes the block", async () => {
+    const root = await makefileProject();
+    await addApi(root);
+    await rm(join(root, "Makefile"));
+
+    const sync = await probeWithoutMake(root, "sync");
+
+    expect(sync.stdout).toBe(
+      "Created Makefile. make is not installed here: run `probe check` (or `probe check <name>`)\n",
+    );
+    expect(await readFile(join(root, "Makefile"), "utf8")).toContain("check-api:");
+  });
+
+  it("says in status and doctor that make is missing, and does not call a stale block a problem", async () => {
+    const root = await makefileProject();
+    await addApi(root);
+    const makefile = join(root, "Makefile");
+    const generated = await readFile(makefile, "utf8");
+    await writeFile(makefile, generated.replace("@$(PROBE) check api", "@echo hacked"));
+    const missing = "makefile   make not installed: `probe check` does the same";
+
+    const status = await probeWithoutMake(root, "status");
+    const doctor = await probeWithoutMake(root, "doctor");
+    const json = await probeWithoutMake(root, "doctor", "--json");
+    const withMake = await probe(root, "doctor");
+
+    expect(status.stdout).toContain(missing);
+    expect(status.stdout).not.toContain("probe sync");
+    expect(doctor.stdout).toContain(missing);
+    expect(doctor.stdout).not.toContain("probe sync");
+    expect(doctor.code).toBe(0);
+    expect(JSON.parse(json.stdout)).toMatchObject({ ok: true, project: { makefile: "modified" } });
+    expect(withMake.stdout).toContain("block edited by hand");
+    expect(withMake.code).toBe(1);
   });
 
   it("reports a config edited by hand as out of date", async () => {

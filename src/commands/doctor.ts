@@ -11,6 +11,7 @@ import { formatDiagnosis } from "../doctor/format";
 import { executableName, runCommand, tcpConnect } from "../doctor/system";
 import { type BlockState, blockState } from "../makefile/sync";
 import { currentPlatform } from "../platform";
+import { isOnPath } from "../platform/on-path";
 import { formatCheckResults } from "../ui/report";
 import { cacheDir, readCache, updateCheckDisabled } from "../update/notifier";
 import { CLI_VERSION } from "../version";
@@ -51,6 +52,7 @@ export default defineCommand({
     const paths = await environmentPaths(requireProbeDir(process.cwd()), args.env);
     // Loading a config that needs a migration rewrites it: doctor only looks.
     const pending = await pendingMigration(paths);
+    const hasMake = await isOnPath("make");
     let makefile: BlockState | null = null;
     let services: ServiceReport[] | null = null;
 
@@ -83,7 +85,7 @@ export default defineCommand({
 
     const ok =
       !pending &&
-      !(makefile && BLOCK_PROBLEMS.includes(makefile)) &&
+      !(hasMake && makefile && BLOCK_PROBLEMS.includes(makefile)) &&
       (services ?? []).every((service) => service.ok);
 
     if (args.json) {
@@ -111,7 +113,9 @@ export default defineCommand({
         line("migration", colors.green("none pending"));
         line(
           "makefile",
-          makefile ? describeBlock(makefile, colors, glyphs) : colors.dim("not checked with --env"),
+          makefile
+            ? describeBlock(makefile, colors, glyphs, hasMake)
+            : colors.dim("not checked with --env"),
         );
       }
       line("update", describeUpdate(colors, glyphs));
