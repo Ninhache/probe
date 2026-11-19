@@ -15,6 +15,19 @@ export const IMPORTANT_KINDS: readonly NoteKind[] = ["schema", "completion", "br
  */
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: "1.4.0",
+    items: [
+      {
+        kind: "info",
+        text: "probe runs on Windows: PowerShell completion, doctor names the process on a port, notifications as toasts.",
+      },
+      {
+        kind: "info",
+        text: "Without make installed, probe sync, status and doctor point to probe check instead of the Makefile.",
+      },
+    ],
+  },
+  {
     version: "1.3.0",
     items: [
       {
