@@ -175,17 +175,18 @@ export function detailPanel(
 ): Panel {
   const writable = env === LOCAL_ENVIRONMENT;
   const width = Math.min(PANEL_WIDTH, area.w - MARGIN * 2);
-  const variables = writable ? actions.edit?.variables : undefined;
+  const variables = actions.edit?.variables;
   let found: readonly VariableRow[] = [];
   // -1 is no variable: enter then closes the panel.
   let at = -1;
   const load = () =>
-    void variables?.load(service).then((rows) => {
+    void variables?.load(service, env).then((rows) => {
       found = rows;
       actions.redraw?.();
     });
   load();
-  const extra = () => (writable ? 2 + found.length : 0);
+  // The timeout and skip rows are the local config's: an environment's panel has the variables alone.
+  const extra = () => (writable ? 2 : 0) + found.length;
   const lines = () => {
     const result = tracker.result(service, env);
     const history = (tracker.history(service, env)?.toArray() ?? []).map((s) => s.latencyMs);
@@ -229,7 +230,7 @@ export function detailPanel(
       if (responding) return "↑↓ PgUp PgDn scroll · c copy · b body · r back · esc";
       return writable
         ? "←→ timeout · s skip · u open · c copy · r response · esc"
-        : "u open · c copy · r response · esc";
+        : `${found.length > 0 ? "↑↓ variable · " : ""}u open · c copy · r response · esc`;
     },
     get size() {
       if (responding) return { w: responseWidth, h: area.h - 2 };
@@ -252,30 +253,32 @@ export function detailPanel(
         if (line.id.startsWith("request "))
           screen.hits.add(inner.x + PAD, inner.y + i, inner.w - PAD, "key", "u");
       });
-      if (!writable) return;
-      const timeout = view.timeouts[service];
       const first = inner.h - extra();
-      stepRow(
-        screen,
-        inner,
-        first,
-        "timeout",
-        timeout === undefined ? "default" : `${timeout}s`,
-        {
-          previous: timeout !== undefined,
-          next: stepServiceTimeout(timeout, 1) !== timeout,
-        },
-        at < 0,
-        -(at + 1),
-      );
-      row(screen, inner, first + 1, "skip", view.skipped.has(service) ? "yes" : "no", false);
+      const variablesAt = first + (writable ? 2 : 0);
+      if (writable) {
+        const timeout = view.timeouts[service];
+        stepRow(
+          screen,
+          inner,
+          first,
+          "timeout",
+          timeout === undefined ? "default" : `${timeout}s`,
+          {
+            previous: timeout !== undefined,
+            next: stepServiceTimeout(timeout, 1) !== timeout,
+          },
+          at < 0,
+          -(at + 1),
+        );
+        row(screen, inner, first + 1, "skip", view.skipped.has(service) ? "yes" : "no", false);
+      }
       found.forEach(({ name, source }, i) => {
         const offer =
           at === i && source !== "environment" ? ` · ↵ ${source ? "changes" : "sets"} it` : "";
         row(
           screen,
           inner,
-          first + 2 + i,
+          variablesAt + i,
           name,
           `${source ? SOURCES[source] : "not set"}${offer}`,
           at === i,
@@ -310,10 +313,10 @@ export function detailPanel(
       if (event.name === "enter") {
         const variable = found[at];
         if (!variable) return "close";
-        variables?.set(variable, load);
+        variables?.set(variable, env, load);
         return true;
       }
-      if (writable && found.length > 0 && (event.name === "up" || event.name === "down")) {
+      if (found.length > 0 && (event.name === "up" || event.name === "down")) {
         at = Math.max(-1, Math.min(found.length - 1, at + (event.name === "down" ? 1 : -1)));
         return true;
       }

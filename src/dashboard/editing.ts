@@ -44,7 +44,8 @@ export interface EditCallbacks {
   /** Writes again what the last undo took back. */
   onRedo?: () => Promise<{ config?: Config; undone?: string; failure?: string }>;
   variableSources?: VariableSources;
-  onVariableWrite?: (name: string, value: string) => Saved;
+  /** `env` keeps the value under that environment in local.yml: none is the top level. */
+  onVariableWrite?: (name: string, value: string, env?: string) => Saved;
 }
 
 const pickFields = (service: Service): ServiceFields => {
@@ -103,6 +104,11 @@ const reads = (config: () => Config) => ({
   },
 });
 
+const writeIn =
+  (write: NonNullable<EditCallbacks["onVariableWrite"]>, env: string) =>
+  (name: string, value: string) =>
+    write(name, value, env);
+
 /** The config the dashboard edits, kept in step with what the writes and undos leave. */
 export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing {
   let config = initial;
@@ -119,9 +125,6 @@ export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing
     const found = (await edits.variableSources?.(sent, env)) ?? {};
     const unset = sent.filter((variable) => !found[variable]);
     if (!edits.variableSources || unset.length === 0) return undefined;
-    // The detail panel only sets the values of the local services.
-    if (env !== undefined)
-      return `${unset.join(", ")} not set for ${env}: probe var ${unset[0]} --env ${env} (or export it)`;
     return `${unset.join(", ")} not set: open ${name} with enter, then enter on the variable`;
   };
   /** Writes to config.yml, or to the file of `env`: the config each leaves is kept apart. */
@@ -154,6 +157,7 @@ export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing
         ...reads(read),
         writeService: writer?.(env),
         variables: sources && variableTools(read, (names) => sources(names, env)),
+        writeVariable: edits.onVariableWrite && writeIn(edits.onVariableWrite, env),
       };
     },
     writeService: writer?.(undefined),

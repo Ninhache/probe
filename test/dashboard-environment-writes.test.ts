@@ -238,7 +238,7 @@ describe("writing a service of an environment", () => {
     expect(Object.keys(editing.config().services)).toEqual(["acme"]);
   });
 
-  it("points to probe var --env, not the detail panel, for a variable prod does not have", async () => {
+  it("points to the detail panel for a variable prod does not have", async () => {
     const paths = await project();
     const { writes } = dashboardWrites(paths, SETTINGS);
     const editing = liveEditing((await loadConfig(paths)).config, writes);
@@ -258,7 +258,46 @@ describe("writing a service of an environment", () => {
     });
 
     expect(outcome?.warning).toBe(
-      "INITECH_KEY not set for prod: probe var INITECH_KEY --env prod (or export it)",
+      "INITECH_KEY not set: open initech with enter, then enter on the variable",
     );
+  });
+
+  it("keeps a variable typed in the detail panel under envs.prod.variables, nowhere else", async () => {
+    const paths = await project();
+    const before = await shared(paths);
+    const { writes } = dashboardWrites(paths, SETTINGS);
+
+    expect(await writes.onVariableWrite("PROD_TOKEN", SECRET, "prod")).toBeUndefined();
+
+    const local = await read(paths, "local.yml");
+    expect(local).toMatch(/envs:\s+prod:\s+variables:\s+PROD_TOKEN: /);
+    expect(local.match(/variables:/g)).toHaveLength(1);
+    expect(await writes.variableSources(["PROD_TOKEN"], "prod")).toEqual({ PROD_TOKEN: "local" });
+    expect(await writes.variableSources(["PROD_TOKEN"])).toEqual({});
+    expect(await writes.variableSources(["PROD_TOKEN"], "staging").catch(() => ({}))).toEqual({});
+    expect(await read(paths, "envs", "prod.yml")).not.toContain(SECRET);
+    expect(await shared(paths)).toEqual(before);
+  });
+
+  it("keeps a local variable at the top level of local.yml", async () => {
+    const paths = await project();
+    const { writes } = dashboardWrites(paths, SETTINGS);
+
+    await writes.onVariableWrite("LOCAL_TOKEN", SECRET);
+
+    const local = await read(paths, "local.yml");
+    expect(local).toMatch(/^variables:\s+LOCAL_TOKEN: /m);
+    expect(local).not.toContain("envs:");
+  });
+
+  it("says why a variable cannot be kept for an environment that does not exist", async () => {
+    const paths = await project();
+    const { writes } = dashboardWrites(paths, SETTINGS);
+
+    const failure = await writes.onVariableWrite("X_TOKEN", SECRET, "nowhere");
+
+    expect(failure).toBeTruthy();
+    expect(failure).not.toContain(SECRET);
+    await expect(read(paths, "local.yml")).rejects.toThrow();
   });
 });

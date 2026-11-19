@@ -70,8 +70,15 @@ export function dashboardWrites(paths: ProbePaths, initial: DashboardSettings) {
           names.map((name) => [name, variableSource(name, values, process.env)]),
         );
       },
-      onVariableWrite: (name: string, value: string) =>
-        saveLocal(() => keepVariable(paths, name, value)),
+      onVariableWrite: async (name: string, value: string, env?: string) => {
+        let target = paths;
+        try {
+          target = await environmentPaths(paths, env);
+        } catch (error) {
+          return (error as Error).message;
+        }
+        return saveLocal(() => keepVariable(target, name, value));
+      },
       onSettingsChange: (next: DashboardSettings) => {
         const changed = changedPreferences(settings, next);
         settings = next;

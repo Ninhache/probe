@@ -158,6 +158,8 @@ Under it, the panel has:
 - skip: leave the service out on this machine;
 - the variables its headers use, and where each is set. `Enter` on one asks for its value, hidden, and keeps
   it in `.probe/local.yml`, as `probe var` does. A variable set in the environment is not changed there.
+  On an environment tab, or on the column of that environment on the `all` tab, the panel has the variables
+  alone: the value is kept under `envs.<name>.variables`, and "where it is set" reads that environment only.
 
 ## Parameters
 
@@ -257,6 +259,7 @@ With [environments](environments.md) in `.probe/envs/`, the services table gets 
   service, the one its detail shows; to change another, go to its tab.
 - A secret typed in a header on an environment tab is kept in `.probe/local.yml` under `envs.<name>.variables`,
   for that environment only, and the file of the environment gets the `${NAME}` reference.
-- The timeout and skip of a service stay local, in the service panel (`Enter`).
+- The variables in the service panel (`Enter`) follow the same rule: the value goes under `envs.<name>.variables`
+  and never falls back on another environment's. The timeout and skip of a service stay local.
 - A file that cannot be read shows `!` next to its name, with the reason when you select it.
 - A notification names the environment (`prod/api`).

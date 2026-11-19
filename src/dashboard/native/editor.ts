@@ -31,9 +31,10 @@ export interface Editor {
   };
   /** The variables the headers of a service send; absent when none can be looked up. */
   variables?: {
-    load(service: string): Promise<VariableRow[]>;
-    /** `done` runs once the value is kept: the rows are then looked up again. */
-    set(row: VariableRow, done: () => void): void;
+    /** The rows of `env`: where each is set there, never in another environment. */
+    load(service: string, env?: string): Promise<VariableRow[]>;
+    /** `done` runs once the value is kept in `env`: the rows are then looked up again. */
+    set(row: VariableRow, env: string | undefined, done: () => void): void;
   };
 }
 
@@ -60,14 +61,17 @@ export function createEditor({
   tracker,
   createEnvironment,
 }: EditorDeps): Editor {
-  const { writeService, writeParameter, variables, writeVariable } = editing;
+  const { writeService, writeParameter, variables } = editing;
 
   /** The editing of config.yml, or of the file of `env`; says why when that file is not there to edit. */
-  const target = (env: string | undefined): { edits: Editing; env?: string } | undefined => {
+  const target = (
+    env: string | undefined,
+    tell = true,
+  ): { edits: Editing; env?: string } | undefined => {
     if (env === undefined || env === LOCAL_ENVIRONMENT) return { edits: editing };
     const edits = editing.environment?.(env);
     if (edits) return { edits, env };
-    say(view, `${env} is not read yet: try again in a moment`);
+    if (tell) say(view, `${env} is not read yet: try again in a moment`);
     return undefined;
   };
 
@@ -217,20 +221,25 @@ export function createEditor({
       },
     },
     variables: variables && {
-      load: (service) => variables.serviceVariables(service),
-      set({ name, source }, done) {
-        if (!writeVariable) return;
+      // An environment not read yet has no rows: the local ones would say where a value is set for another file.
+      load: async (service, env) =>
+        (await target(env, false)?.edits.variables?.serviceVariables(service)) ?? [],
+      set({ name, source }, env, done) {
+        const found = target(env);
+        const write = found?.edits.writeVariable;
+        if (!found || !write) return;
         if (source === "environment")
           return say(view, `${name} comes from the environment, which is read first`);
+        const where = found.env === undefined ? LOCAL : `${LOCAL}, under envs.${found.env}`;
         view.modals.push(
           variableModal(name, (value) => {
-            void writeVariable(name, value).then((failure) => {
+            void write(name, value).then((failure) => {
               view.unsaved = failure;
               say(
                 view,
                 failure
                   ? `not saved: ${failure}`
-                  : `Kept ${name} in ${LOCAL}, for this machine only`,
+                  : `Kept ${name} in ${where}, for this machine only`,
               );
               if (!failure) {
                 changed();
