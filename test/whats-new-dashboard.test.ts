@@ -37,6 +37,16 @@ describe("what's new in the dashboard", () => {
     expect(draw(view)).not.toContain("What's new");
   });
 
+  it("should draw the footer key as W in ascii mode", () => {
+    const view = initialView();
+    view.modals.push(whatsNewModal(news));
+    const screen = new Screen(100, 30, "truecolor");
+    screen.ascii = true;
+    renderDashboard(screen, { x: 0, y: 0, w: 100, h: 30 }, new Tracker(["local"]), view, 0);
+
+    expect(screen.toPlainText()).toContain("Esc close -  W reopen");
+  });
+
   it("should open again on W, and say so when there is nothing", () => {
     const tracker = new Tracker(["local"]);
     const view = initialView();

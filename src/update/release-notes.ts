@@ -17,12 +17,15 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: "1.2.0",
     items: [
-      { kind: "info", text: "probe --help is grouped and colored, with a first-run line." },
-      { kind: "info", text: "In the dashboard, ? shows the keys of the current screen first." },
+      {
+        kind: "info",
+        text: "probe --help is grouped and colored; in the dashboard, ? shows the keys of the current screen first.",
+      },
       {
         kind: "info",
         text: "probe tells you once what changed after an update (Shift+w in the dashboard).",
       },
+      { kind: "info", text: "PROBE_ASCII=1 draws the dashboard with ASCII only." },
     ],
   },
   {

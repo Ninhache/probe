@@ -37,7 +37,12 @@ function supportsHyperlinks(env: NodeJS.ProcessEnv): boolean {
   return env.TERM === "alacritty" || env.TERM === "xterm-kitty";
 }
 
+/**
+ * Whether glyphs beyond ASCII can be drawn. `PROBE_ASCII=1` forces ASCII for a UTF-8 locale whose font
+ * lacks them (a font cannot be detected); any other value leaves the locale to decide.
+ */
 export function supportsUnicode(env: NodeJS.ProcessEnv): boolean {
+  if (env.PROBE_ASCII === "1") return false;
   if (env.TERM === "linux") return false;
   return /UTF-?8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || "");
 }

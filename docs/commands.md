@@ -171,6 +171,8 @@ Prints the version, a pending migration, the state of the Makefile block and an 
 `probe` looks for a newer version at most once a day, in the background, and prints one line when there is one.
 It never updates itself. Turn it off with `PROBE_NO_UPDATE_CHECK=1`. It is off when `CI` is set.
 
+`PROBE_ASCII=1` makes the dashboard draw ASCII only, for a UTF-8 terminal whose font lacks some glyphs. The command-line output (`✓`, `✗`, `→`, `·`) is not affected.
+
 After an update, the first run in a terminal shows what is new, once, on stderr: the versions you skipped,
 the items that need an action (`!`: a schema change, a stale saved completion) first, then the others (`+`),
 about 8 lines at most. A first install shows nothing. It stays silent with `--json`, when stderr is not a

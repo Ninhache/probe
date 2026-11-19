@@ -88,6 +88,7 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 | `q`             | Quit                                              |
 
 A capital letter key is shown as `⇧` and the letter (`⇧w` is Shift+w); in ASCII terminals it stays `W`.
+If your font lacks `⇧`, `↵` or the box drawing, set `PROBE_ASCII=1` to draw the dashboard with ASCII only. Only `1` counts.
 
 The bar at the bottom shows the keys you need first. While you type (filter, form, command palette), `q` and
 `?` are letters.

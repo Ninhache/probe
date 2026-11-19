@@ -119,6 +119,9 @@ describe("native screen on a limited terminal", () => {
     [{ LANG: "C" }, false],
     [{}, false],
     [{ TERM: "linux", LANG: "en_US.UTF-8" }, false],
+    [{ PROBE_ASCII: "1", LANG: "en_US.UTF-8" }, false],
+    [{ PROBE_ASCII: "0", LANG: "en_US.UTF-8" }, true],
+    [{ PROBE_ASCII: "", LANG: "en_US.UTF-8" }, true],
   ])("should read the locale %j as unicode: %s", (env, unicode) => {
     expect(supportsUnicode(env)).toBe(unicode);
   });
