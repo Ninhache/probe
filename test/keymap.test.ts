@@ -125,7 +125,10 @@ describe("helpLines", () => {
 
 describe("paletteEntries", () => {
   it("should offer every key of the list the help names, but moving and itself", () => {
-    const offered = paletteEntries(true).map(({ keys, label }) => `  ${keys.padEnd(7)} ${label}`);
+    // `w` is in the palette with no line in the help, which is full: see the next test.
+    const offered = paletteEntries(true)
+      .filter(({ command }) => command !== "trace")
+      .map(({ keys, label }) => `  ${keys.padEnd(7)} ${label}`);
     const lines = helpLines(true);
     const list = lines.slice(
       0,
@@ -137,6 +140,15 @@ describe("paletteEntries", () => {
 
     expect(offered.slice(0, named.length)).toEqual(named);
     expect(offered.slice(named.length)).toEqual(["  ?       This help", "  q       Quit"]);
+  });
+
+  it("should offer saving the response, which only the response panel's help names", () => {
+    expect(paletteEntries(true, "save")).toEqual([
+      { command: "trace", label: "Save the response to .probe/traces", keys: "w" },
+    ]);
+    expect(helpLines(true).some(({ text }) => /^ {2}w {7}Save the response$/.test(text))).toBe(
+      true,
+    );
   });
 
   it("should give each command once", () => {

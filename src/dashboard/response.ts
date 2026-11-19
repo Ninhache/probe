@@ -22,6 +22,36 @@ export function responseText(result: CheckResult): string | undefined {
   return `${head.join("\r\n")}\r\n\r\n${response.body ?? ""}`;
 }
 
+/** The query parameters whose value is hidden in a saved request line, by name, as headers are. */
+const SECRET_PARAMETER = /auth|cookie|token|secret|key|session|password|credential|signature/i;
+const HIDDEN_PARAMETER = "***";
+
+/** The address of the request with what a secret would sit in hidden: userinfo and sensitive parameters. */
+function maskedTarget(target: string): string {
+  let url: URL;
+  try {
+    url = new URL(target);
+  } catch {
+    // Unreadable: nothing after the path is kept rather than risk a leak.
+    return target.split(/[?#]/, 1)[0] ?? "";
+  }
+  if (url.password) url.password = HIDDEN_PARAMETER;
+  for (const [name] of [...url.searchParams])
+    if (SECRET_PARAMETER.test(name)) url.searchParams.set(name, HIDDEN_PARAMETER);
+  return url.href;
+}
+
+/**
+ * The exchange as an `.http` file: the request line and headers as the config writes them (secrets
+ * hidden), a blank line, then the response the copy takes. Nothing here is resolved from a variable.
+ */
+export function traceText(result: CheckResult): string | undefined {
+  const answer = responseText(result);
+  if (answer === undefined) return undefined;
+  const line = `${result.method ?? "GET"} ${maskedTarget(result.target)} ${HTTP_VERSION}`;
+  return `${[line, ...(result.sent ?? [])].join("\r\n")}\r\n\r\n${answer}`;
+}
+
 /** Why the response cannot be shown, or nothing when it can. */
 export function responseProblem(result: CheckResult | undefined): string | undefined {
   if (!result) return NO_RESPONSE;

@@ -54,6 +54,7 @@ import {
   parametersPanel,
   type ResponseRow,
   responseRows,
+  saveTrace,
 } from "./panels";
 import { variablesPanel } from "./variables-panel";
 
@@ -589,6 +590,8 @@ export interface ViewActions {
   copy?(service: string, env: string): void;
   /** Copies the text of a response, or only its body: `cut` when the body is not all there. */
   copyResponse?(text: string, cut: boolean, part?: ResponsePart, formatted?: boolean): void;
+  /** Saves the text of an exchange as a trace file. */
+  saveTrace?(service: string, text: string): void;
   /** Copies the log lines that are on screen. */
   copyLog?(text: string): void;
   skip?(service: string, skip: boolean): void;
@@ -870,6 +873,10 @@ export function runCommand(
         actions,
         service === undefined || env === undefined ? undefined : tracker.result(service, env),
       );
+      break;
+    case "trace":
+      if (service === undefined || env === undefined) say(view, NO_RESPONSE);
+      else saveTrace(view, actions, service, tracker.result(service, env));
       break;
     case "open":
     case "copy":

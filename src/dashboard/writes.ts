@@ -24,6 +24,7 @@ import { CONFIG_FILE, LOCAL_FILE, PROBE_DIR } from "../constants";
 import type { Secrets } from "./editing";
 import { createSaveQueue } from "./saves";
 import type { DashboardSettings } from "./settings";
+import { saveTrace } from "./traces";
 import { createUndoJournal, journalFiles, type UndoOutcome } from "./undo";
 
 /** What the dashboard writes: every save goes through one queue and one undo journal. */
@@ -167,6 +168,7 @@ export function dashboardWrites(paths: ProbePaths, initial: DashboardSettings) {
           `${file} is already gone`,
         );
       },
+      onTraceSave: (service: string, text: string) => saveTrace(paths, service, text),
       onUndo: () => revert("undo"),
       onRedo: () => revert("redo"),
     },
