@@ -887,9 +887,8 @@ describe("probe (top level)", () => {
     }
     const usage = await exec(process.execPath, [CLI], await tempDir(), env);
     expect(usage.code).toBe(2);
-    expect(usage.stdout).toContain(
-      "USAGE probe [OPTIONS] init|add|rm|ls|check|wait|open|curl|var|env|status|doctor|sync|migrate",
-    );
+    expect(usage.stdout).toContain("Usage: probe [command] [options]");
+    expect(usage.stdout).toContain("First run: cd into your project folder");
   });
 
   it("declares --once in the usage of the dashboard", async () => {
@@ -918,14 +917,13 @@ describe("probe (top level)", () => {
   });
 
   it.each([
-    [["--help"], "probe add api -p 3000 --path /health  Declare a service"],
-    [["check", "--help"], "probe check api db        Check these two only"],
+    [["check", "--help"], "probe check api db  Check these two only"],
     [["rm", "-h"], "probe rm api --yes  Remove it without the question"],
   ])("ends the help of %j with examples", async (args, example) => {
     const { code, stdout } = await probe(await tempDir(), ...args);
 
     expect(code).toBe(0);
-    expect(stdout).toContain("\nEXAMPLES\n\n");
+    expect(stdout).toContain("\nExamples\n");
     expect(stdout).toContain(`\n  ${example}\n`);
   });
 

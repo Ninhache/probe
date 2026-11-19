@@ -2,6 +2,7 @@ export interface Colors {
   green(text: string): string;
   red(text: string): string;
   yellow(text: string): string;
+  cyan(text: string): string;
   dim(text: string): string;
   bold(text: string): string;
   inverse(text: string): string;
@@ -14,6 +15,7 @@ export function createColors(enabled: boolean): Colors {
     green: wrap(32, 39),
     red: wrap(31, 39),
     yellow: wrap(33, 39),
+    cyan: wrap(36, 39),
     dim: wrap(2, 22),
     bold: wrap(1, 22),
     inverse: wrap(7, 27),

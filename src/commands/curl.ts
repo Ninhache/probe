@@ -5,7 +5,7 @@ import { ProbeError } from "../errors";
 import { ENVIRONMENT_ARG, namedService, openProject, SET_ARG, selectionFrom } from "./shared";
 
 export default defineCommand({
-  meta: { name: "curl", description: "Print the curl command that requests a service" },
+  meta: { name: "curl", description: "Print the curl command of a service" },
   args: {
     name: { type: "positional", description: "Service name", required: true },
     env: ENVIRONMENT_ARG,

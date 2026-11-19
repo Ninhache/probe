@@ -4,20 +4,14 @@ export interface Example {
 }
 
 import { reference } from "../config/headers";
+import { createColors } from "./colors";
 
-const ROOT = "probe";
 const GAP = "  ";
 const INDENT = "  ";
-const ESC = "\u001b";
+// A few are enough: the help has to stay short.
+const MAX_EXAMPLES = 3;
 
 export const EXAMPLES: Record<string, Example[]> = {
-  [ROOT]: [
-    { command: "probe init", note: "Start in this project" },
-    { command: "probe add api -p 3000 --path /health", note: "Declare a service" },
-    { command: "probe check", note: "Check every service" },
-    { command: "probe wait && pnpm test", note: "Run the tests once all are up" },
-    { command: "probe", note: "Open the dashboard (on a terminal)" },
-  ],
   init: [{ command: "probe init", note: "Create .probe/ in this directory" }],
   add: [
     { command: "probe add api -p 3000", note: "http://localhost:3000/" },
@@ -73,15 +67,12 @@ export const EXAMPLES: Record<string, Example[]> = {
 };
 
 export function formatExamples(name: string | undefined, color: boolean): string {
-  const examples = EXAMPLES[name ?? ROOT] ?? [];
+  const examples = (name === undefined ? undefined : EXAMPLES[name])?.slice(0, MAX_EXAMPLES) ?? [];
   if (examples.length === 0) return "";
-  const style = (open: string, close: string) => (text: string) =>
-    color ? `${ESC}[${open}m${text}${ESC}[${close}m` : text;
-  const title = style("1;4", "22;24");
-  const cyan = style("36", "39");
+  const { bold, cyan } = createColors(color);
   const width = Math.max(...examples.map((example) => example.command.length));
   const lines = examples.map(
     ({ command, note }) => `${INDENT}${cyan(command.padEnd(width))}${GAP}${note}`,
   );
-  return [title("EXAMPLES"), "", ...lines].join("\n");
+  return [bold("Examples"), ...lines].join("\n");
 }
