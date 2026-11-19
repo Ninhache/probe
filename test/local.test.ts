@@ -1,13 +1,4 @@
-import {
-  chmod,
-  mkdir,
-  readdir,
-  readFile,
-  readlink,
-  stat,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
