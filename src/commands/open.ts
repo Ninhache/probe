@@ -7,7 +7,7 @@ import { openerCommand, openUrl } from "../open-url";
 import { namedService, openProject, SET_ARG, selectionFrom } from "./shared";
 
 export default defineCommand({
-  meta: { name: "open", description: "Open the URL of a service in the browser" },
+  meta: { name: "open", description: "Open a service in the browser" },
   args: {
     name: { type: "positional", description: "Service name", required: true },
     set: SET_ARG,

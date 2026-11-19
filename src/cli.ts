@@ -1,29 +1,11 @@
 #!/usr/bin/env node
-import {
-  type ArgsDef,
-  type CommandDef,
-  defineCommand,
-  renderUsage,
-  runCommand,
-  runMain,
-} from "citty";
-import add, { guidedAdd } from "./commands/add";
-import check from "./commands/check";
+import { type ArgsDef, type CommandDef, defineCommand, runCommand, runMain } from "citty";
+import { guidedAdd } from "./commands/add";
 import completionCommand from "./commands/completion";
-import curl from "./commands/curl";
-import doctor from "./commands/doctor";
-import environment from "./commands/env";
 import { createEnvironment, EMPTY_ENVIRONMENT, environmentFile } from "./commands/env-create";
-import init, { initProject } from "./commands/init";
-import ls from "./commands/ls";
-import migrate from "./commands/migrate";
-import open from "./commands/open";
-import rm from "./commands/rm";
+import { initProject } from "./commands/init";
+import { commands } from "./commands/registry";
 import { noServices, secondsToMs, stdoutTerminal } from "./commands/shared";
-import status from "./commands/status";
-import sync from "./commands/sync";
-import variable from "./commands/var";
-import wait from "./commands/wait";
 import {
   completableEnvironments,
   completableServices,
@@ -51,7 +33,7 @@ import {
 import { dashboardWrites } from "./dashboard/writes";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
-import { formatExamples } from "./ui/examples";
+import { type HelpCommand, renderCommandHelp, renderRootHelp } from "./ui/help";
 import { linkFileIn } from "./ui/links";
 import { confirm } from "./ui/prompt";
 import { detectTerminal, isInteractive, stripStyles } from "./ui/terminal";
@@ -64,22 +46,7 @@ import {
 } from "./update/notifier";
 import { CLI_VERSION } from "./version";
 
-const commands = {
-  init,
-  add,
-  rm,
-  ls,
-  check,
-  wait,
-  open,
-  curl,
-  var: variable,
-  env: environment,
-  status,
-  doctor,
-  sync,
-  migrate,
-};
+const subCommands = { ...commands, completion: completionCommand(commands) };
 
 const main = defineCommand({
   meta: {
@@ -90,29 +57,39 @@ const main = defineCommand({
   args: {
     interval: {
       type: "string",
-      valueHint: "seconds",
-      description: "Seconds between two refreshes of the dashboard (probe alone, on a terminal)",
+      valueHint: "s",
+      description: "Dashboard refresh",
       default: String(DASHBOARD_INTERVAL_SECONDS),
     },
     once: {
       type: "boolean",
-      description: "Check once, print the table and exit with 1 if a service is down (probe alone)",
+      description: "Check once and exit",
     },
   },
-  subCommands: { ...commands, completion: completionCommand(commands) },
+  subCommands,
 });
 
-// citty styles its usage text whatever the stream is: strip it when stdout shows no colour.
-// Its usage has no room for examples: they are added after it.
-async function printUsage<T extends ArgsDef = ArgsDef>(
-  command: CommandDef<T>,
-  parent?: CommandDef<T>,
-): Promise<void> {
-  const usage = await renderUsage(command, parent);
+// citty's own renderer lists every command on one line and cannot group or colour: ours is used.
+async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): Promise<void> {
   const { color } = stdoutTerminal();
+  if (command === (main as unknown)) {
+    const meta = await (typeof main.meta === "function" ? main.meta() : main.meta);
+    console.log(
+      await renderRootHelp({
+        version: CLI_VERSION,
+        description: meta?.description ?? "",
+        commands: subCommands as Record<string, HelpCommand>,
+        args: (main.args ?? {}) as never,
+        color,
+        firstRun: findProbeDir(process.cwd()) === null,
+      }),
+    );
+    return;
+  }
   const meta = await (typeof command.meta === "function" ? command.meta() : command.meta);
-  const examples = formatExamples(command === main ? undefined : meta?.name, color);
-  console.log(`${color ? usage : stripStyles(usage)}\n${examples ? `\n${examples}\n` : ""}`);
+  console.log(
+    await renderCommandHelp({ name: meta?.name ?? "", command: command as HelpCommand, color }),
+  );
 }
 
 function notifyUpdate(rawArgs: string[]): void {

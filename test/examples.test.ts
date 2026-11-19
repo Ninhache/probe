@@ -52,12 +52,12 @@ function optionNames(args: ArgsDef): Set<string> {
 }
 
 describe("help examples", () => {
-  it.each(["probe", ...Object.keys(COMMANDS)])("has at least one example for %s", (name) => {
+  it.each(Object.keys(COMMANDS))("has at least one example for %s", (name) => {
     expect(EXAMPLES[name]?.length).toBeGreaterThan(0);
   });
 
   it("has no example for a command that does not exist", () => {
-    expect(Object.keys(EXAMPLES).sort()).toEqual(["probe", ...Object.keys(COMMANDS)].sort());
+    expect(Object.keys(EXAMPLES).sort()).toEqual(Object.keys(COMMANDS).sort());
   });
 
   const all = Object.entries(EXAMPLES).flatMap(([name, examples]) =>
@@ -69,7 +69,7 @@ describe("help examples", () => {
     expect(binary).toBe("probe");
     const [commandName, ...rawArgs] = words;
     if (commandName === undefined) return;
-    if (name !== "probe") expect(commandName).toBe(name);
+    expect(commandName).toBe(name);
     const definition = COMMANDS[commandName];
     expect(definition, `unknown command ${commandName}`).toBeDefined();
     const args = (definition?.args ?? {}) as ArgsDef;
@@ -95,10 +95,14 @@ describe("help examples", () => {
     expect(formatExamples("check", false)).not.toContain("\u001b");
     expect(formatExamples("check", true)).toContain("\u001b[36mprobe check");
     expect(formatExamples("check", false).split("\n").slice(0, 3)).toEqual([
-      "EXAMPLES",
-      "",
-      "  probe check               Check every service",
+      "Examples",
+      "  probe check         Check every service",
+      "  probe check api db  Check these two only",
     ]);
+  });
+
+  it("shows three examples at most", () => {
+    expect(formatExamples("add", false).split("\n")).toHaveLength(4);
   });
 
   it("renders nothing for a command without examples", () => {

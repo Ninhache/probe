@@ -49,7 +49,7 @@ export function progressReporter(): (results: CheckResult[], elapsedMs: number) 
 export default defineCommand({
   meta: {
     name: "wait",
-    description: "Check again and again until services are up (all of them by default)",
+    description: "Wait until services are up (all of them by default)",
   },
   args: {
     json: { type: "boolean", description: "Print the final results as JSON" },
