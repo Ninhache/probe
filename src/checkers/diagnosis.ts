@@ -215,7 +215,7 @@ export function diagnoseForeignRedirect(service: Service, origin: string): Diagn
   const error = `redirected to ${origin}`;
   const bare = (host: string) => host.replace(/^www\./, "");
   // The same site under another scheme, port or `www.`: the address moved, nobody asks to log in.
-  if (bare(new URL(origin).hostname) === bare(service.host)) {
+  if (bare(new URL(origin).hostname) === bare(service.host ?? "")) {
     return {
       error,
       hint: `the service moved there, and headers stay on the address they are for: set \`url\` to it in ${CONFIG}`,

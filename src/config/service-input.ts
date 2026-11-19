@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import {
+  COMMAND_EXPECTED,
   CONTAINS_EXPECTED,
   DEFAULT_PORTS,
   HINT_EXPECTED,
@@ -61,6 +62,40 @@ export function expectProblem(expect: string): string | undefined {
   );
 }
 
+/**
+ * One line of text for a command: a string as is, a list as a JSON array. A string that is not a
+ * JSON array of strings stays a string, so `[ -f ready ]` is still the shell's test.
+ */
+export function commandText(command: NonNullable<Service["command"]>): string {
+  return typeof command === "string" ? command : JSON.stringify(command);
+}
+
+export function commandFromText(text: string): NonNullable<Service["command"]> {
+  if (text.trim().startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.every((word) => typeof word === "string")) {
+        return parsed as string[];
+      }
+    } catch {
+      // Not JSON: it is a command for the shell.
+    }
+  }
+  return text;
+}
+
+/** Whether the config would take this command: its own message, without the command in it. */
+export function commandValueProblem(command: unknown): string | undefined {
+  return schemaProblem(serviceShapeV1.command, command) && `expected ${COMMAND_EXPECTED}`;
+}
+
+export function commandProblem(text: string): string | undefined {
+  return (
+    commandValueProblem(commandFromText(text)) &&
+    'A command, e.g. redis-cli ping, or a list as JSON, e.g. ["docker", "ps"]'
+  );
+}
+
 const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 /** `localhost:3000` is read as a scheme by `new URL`: the text decides, not the parser. */
@@ -69,7 +104,7 @@ export const withScheme = (address: string) => {
   return trimmed === "" || SCHEME.test(trimmed) ? trimmed : `http://${trimmed}`;
 };
 
-export type Address = Pick<Service, "url" | "host" | "port" | "path">;
+export type Address = Pick<Service, "url"> & Required<Pick<Service, "host" | "port" | "path">>;
 
 // The text is split by hand, not by `new URL`: it would lowercase a host written by hand,
 // and a host left as typed is a host an edit does not rewrite.

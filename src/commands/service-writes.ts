@@ -7,7 +7,7 @@ import { rawServices, writeServices } from "./shared";
 
 /** No address at all: the service takes it from `urls:`, one per value of the `url` parameter. */
 export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers"> &
-  Partial<Pick<Service, "host" | "port" | "path">>;
+  Partial<Pick<Service, "host" | "port" | "path" | "type" | "command">>;
 
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */
 export type ServiceUrls = Readonly<Record<string, string>>;
@@ -39,6 +39,11 @@ const ADDRESS_KEYS: readonly string[] = ["host", "port", "path"];
 
 function withFields(service: RawConfig, fields: ServiceFields, current?: Service): RawConfig {
   const next = { ...service };
+  // `type: http` is the default: only a service that runs a command ever gets the key.
+  if (fields.type === "command") next.type = "command";
+  if (fields.command !== undefined && !isDeepStrictEqual(fields.command, service.command)) {
+    next.command = fields.command;
+  }
   // `url` says what host, port and path say: the config refuses both, one goes when the other comes.
   if (fields.url !== undefined) {
     if (fields.url !== service.url) next.url = fields.url;

@@ -118,6 +118,29 @@
           "additionalProperties": {
             "type": "object",
             "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "command"
+                ]
+              },
+              "command": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "\\S"
+                  },
+                  {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                ]
+              },
               "url": {
                 "type": "string"
               },

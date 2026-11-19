@@ -180,6 +180,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
       skipped: await readSkippedServices(paths),
       selection: await readDashboardSelection(paths),
       timeoutMs: settings.timeoutMs,
+      cwd: paths.root,
       environments: environments.map((name) => source(paths, name)),
       terminal: stdoutTerminal(),
       glyphs: glyphsFor(process.env),
@@ -199,6 +200,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
   const { openNativeDashboard } = await import("./dashboard/native/open");
   await openNativeDashboard({
     config,
+    cwd: paths.root,
     environments: environments.map((name) => source(paths, name)),
     settings,
     selection: await readDashboardSelection(paths),
@@ -299,7 +301,9 @@ async function run(rawArgs: string[]): Promise<void> {
   if (rawArgs[0] === REFRESH_COMMAND) return refreshCache(cacheDir());
   if (rawArgs[0] === COMPLETE_COMMAND) return printCompletions(rawArgs[1]);
 
-  const wantsHelp = rawArgs.includes("--help") || rawArgs.includes("-h");
+  // What follows `--` is a command for `probe add`: its own `-h` is not a request for help.
+  const options = rawArgs.slice(0, rawArgs.includes("--") ? rawArgs.indexOf("--") : undefined);
+  const wantsHelp = options.includes("--help") || options.includes("-h");
   const wantsVersion = rawArgs.length === 1 && ["--version", "-v"].includes(rawArgs[0] as string);
   if (wantsHelp || wantsVersion) return runMain(main, { rawArgs, showUsage: printUsage });
 

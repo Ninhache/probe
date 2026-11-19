@@ -32,12 +32,19 @@ export function urlProblem(value: string): string | undefined {
   return undefined;
 }
 
+export const SERVICE_TYPES = ["http", "command"] as const;
+export type ServiceKind = (typeof SERVICE_TYPES)[number];
+
 export interface Service {
+  /** Absent for an http service: the key is optional, and a writer never adds it. */
+  type?: ServiceKind;
+  /** A list is spawned as is; a string goes through the system shell. */
+  command?: string | string[];
   url?: string;
   urls?: Record<string, string>;
-  host: string;
-  port: number;
-  path: string;
+  host?: string;
+  port?: number;
+  path?: string;
   expect?: number | number[];
   timeout?: number;
   method?: Method;
@@ -97,7 +104,18 @@ const urlText = z.string().refine((value) => urlProblem(value) === undefined, {
   error: (issue) => `expected ${urlProblem(String(issue.input))}`,
 });
 
+export const COMMAND_EXPECTED =
+  'a command: a string run by the shell, e.g. "redis-cli ping", or a list of arguments run as is, e.g. [docker, compose, exec, -T, db, pg_isready]';
+
+const commandWord = z.string().regex(/\S/, "expected a word that is not empty");
+
+const commandSchema = z.union([commandWord, z.array(commandWord).min(1)], {
+  error: `expected ${COMMAND_EXPECTED}`,
+});
+
 export const serviceObjectV1 = z.strictObject({
+  type: z.enum(SERVICE_TYPES).optional(),
+  command: commandSchema.optional(),
   url: urlText.optional(),
   urls: z.record(parameterWord, urlText).optional(),
   host: z.string().min(1).optional(),
@@ -133,8 +151,52 @@ const firstAddress = (urls: Record<string, string> | undefined) =>
     .map(parsedUrl)
     .find((parsed) => parsed !== undefined);
 
+// What a request is made of: a service that runs a command has none of it.
+const HTTP_ONLY_KEYS = [
+  "url",
+  "urls",
+  "host",
+  "port",
+  "path",
+  "method",
+  "headers",
+  "expect",
+  "contains",
+] as const;
+
 export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service => {
-  const { url, host, port, path, ...rest } = service;
+  if (service.type === "command") {
+    const { command, ...others } = service;
+    const extra = HTTP_ONLY_KEYS.filter((key) => service[key] !== undefined);
+    for (const key of extra) {
+      ctx.issues.push({
+        code: "custom",
+        message: "cannot be set with `type: command`: it runs a command, it sends no request",
+        input: service[key],
+        path: [key],
+      });
+    }
+    if (command === undefined) {
+      ctx.issues.push({
+        code: "custom",
+        message: `\`type: command\` needs a \`command\`: expected ${COMMAND_EXPECTED}`,
+        input: command,
+        path: ["command"],
+      });
+    }
+    if (extra.length > 0 || command === undefined) return z.NEVER;
+    return { ...others, command } as Service;
+  }
+  if (service.command !== undefined) {
+    ctx.issues.push({
+      code: "custom",
+      message: "needs `type: command`: an http service sends a request",
+      input: service.command,
+      path: ["command"],
+    });
+    return z.NEVER;
+  }
+  const { url, host, port, path, command: _, ...rest } = service;
   if (service.method === "HEAD" && service.contains !== undefined) {
     ctx.issues.push({
       code: "custom",

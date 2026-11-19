@@ -75,6 +75,19 @@ describe("the JSON Schema of config.yml", () => {
     }
   });
 
+  it("accepts a command service in both forms and refuses an unknown type", () => {
+    const services = {
+      db: { type: "command", command: ["pg_isready", "-q"], timeout: 5 },
+      cache: { type: "command", command: "redis-cli ping" },
+    };
+
+    expect(validate({ schemaVersion: 1, services })).toBe(true);
+    expect(validate({ schemaVersion: 1, services: { db: { type: "tcp" } } })).toBe(false);
+    expect(validate({ schemaVersion: 1, services: { db: { type: "command", command: [] } } })).toBe(
+      false,
+    );
+  });
+
   it("refuses a misspelled key", () => {
     expect(validate({ schemaVersion: 1, services: { api: { prot: 3000 } } })).toBe(false);
     expect(validate.errors?.[0]).toMatchObject({

@@ -1,4 +1,4 @@
-import { targetOf } from "../checkers/registry";
+import { serviceType, targetOf } from "../checkers/registry";
 import type { CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
 import {
@@ -106,7 +106,9 @@ export async function diagnoseServices(
   const down = new Map<string, Endpoint | undefined>();
   for (const result of results) {
     const service = config.services[result.name];
-    if (!result.ok && service) down.set(result.name, endpointOf(targetOf(service)));
+    // A type with no address has no port to look at: its own reason says all there is.
+    if (!result.ok && service && serviceType(service).open)
+      down.set(result.name, endpointOf(targetOf(service)));
   }
   const local = [...down.values()].filter((endpoint) => endpoint?.local) as Endpoint[];
   const open = new Map<Endpoint, boolean>(

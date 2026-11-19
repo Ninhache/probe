@@ -37,6 +37,8 @@ export interface NativeDashboardOptions extends EditCallbacks {
   environments: readonly EnvironmentSource[];
   settings: DashboardSettings;
   selection?: Selection;
+  /** The project root, where the command services run. */
+  cwd?: string;
   variables?: () => Promise<Variables>;
   /** Services of config.yml set aside by local.yml. */
   skipped?: ReadonlySet<string>;
@@ -70,6 +72,7 @@ export function sourceCheck(
   source: EnvironmentSource,
   live: () => LiveState,
   onLoaded: (env: string, declared: Config) => void,
+  cwd?: string,
 ): EnvironmentCheck {
   return {
     name: source.name,
@@ -87,6 +90,7 @@ export function sourceCheck(
           bodyBytes: RESPONSE_FULL_BODY_BYTES,
           variables: loaded,
           configFile: source.file,
+          cwd,
           selection: now.selection,
         },
         skipped,
@@ -134,6 +138,7 @@ export function environmentChecks(
                 detail: true,
                 bodyBytes: RESPONSE_FULL_BODY_BYTES,
                 variables: await variables?.(),
+                cwd: options.cwd,
                 selection: now.selection,
               },
               now.skipped,
@@ -141,7 +146,10 @@ export function environmentChecks(
           },
         },
       ];
-  return [...local, ...environments.map((source) => sourceCheck(source, live, onLoaded))];
+  return [
+    ...local,
+    ...environments.map((source) => sourceCheck(source, live, onLoaded, options.cwd)),
+  ];
 }
 
 /** A window in focus shows the change itself: only one out of focus, or unknown, is notified. */

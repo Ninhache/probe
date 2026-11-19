@@ -11,6 +11,7 @@ import { loadVariables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
 import { DEFAULT_METHOD, METHODS, type Method, urlProblem } from "../config/schema";
 import {
+  commandValueProblem,
   containsProblem,
   expectProblem,
   hintProblem,
@@ -66,6 +67,46 @@ function addressFrom(args: {
   if (args.host) service.host = args.host;
   if (args.path) service.path = args.path;
   return service;
+}
+
+// What a service that runs a command cannot say: each of these describes a request.
+const HTTP_FLAGS = [
+  "url",
+  "port",
+  "host",
+  "path",
+  "expect",
+  "contains",
+  "method",
+  "header",
+] as const;
+
+/** What follows the first `--`: a command as a list, spawned without a shell. */
+const afterDashes = (rawArgs: string[]): string[] => {
+  const at = rawArgs.indexOf("--");
+  return at === -1 ? [] : rawArgs.slice(at + 1);
+};
+
+type AddArgs = Partial<Record<(typeof HTTP_FLAGS)[number] | "command", unknown>>;
+
+function commandService(args: AddArgs, rawArgs: string[]): RawConfig | undefined {
+  const list = afterDashes(rawArgs);
+  if (args.command === undefined && list.length === 0) return undefined;
+  if (args.command !== undefined && list.length > 0) {
+    throw new ProbeError("USAGE", "give the command once: --command '<string>', or after --.");
+  }
+  const clash = HTTP_FLAGS.filter((flag) => args[flag] !== undefined);
+  if (clash.length > 0) {
+    const flags = clash.map((flag) => `--${flag}`).join(", ");
+    throw new ProbeError(
+      "USAGE",
+      `--command runs a command, it sends no request: remove ${flags}.`,
+    );
+  }
+  const command = args.command === undefined ? list : String(args.command);
+  const problem = commandValueProblem(command);
+  if (problem) throw new ProbeError("USAGE", `--command ${problem}.`);
+  return { type: "command", command };
 }
 
 const LONG_HEADER = "--header";
@@ -165,6 +206,12 @@ export default defineCommand({
   meta: { name: "add", description: "Add a service" },
   args: {
     name: { type: "positional", description: "Service name", required: true },
+    command: {
+      type: "string",
+      valueHint: "string",
+      description:
+        'Check by running a command: up when it exits 0, e.g. --command "redis-cli ping". Without a shell: probe add db -- pg_isready -q',
+    },
     port: { type: "string", alias: "p", description: "Port" },
     host: { type: "string", description: "Host (default: localhost)" },
     path: { type: "string", description: "Path to request (default: /)" },
@@ -213,7 +260,8 @@ export default defineCommand({
         `service "${args.name}" already exists. Remove it first: probe rm ${args.name}`,
       );
     }
-    const service = addressFrom(args);
+    // The command flags are checked first: a request option beside them is refused there.
+    const service = commandService(args, rawArgs) ?? addressFrom(args);
     if (args.expect) service.expect = parseExpect(String(args.expect));
     if (args.contains !== undefined) {
       const problem = containsProblem(String(args.contains));

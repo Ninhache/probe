@@ -41,7 +41,15 @@ export default defineCommand({
     const results = await runChecks(
       config,
       args._,
-      { timeoutMs, forceTimeout, variables, configFile: configFile(paths), tags, selection },
+      {
+        timeoutMs,
+        forceTimeout,
+        variables,
+        cwd: paths.root,
+        configFile: configFile(paths),
+        tags,
+        selection,
+      },
       skipped,
     );
 

@@ -65,6 +65,7 @@ export default defineCommand({
           timeoutMs,
           forceTimeout,
           variables: await loadVariables(paths),
+          cwd: paths.root,
           configFile: configFile(paths),
           tags,
           selection,

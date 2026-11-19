@@ -1,10 +1,13 @@
 import type { Service } from "../config/schema";
 import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { ProbeError } from "../errors";
+import { commandChecker } from "./command";
 import { httpChecker } from "./http";
 import type { ParameterKind, ServiceType, ServiceTypes } from "./types";
 
-const types = new Map<string, ServiceType>([httpChecker].map((type) => [type.type, type]));
+const types = new Map<string, ServiceType>(
+  [httpChecker, commandChecker].map((type) => [type.type, type]),
+);
 
 /** Every way of sending a parameter that one type at least understands. */
 export const PARAMETER_KINDS: readonly ParameterKind[] = [
@@ -20,9 +23,7 @@ export function getServiceType(type: string): ServiceType {
   return found;
 }
 
-// Schema v1 has no `type` field; a later schema adds it.
-export const typeName = (service: Service): string =>
-  (service as { type?: string }).type ?? DEFAULT_CHECKER_TYPE;
+export const typeName = (service: Service): string => service.type ?? DEFAULT_CHECKER_TYPE;
 
 export const serviceType: ServiceTypes = (service) => getServiceType(typeName(service));
 
