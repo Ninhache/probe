@@ -31,6 +31,8 @@ export interface Platform {
   localFileHost(): string | undefined;
   /** Whether `ss` can stand in for a missing `lsof`. */
   readonly hasSs: boolean;
+  /** Whether `netstat` and `tasklist` name the owner of a port, where there is no lsof. */
+  readonly hasNetstat: boolean;
   /** The real name of the executable of a process, where lsof and ss only give a thread name. */
   executableName(pid: number): Promise<string | undefined>;
 }

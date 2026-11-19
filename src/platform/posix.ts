@@ -54,6 +54,7 @@ function linuxLike(name: NodeJS.Platform): Platform {
     notifier: { name: "notify-send", command: NOTIFY_SEND },
     localFileHost: () => hostname(),
     hasSs: name === "linux",
+    hasNetstat: false,
     executableName: async (pid) => (name === "linux" ? procExecutableName(pid) : undefined),
   };
 }

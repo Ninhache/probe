@@ -61,6 +61,7 @@ export function windowsPlatform(spawn: Spawn = nodeSpawn): Platform {
     // `file://host/C:/x` is read as a share, `file:///C:/x` as the local drive.
     localFileHost: () => undefined,
     hasSs: false,
+    hasNetstat: true,
     executableName: async () => undefined,
   };
 }

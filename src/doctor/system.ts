@@ -12,7 +12,8 @@ export type RunCommand = (command: string, args: string[]) => Promise<CommandRes
 
 export const runCommand: RunCommand = (command, args) =>
   new Promise((resolve) => {
-    execFile(command, args, { timeout: DOCTOR_COMMAND_TIMEOUT_MS }, (error, stdout) => {
+    const options = { timeout: DOCTOR_COMMAND_TIMEOUT_MS, windowsHide: true };
+    execFile(command, args, options, (error, stdout) => {
       if (!error) return resolve({ state: "done", code: 0, stdout });
       const { code } = error as { code?: unknown };
       if (code === "ENOENT") return resolve({ state: "missing" });
@@ -80,6 +81,52 @@ export function parseSs(output: string): Map<number, ProcessInfo> {
   return owners;
 }
 
+const NETSTAT_ARGS = ["-ano"];
+const TASKLIST_ARGS = ["/FO", "CSV", "/NH"];
+const NETSTAT_TCP_COLUMNS = 5;
+const NO_PROCESS_NAME = "unknown process";
+
+/**
+ * Reads `netstat -ano`. The state word is translated on some Windows languages, so a listener is
+ * told by its remote port, which is 0 for a socket that waits: TCP rows are `proto local remote state pid`.
+ */
+export function parseNetstat(output: string): Map<number, number> {
+  const listeners = new Map<number, number>();
+  for (const line of output.split("\n")) {
+    const columns = line.trim().split(/\s+/);
+    if (columns.length !== NETSTAT_TCP_COLUMNS || columns[0]?.toUpperCase() !== "TCP") continue;
+    const port = portOf(columns[1] ?? "");
+    const pid = Number(columns[4]);
+    if (portOf(columns[2] ?? "") !== undefined || !Number.isInteger(pid)) continue;
+    if (port !== undefined && !listeners.has(port)) listeners.set(port, pid);
+  }
+  return listeners;
+}
+
+/** Reads `tasklist /FO CSV /NH`: only the image name and the pid, the first two fields, are kept. */
+export function parseTasklist(output: string): Map<number, string> {
+  const names = new Map<number, string>();
+  for (const line of output.split("\n")) {
+    const found = /^"([^"]+)","(\d+)"/.exec(line.trim());
+    if (found) names.set(Number(found[2]), (found[1] as string).replace(/\.exe$/i, ""));
+  }
+  return names;
+}
+
+async function windowsOwners(run: RunCommand): Promise<OwnerLookup> {
+  const netstat = await run("netstat", NETSTAT_ARGS);
+  if (netstat.state !== "done" || netstat.code !== 0)
+    return { state: "skipped", reason: "netstat did not answer" };
+  const listeners = parseNetstat(netstat.stdout);
+  const owners = new Map<number, ProcessInfo>();
+  if (listeners.size === 0) return { state: "done", owners };
+  const tasklist = await run("tasklist", TASKLIST_ARGS);
+  const names = tasklist.state === "done" ? parseTasklist(tasklist.stdout) : new Map();
+  for (const [port, pid] of listeners)
+    owners.set(port, { name: names.get(pid) ?? NO_PROCESS_NAME, pid });
+  return { state: "done", owners };
+}
+
 export type OwnerLookup =
   | { state: "done"; owners: Map<number, ProcessInfo> }
   | { state: "skipped"; reason: string };
@@ -89,6 +136,7 @@ const LSOF_ARGS = ["-nP", "+c", "0", "-iTCP", "-sTCP:LISTEN", "-Fpcn"];
 const SS_ARGS = ["-H", "-ltnp"];
 
 export async function listenerOwners(run: RunCommand, platform: Platform): Promise<OwnerLookup> {
+  if (platform.hasNetstat) return windowsOwners(run);
   const lsof = await run("lsof", LSOF_ARGS);
   // lsof exits 1 when no socket matches: what it printed is read whatever the code.
   if (lsof.state === "done") return { state: "done", owners: parseLsof(lsof.stdout) };
