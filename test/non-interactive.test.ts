@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { makeEnv, tempDir } from "./helpers";
+import { inheritedEnv, makeEnv, tempDir } from "./helpers";
 
 // The interactive layer adds to the CLI, it replaces nothing: these tests freeze what scripts,
 // CI and the Makefile get, and keep the interactive libraries off that path.
@@ -34,7 +34,7 @@ function node(args: string[], cwd: string, env: NodeJS.ProcessEnv = {}): Promise
     execFile(
       process.execPath,
       args,
-      { cwd, env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", ...makeEnv(true), ...env } },
+      { cwd, env: { ...inheritedEnv(), PROBE_NO_UPDATE_CHECK: "1", ...makeEnv(true), ...env } },
       (error, stdout, stderr) => {
         const code = error ? ((error as { code?: number }).code ?? 1) : 0;
         done({ code: typeof code === "number" ? code : 1, stdout, stderr });

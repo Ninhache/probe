@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { currentPlatform } from "../src/platform";
-import { makeEnv, tempDir } from "./helpers";
+import { inheritedEnv, makeEnv, tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const ANSI = "\u001b[";
@@ -31,7 +31,7 @@ function exec(
     execFile(
       file,
       args,
-      { cwd, timeout, env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", ...env } },
+      { cwd, timeout, env: { ...inheritedEnv(), PROBE_NO_UPDATE_CHECK: "1", ...env } },
       (error, stdout, stderr) => {
         const code = error ? ((error as { code?: number }).code ?? 1) : 0;
         if (error?.killed) return done({ code: KILLED, stdout, stderr });

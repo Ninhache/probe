@@ -57,3 +57,27 @@ export function makeEnv(installed: boolean): NodeJS.ProcessEnv {
     PATHEXT: process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD",
   };
 }
+
+/** What a spawned probe inherits: the variables a process needs to run, not the whole environment of the test run. */
+const INHERITED = [
+  "PATH",
+  "PATHEXT",
+  "HOME",
+  "XDG_CACHE_HOME",
+  "USERPROFILE",
+  "LOCALAPPDATA",
+  "APPDATA",
+  "SYSTEMROOT",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+];
+
+export function inheritedEnv(): NodeJS.ProcessEnv {
+  const wanted = new Set(INHERITED);
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => wanted.has(name.toUpperCase())),
+  );
+}
