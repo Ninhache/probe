@@ -140,7 +140,7 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
   list({
     keys: "y",
     action: "copy lines",
-    help: "Copy the log lines on screen",
+    help: "Copy visible log lines",
     barless: true,
     command: "copylog",
   }),
@@ -508,14 +508,30 @@ export interface HelpLine {
   id: string;
   text: string;
   heading: boolean;
+  /** How many leading characters of `text` are the indent and the keys: the rest is the description. */
+  keysEnd?: number;
 }
+
+/** Which keys the help lists: those of a screen, the others, or all of them. */
+export type HelpPart = "current" | "rest" | "all";
 
 const HELP_GAP = 3;
 const LEFT_SECTIONS = 2;
+const INDENT = "  ";
 
-function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
-  const described = offered(grid).filter(({ help }) => help !== undefined);
-  const width = Math.max(...described.map((binding) => written(binding, unicode).length));
+const inPart = (binding: Binding, screen: Screen | undefined, part: HelpPart) => {
+  if (part === "all" || screen === undefined) return true;
+  return binding.screens.includes(screen) === (part === "current");
+};
+
+function sectionLines(
+  sections: readonly Section[],
+  unicode: boolean,
+  grid: boolean,
+  keep: (binding: Binding) => boolean = () => true,
+): HelpLine[] {
+  const described = offered(grid).filter((binding) => binding.help !== undefined && keep(binding));
+  const width = Math.max(0, ...described.map((binding) => written(binding, unicode).length));
   const present = sections.filter((title) => described.some(({ section }) => section === title));
   return present.flatMap((title) => [
     { id: title, text: title, heading: true },
@@ -523,8 +539,9 @@ function sectionLines(sections: readonly Section[], unicode: boolean, grid: bool
       .filter(({ section }) => section === title)
       .map((binding) => ({
         id: `${title} ${binding.screens.join("+")} ${binding.keys}`,
-        text: `  ${written(binding, unicode).padEnd(width)}  ${binding.help}`,
+        text: `${INDENT}${written(binding, unicode).padEnd(width)}  ${binding.help}`,
         heading: false,
+        keysEnd: INDENT.length + width,
       })),
   ]);
 }
@@ -533,15 +550,41 @@ export function helpLines(unicode: boolean, grid = false): HelpLine[] {
   return sectionLines(SECTIONS, unicode, grid);
 }
 
-export function helpColumns(unicode: boolean, columns: number, grid = false): HelpLine[][] {
+/**
+ * The help in columns that fit `columns`, or in one when they do not.
+ * `part` narrows it to the keys of `screen` or to all the others.
+ */
+export function helpColumns(
+  unicode: boolean,
+  columns: number,
+  grid = false,
+  screen?: Screen,
+  part: HelpPart = "all",
+): HelpLine[][] {
+  const keep = (binding: Binding) => inPart(binding, screen, part);
+  const stacked = sectionLines(SECTIONS, unicode, grid, keep);
   // The list and the parameters it opens on the left: both columns then fit 24 lines.
-  const sides = [
-    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid),
-    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid),
-  ];
-  const widths = sides.map((side) => Math.max(...side.map(({ text }) => text.length)));
+  const sides =
+    part === "current"
+      ? balanced(stacked)
+      : [
+          sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid, keep),
+          sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid, keep),
+        ];
+  const widths = sides.map((side) => Math.max(0, ...side.map(({ text }) => text.length)));
   const fits = (widths[0] as number) + HELP_GAP + (widths[1] as number) <= columns;
-  return fits ? sides : [helpLines(unicode, grid)];
+  return fits && sides.every((side) => side.length > 0) ? sides : [stacked];
+}
+
+/** Whole sections split in two columns, as even as the sections allow. */
+function balanced(lines: HelpLine[]): HelpLine[][] {
+  const starts = lines.flatMap(({ heading }, i) => (heading && i > 0 ? [i] : []));
+  const cut = starts.reduce(
+    (best, at) =>
+      Math.max(at, lines.length - at) < Math.max(best, lines.length - best) ? at : best,
+    lines.length,
+  );
+  return [lines.slice(0, cut), lines.slice(cut)];
 }
 
 export { HELP_GAP };

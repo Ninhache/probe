@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { helpColumns } from "../src/dashboard/keymap";
 import { helpModal, searchRows } from "../src/dashboard/native/help";
 import { parseInput } from "../src/tui/input";
 import { Screen } from "../src/tui/screen";
@@ -7,8 +8,8 @@ const W = 120;
 const H = 40;
 const AREA = { x: 0, y: 0, w: W, h: H };
 
-function open(area = AREA) {
-  const modal = helpModal(area, false);
+function open(area = AREA, current: Parameters<typeof helpModal>[2] = "list") {
+  const modal = helpModal(area, false, current);
   const screen = () => {
     const out = new Screen(area.w, area.h, "none");
     const w = Math.min(modal.size.w, area.w);
@@ -120,5 +121,70 @@ describe("the help search", () => {
 
   it("should not let a typing modal be quit from", () => {
     expect(open().modal.typing).toBe(true);
+  });
+});
+
+describe("the help by screen", () => {
+  const TAB = "\t";
+
+  it("should put the keys of the current screen first, with the rest folded", () => {
+    const { screen } = open(AREA, "response");
+
+    const frame = screen();
+    expect(frame).toContain("Copy the response");
+    expect(frame).toContain("all keys (Tab)");
+    expect(frame).not.toContain("Filter by name");
+    expect(frame.indexOf("Copy the response")).toBeLessThan(frame.indexOf("all keys (Tab)"));
+  });
+
+  it("should show the list keys on the list, and not the ones of the response", () => {
+    const frame = open(AREA, "list").screen();
+
+    expect(frame).toContain("Filter by name");
+    expect(frame).not.toContain("Copy the response\n");
+    expect(frame).not.toContain("Back to the detail");
+  });
+
+  it("should unfold every other key under the rule on Tab, and fold them back on a second Tab", () => {
+    const { screen, press } = open(AREA, "response");
+
+    press(TAB);
+
+    const frame = screen();
+    expect(frame).toContain("Filter by name");
+    expect(frame.indexOf("all keys (Tab)")).toBeLessThan(frame.indexOf("Filter by name"));
+    press(TAB);
+    expect(screen()).not.toContain("Filter by name");
+  });
+
+  it("should search the keys of every screen while they are folded", () => {
+    const { screen, press } = open(AREA, "response");
+
+    press("filter by");
+
+    expect(screen()).toContain("Filter by name");
+    expect(screen()).not.toContain("all keys (Tab)");
+  });
+
+  it("should not type a tab into the query, nor unfold while searching", () => {
+    const { screen, press } = open(AREA, "response");
+    press("scroll");
+
+    press(TAB);
+
+    expect(screen()).toContain("search: scroll");
+    expect(screen()).not.toContain("Filter by name");
+  });
+
+  it("should list a key in the current keys or in the rest, never in both", () => {
+    const ids = (part: "current" | "rest") =>
+      helpColumns(true, 200, false, "detail", part)
+        .flat()
+        .filter(({ heading }) => !heading)
+        .map(({ id }) => id);
+
+    const current = ids("current");
+    expect(current.length).toBeGreaterThan(0);
+    expect(ids("rest").filter((id) => current.includes(id))).toEqual([]);
   });
 });

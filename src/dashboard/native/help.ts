@@ -9,6 +9,7 @@ import { strWidth } from "../../tui/width";
 import {
   HELP_GAP,
   type HelpLine,
+  type HelpPart,
   helpBarItems,
   helpColumns,
   helpLines,
@@ -52,25 +53,47 @@ interface HelpCell {
   text: string;
   heading: boolean;
   x: number;
+  /** Where the keys end in `text`: the rest is the description. */
+  keysEnd?: number;
+  /** The rule between the keys of the screen and all the others. */
+  divider?: boolean;
 }
 
-/** The help sections side by side when they fit, stacked otherwise: one list of cells per row. */
-export function helpRows(width: number, grid: boolean): { cells: HelpCell[]; width: number }[] {
-  const columns = helpColumns(UNICODE, width, grid);
+type HelpRow = { cells: HelpCell[]; width: number };
+
+const DIVIDER = "── all keys (Tab) ──";
+
+/** The lines of each column as rows: one list of cells per row. */
+function rowsOf(columns: HelpLine[][]): HelpRow[] {
   const starts: number[] = [];
   let x = 0;
   for (const column of columns) {
     starts.push(x);
     x += Math.max(0, ...column.map(({ text }) => strWidth(text))) + HELP_GAP;
   }
-  const count = Math.max(...columns.map((column) => column.length));
+  const count = Math.max(0, ...columns.map((column) => column.length));
   return Array.from({ length: count }, (_, i) => ({
     cells: columns.flatMap((column, c) => {
       const line = column[i];
-      return line ? [{ text: line.text, heading: line.heading, x: starts[c] ?? 0 }] : [];
+      return line
+        ? [{ text: line.text, heading: line.heading, x: starts[c] ?? 0, keysEnd: line.keysEnd }]
+        : [];
     }),
     width: x - HELP_GAP,
   }));
+}
+
+/**
+ * The help sections side by side when they fit, stacked otherwise.
+ * `part` keeps the keys of `screen`, or the others.
+ */
+export function helpRows(
+  width: number,
+  grid: boolean,
+  screen?: KeymapScreen,
+  part: HelpPart = "all",
+): HelpRow[] {
+  return rowsOf(helpColumns(UNICODE, width, grid, screen, part));
 }
 
 const PROMPT = "search: ";
@@ -83,7 +106,7 @@ const matches = (texts: readonly (string | undefined)[], wanted: string) =>
  * The lines that match `query`, under the headings of their sections, in one column.
  * Both writings of the keys count: `↵` and `enter` find the same line.
  */
-export function searchRows(query: string, grid: boolean): { cells: HelpCell[]; width: number }[] {
+export function searchRows(query: string, grid: boolean): HelpRow[] {
   const wanted = query.trim().toLowerCase();
   const ascii = new Map(helpLines(false, grid).map(({ id, text }) => [id, text]));
   const kept: HelpLine[] = [];
@@ -96,24 +119,36 @@ export function searchRows(query: string, grid: boolean): { cells: HelpCell[]; w
       kept.push(line);
     }
   }
-  return kept.map(({ text, heading: isHeading }) => ({
-    cells: [{ text, heading: isHeading, x: 0 }],
+  return kept.map(({ text, heading: isHeading, keysEnd }) => ({
+    cells: [{ text, heading: isHeading, x: 0, keysEnd }],
     width: strWidth(text),
   }));
 }
 
 /**
- * The help overlay: every binding by section, scrollable when the terminal is short.
- * Typing narrows it to the lines that match; the letters are the query, `q` included.
+ * The help overlay: the keys of `screen` first, all the others under a rule that Tab opens.
+ * Typing narrows every key, whatever the screen, to the lines that match; the letters are the
+ * query, `q` included.
  */
-export function helpModal(area: Rect, grid: boolean): Modal {
+export function helpModal(area: Rect, grid: boolean, screen: KeymapScreen = "list"): Modal {
   const maxWidth = Math.max(10, area.w - MODAL_MARGIN * 2);
-  const everything = helpRows(maxWidth - 2 * PADDING, grid);
-  const wanted = Math.max(...everything.map(({ width }) => width)) + 2 * PADDING;
+  const inside = maxWidth - 2 * PADDING;
+  const current = helpRows(inside, grid, screen, "current");
+  const rest = helpRows(inside, grid, screen, "rest");
+  const divider: HelpRow = {
+    cells: [{ text: DIVIDER, heading: false, x: 0, divider: true }],
+    width: strWidth(DIVIDER),
+  };
+  const folded = [...current, divider];
+  const unfolded = [...folded, ...rest];
+  const wanted = Math.max(...unfolded.map(({ width }) => width)) + 2 * PADDING;
+  // A screen with no line of its own has nothing to put first.
+  let expanded = current.length === 0;
+  const everything = () => (expanded ? unfolded : folded);
   let query = textField();
   let top = 0;
   const lines = () =>
-    fieldValue(query).trim() === "" ? everything : searchRows(fieldValue(query), grid);
+    fieldValue(query).trim() === "" ? everything() : searchRows(fieldValue(query), grid);
   // The first row of the box is the query: the lines scroll below it.
   const room = (inner: Rect) => Math.max(1, inner.h - 1);
   const clamp = (inner: Rect) => Math.max(0, Math.min(top, lines().length - room(inner)));
@@ -133,7 +168,9 @@ export function helpModal(area: Rect, grid: boolean): Modal {
     },
     // Letters are typed: `q` is part of the query, it does not quit.
     typing: true,
-    size: { w: Math.min(wanted, maxWidth), h: everything.length + 3 },
+    get size() {
+      return { w: Math.min(wanted, maxWidth), h: everything().length + 3 };
+    },
     draw(screen, inner) {
       const prompt = screen.text(inner.x + PADDING, inner.y, PROMPT, { fg: t.accent, bold: true });
       query = drawField(
@@ -155,8 +192,21 @@ export function helpModal(area: Rect, grid: boolean): Modal {
       }
       for (let i = 0; i < room(inner); i++) {
         for (const cell of shown[top + i]?.cells ?? []) {
-          const style = cell.heading ? { fg: t.accent, bold: true } : { fg: t.fg };
-          screen.text(inner.x + PADDING + cell.x, inner.y + 1 + i, cell.text, style, inner.w);
+          const x = inner.x + PADDING + cell.x;
+          const y = inner.y + 1 + i;
+          if (cell.heading) screen.text(x, y, cell.text, { fg: t.accent, bold: true }, inner.w);
+          else if (cell.keysEnd === undefined)
+            screen.text(x, y, cell.text, { fg: t.muted }, inner.w);
+          else {
+            const keys = screen.text(
+              x,
+              y,
+              cell.text.slice(0, cell.keysEnd),
+              { fg: t.accent },
+              inner.w,
+            );
+            screen.text(x + keys, y, cell.text.slice(cell.keysEnd), { fg: t.muted }, inner.w);
+          }
         }
       }
     },
@@ -173,6 +223,13 @@ export function helpModal(area: Rect, grid: boolean): Modal {
         return true;
       }
       if (event.name === "?") return "close";
+      if (event.name === "tab") {
+        if (fieldValue(query) === "") {
+          expanded = !expanded;
+          top = 0;
+        }
+        return true;
+      }
       const delta = keyDelta(event.name, Math.max(1, room(inner) - 1));
       if (delta !== undefined) {
         top = clamp(inner) + delta;
