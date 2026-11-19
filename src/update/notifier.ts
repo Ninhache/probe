@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PACKAGE_NAME,
@@ -74,6 +74,8 @@ export function scheduleRefresh(dir: string, cliPath: string, now: number = Date
     spawn(process.execPath, [cliPath, REFRESH_COMMAND], {
       detached: true,
       stdio: "ignore",
+      // On Windows a running process locks its working directory: not the project of the user.
+      cwd: tmpdir(),
     }).unref();
     return true;
   } catch {
