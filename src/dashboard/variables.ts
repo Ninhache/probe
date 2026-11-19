@@ -7,12 +7,16 @@ export interface VariableRow {
   source?: VariableSource;
 }
 
+/** `env` looks the values up for that environment alone: none falls back on another's. */
 export type VariableSources = (
   names: readonly string[],
+  env?: string,
 ) => Promise<Readonly<Record<string, VariableSource | undefined>>>;
 
 export interface VariableTools {
   serviceVariables: (service: string) => Promise<VariableRow[]>;
+  /** Every variable the headers of any service send, once each, in the order they appear. */
+  allVariables: () => Promise<VariableRow[]>;
   variableProblem: (name: string, service: string) => Promise<string | undefined>;
   variableName: (service: string, header: string, taken: readonly string[]) => Promise<string>;
 }
@@ -30,7 +34,10 @@ export function proposedVariable(service: string, header: string): string {
 }
 
 // Only names and where they are set come through here: a value never reaches the screen.
-export function variableTools(config: () => Config, sources: VariableSources): VariableTools {
+export function variableTools(
+  config: () => Config,
+  sources: (names: readonly string[]) => ReturnType<VariableSources>,
+): VariableTools {
   const sentBy = (service: string) => serviceVariables(config().services[service]?.headers);
   const variableProblem: VariableTools["variableProblem"] = async (name, service) => {
     if (!VARIABLE_NAME.test(name)) return "Letters, digits and _ only, e.g. API_TOKEN";
@@ -46,12 +53,14 @@ export function variableTools(config: () => Config, sources: VariableSources): V
       return `${name} is already set: ${instead}`;
     return undefined;
   };
+  const rowsOf = async (names: readonly string[]) => {
+    const found = await sources(names);
+    return names.map((name) => ({ name, source: found[name] }));
+  };
   return {
-    async serviceVariables(service) {
-      const names = sentBy(service);
-      const found = await sources(names);
-      return names.map((name) => ({ name, source: found[name] }));
-    },
+    serviceVariables: (service) => rowsOf(sentBy(service)),
+    allVariables: () =>
+      rowsOf([...new Set(Object.keys(config().services).flatMap((service) => sentBy(service)))]),
     variableProblem,
     async variableName(service, header, taken) {
       const base = proposedVariable(service, header);

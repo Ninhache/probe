@@ -13,18 +13,12 @@ import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
 import doctor from "./commands/doctor";
 import environment from "./commands/env";
-import { createEnvironment, environmentFile } from "./commands/env-create";
-import init, { ignoreLocalFiles, initProject } from "./commands/init";
+import { createEnvironment, EMPTY_ENVIRONMENT, environmentFile } from "./commands/env-create";
+import init, { initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
 import open from "./commands/open";
-import {
-  type ParameterWrite,
-  type ParameterWritten,
-  writeParameter,
-} from "./commands/parameter-writes";
 import rm from "./commands/rm";
-import { type ServiceWrite, type ServiceWritten, writeService } from "./commands/service-writes";
 import { noServices, secondsToMs, stdoutTerminal } from "./commands/shared";
 import status from "./commands/status";
 import sync from "./commands/sync";
@@ -36,37 +30,25 @@ import {
   completableTags,
 } from "./completion/services";
 import { COMPLETION_COMMAND } from "./completion/spec";
-import { findProbeDir, type ProbePaths, requireProbeDir } from "./config/discovery";
+import { findProbeDir, requireProbeDir } from "./config/discovery";
 import { listEnvironments } from "./config/environments";
-import { loadConfig, writeServiceTimeout } from "./config/loader";
+import { loadConfig } from "./config/loader";
 import {
-  changedPreferences,
   initialDashboardSettings,
   loadVariables,
   readDashboardPreferences,
   readDashboardSelection,
-  readLocalVariables,
   readSkippedServices,
-  variableSource,
-  writeDashboardPreferences,
-  writeDashboardSelection,
-  writeServiceSkip,
-  writeVariable,
 } from "./config/local";
 import {
   COMPLETE_COMMAND,
-  CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
   EXIT_DOWN,
   EXIT_ERROR,
-  LOCAL_FILE,
   PROBE_DIR,
   REFRESH_COMMAND,
 } from "./constants";
-import type { Secrets } from "./dashboard/editing";
-import { createSaveQueue } from "./dashboard/saves";
-import type { DashboardSettings } from "./dashboard/settings";
-import { createUndoJournal, journalFiles, type UndoOutcome } from "./dashboard/undo";
+import { dashboardWrites } from "./dashboard/writes";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
 import { formatExamples } from "./ui/examples";
@@ -218,114 +200,20 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
       const sends = variables.map(
         (variable) => `It sends ${variable}: probe var ${variable} --env ${name} (or export it).`,
       );
-      const told = `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
+      const told =
+        from === EMPTY_ENVIRONMENT
+          ? `Created ${environmentFile(name)}, with no service.`
+          : `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
       return { source: source(paths, name), message: [told, ...sends].join("\n") };
     },
+    onEnvironmentsList: async () =>
+      (await listEnvironments(paths)).map((name) => source(paths, name)),
     ...writes,
   });
   await saves.idle();
   // The dashboard said so too, but its screen is gone once it closes.
   for (const failure of saves.failures()) console.error(`probe: not saved: ${failure}`);
   return true;
-}
-
-/** What the dashboard writes: every save goes through one queue and one undo journal. */
-function dashboardWrites(paths: ProbePaths, initial: DashboardSettings) {
-  let settings = initial;
-  const saves = createSaveQueue();
-  const local = `${PROBE_DIR}/${LOCAL_FILE}`;
-  const saveLocal = (write: () => Promise<boolean>) =>
-    saves.save(local, write, `${local} cannot be edited safely: fix or delete it`);
-  const configFile = `${PROBE_DIR}/${CONFIG_FILE}`;
-  const journal = createUndoJournal(journalFiles(paths));
-  const revert = async (way: "undo" | "redo") => {
-    const word = way === "undo" ? "undone" : "redone";
-    let outcome = { kind: "empty" } as UndoOutcome;
-    const failure = await saves.save(
-      configFile,
-      async () => {
-        outcome = await journal[way]();
-        return true;
-      },
-      "",
-    );
-    if (failure) return { failure };
-    if (outcome.kind === "empty") return { failure: `Nothing to ${way}` };
-    if (outcome.kind === "changed")
-      return { failure: `${outcome.file} changed since: nothing ${word}` };
-    // Not on stderr: a line printed there would land in the middle of the screen.
-    const { config } = await loadConfig(paths, { log: () => {} });
-    return { config, undone: `${word[0]?.toUpperCase()}${word.slice(1)}: ${outcome.label}` };
-  };
-  const keepVariable = async (name: string, value: string) => {
-    // Before the value is written: the file that holds it must never be committed.
-    await ignoreLocalFiles(paths.root);
-    return writeVariable(paths, name, value);
-  };
-  return {
-    saves,
-    writes: {
-      onParameterChange: (name: string, value: string) =>
-        saveLocal(() => writeDashboardSelection(paths, name, value)),
-      variables: () => loadVariables(paths),
-      variableSources: async (names: readonly string[]) => {
-        const { values } = await readLocalVariables(paths);
-        return Object.fromEntries(
-          names.map((name) => [name, variableSource(name, values, process.env)]),
-        );
-      },
-      onVariableWrite: (name: string, value: string) => saveLocal(() => keepVariable(name, value)),
-      onSettingsChange: (next: DashboardSettings) => {
-        const changed = changedPreferences(settings, next);
-        settings = next;
-        return saveLocal(() => writeDashboardPreferences(paths, changed));
-      },
-      onSkipChange: (name: string, skip: boolean) =>
-        saveLocal(() => writeServiceSkip(paths, name, skip)),
-      onTimeoutChange: (name: string, seconds: number | undefined) =>
-        saves.save(
-          `${PROBE_DIR}/${CONFIG_FILE}`,
-          () =>
-            journal.record(`timeout of ${name}`, () => writeServiceTimeout(paths, name, seconds)),
-          `${name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
-        ),
-      onServiceWrite: async (write: ServiceWrite, secrets: Secrets = {}) => {
-        let written: ServiceWritten | null = null;
-        let failure = await saves.save(
-          `${PROBE_DIR}/${CONFIG_FILE}`,
-          () =>
-            journal.record(`${write.kind} ${write.name}`, async () => {
-              written = await writeService(paths, write);
-              return written !== null;
-            }),
-          write.kind === "add"
-            ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
-            : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
-        );
-        // After the config: a service that was not written leaves no secret behind.
-        for (const [name, value] of written ? Object.entries(secrets) : [])
-          failure = (await saveLocal(() => keepVariable(name, value))) ?? failure;
-        return { failure, ...(written as ServiceWritten | null) };
-      },
-      onParameterWrite: async (write: ParameterWrite) => {
-        let written: ParameterWritten | null = null;
-        const failure = await saves.save(
-          `${PROBE_DIR}/${CONFIG_FILE}`,
-          () =>
-            journal.record(`${write.kind} parameter ${write.name}`, async () => {
-              written = await writeParameter(paths, write);
-              return written !== null;
-            }),
-          write.kind === "add"
-            ? `${write.name} is already in ${PROBE_DIR}/${CONFIG_FILE}`
-            : `${write.name} is no longer in ${PROBE_DIR}/${CONFIG_FILE}`,
-        );
-        return { failure, ...(written as ParameterWritten | null) };
-      },
-      onUndo: () => revert("undo"),
-      onRedo: () => revert("redo"),
-    },
-  };
 }
 
 async function offeredInit(error: unknown, rawArgs: string[]): Promise<boolean> {

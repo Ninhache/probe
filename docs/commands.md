@@ -159,9 +159,10 @@ probe var API_TOKEN      # type its value, hidden
 `probe env` lists the environments. `probe env staging` creates one. See
 [Environments](features/environments.md).
 
-| Option          | Default | Meaning                               |
-| --------------- | ------- | ------------------------------------- |
-| `--from <name>` | local   | Environment whose services are copied |
+| Option          | Default | Meaning                                             |
+| --------------- | ------- | --------------------------------------------------- |
+| `--from <name>` | local   | Environment whose services are copied               |
+| `--empty`       |         | Create it with no service (conflicts with `--from`) |
 
 ## probe status
 

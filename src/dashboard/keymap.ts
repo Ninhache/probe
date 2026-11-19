@@ -2,6 +2,7 @@ export type Screen =
   | "list"
   | "panel"
   | "choose"
+  | "variables"
   | "readonly"
   | "filter"
   | "palette"
@@ -28,9 +29,11 @@ export type Command =
   | "remove"
   | "add"
   | "environment"
+  | "removeEnvironment"
   | "filter"
   | "options"
   | "parameters"
+  | "variables"
   | "undo"
   | "redo"
   | "help"
@@ -141,9 +144,10 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
   peek({ keys: "1", action: "log", drop: 4 }),
   list({
     keys: "n",
-    action: "new environment",
+    action: "new env",
     help: "New environment",
-    barless: true,
+    // First to go: at 80 columns the bar stays what it was.
+    drop: 0,
     command: "environment",
   }),
 ];
@@ -192,6 +196,13 @@ const BINDINGS: readonly Binding[] = [
   list({ keys: "c", action: "copy", help: "Copy curl command", barless: true, command: "copy" }),
   list({ keys: "e", action: "edit", help: "Edit the service", barless: true, command: "edit" }),
   list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
+  list({
+    keys: "D",
+    action: "remove env",
+    help: "Remove the environment",
+    barless: true,
+    command: "removeEnvironment",
+  }),
   list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
   list({ keys: "z", action: "undo", help: "Undo last change", barless: true, command: "undo" }),
   list({ keys: "Z", action: "redo", help: "Redo what z undid", barless: true, command: "redo" }),
@@ -203,6 +214,13 @@ const BINDINGS: readonly Binding[] = [
     drop: 4,
     command: "parameters",
     parameters: true,
+  }),
+  list({
+    keys: "v",
+    action: "variables",
+    help: "Header variables",
+    drop: 0,
+    command: "variables",
   }),
   list({ keys: ":", action: "commands", help: "Find a command", drop: 1 }),
   list({ keys: "o", action: "options", help: "Options", barless: true, command: "options" }),
@@ -291,6 +309,35 @@ const BINDINGS: readonly Binding[] = [
     keys: "p esc",
     action: "close",
     help: "Close",
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "↑↓ jk",
+    ascii: "jk",
+    action: "move",
+    drop: 1,
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "↵",
+    ascii: "enter",
+    action: "set",
+    drop: 2,
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "d",
+    action: "remove",
+    drop: 2,
+  },
+  {
+    screens: ["variables"],
+    section: "Panels",
+    keys: "v esc",
+    action: "close",
   },
   {
     screens: ["filter"],

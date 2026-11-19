@@ -55,6 +55,7 @@ import {
   type ResponseRow,
   responseRows,
 } from "./panels";
+import { variablesPanel } from "./variables-panel";
 
 /** Uptime the services are held to, in percent. Not configurable on purpose. */
 export const SLO_PERCENT = 99;
@@ -123,6 +124,8 @@ export interface ViewState {
   parameterAt?: string;
   /** Services can be added from here: the empty list says how. */
   canAdd?: boolean;
+  /** A new environment can be created from here: the tab bar ends with `+ env`. */
+  canCreateEnvironment?: boolean;
   /** Parameters can be written from here: the bar offers the panel even when none is declared. */
   canEditParameters?: boolean;
   /** Why the last save failed; stays on the header until a save succeeds. */
@@ -176,6 +179,8 @@ export const initialView = (init: ViewInit = {}): ViewState => ({
   area: { x: 0, y: 0, w: 0, h: 0 },
 });
 
+/** The last entry of the tab bar, always there where an environment can be created. */
+const NEW_ENVIRONMENT_TAB = "+ env";
 const tabNames = (tracker: Tracker) => [ALL, ...tracker.environments];
 /** With a single environment, `all` and `local` are the same list: the tabs are hidden and do nothing. */
 const hasEnvTabs = (tracker: Tracker) => tracker.environments.length > 1;
@@ -252,6 +257,12 @@ export function renderDashboard(
       { fg: t.muted },
       (index, at, width) => screen.hits.add(at, header.y, width, "env", "", index),
     );
+  if (view.canCreateEnvironment) {
+    const label = ` ${NEW_ENVIRONMENT_TAB} `;
+    // A key hit, not a tab: it does what `n` does, and lights up under the pointer like the tabs.
+    screen.hits.add(x, header.y, label.length, "key", "n");
+    x += screen.text(x, header.y, label, { fg: t.accent }) + 1;
+  }
   const picked = effectiveSelection(view.choices, view.selection);
   for (const [name, value] of Object.entries(picked)) {
     x += screen.text(x, header.y, `${name}:`, { fg: t.muted }) + 1;
@@ -795,10 +806,9 @@ export function runCommand(
 ): void {
   const service = selectedService(tracker, view);
   const env = service === undefined ? undefined : focusEnv(tracker, view, service);
-  const elsewhere = actions.edit?.elsewhere(activeEnv(tracker, view));
-  const edit = (act: (editor: Editor, name: string) => void) => {
-    if (elsewhere) say(view, elsewhere);
-    else if (actions.edit && service !== undefined) act(actions.edit, service);
+  // On the all tab, `env` is the first environment that has the service: the one its detail shows.
+  const edit = (act: (editor: Editor, name: string, env?: string) => void) => {
+    if (actions.edit && service !== undefined) act(actions.edit, service, env);
   };
   switch (command) {
     case "check":
@@ -826,6 +836,13 @@ export function runCommand(
             ? "No parameter declared"
             : `${PROBE_DIR}/${CONFIG_FILE} declares no parameter`,
         );
+      break;
+    case "variables":
+      if (actions.edit?.variables)
+        view.modals.push(
+          variablesPanel(activeEnv(tracker, view) ?? env ?? LOCAL_ENVIRONMENT, actions),
+        );
+      else say(view, "No variable can be looked up here");
       break;
     case "detail":
       if (service !== undefined && env !== undefined)
@@ -860,22 +877,23 @@ export function runCommand(
         (command === "open" ? actions.open : actions.copy)?.(service, env);
       break;
     case "add":
-      if (elsewhere) say(view, elsewhere);
-      else actions.edit?.add();
+      actions.edit?.add(activeEnv(tracker, view));
       break;
     case "environment":
       actions.edit?.environment?.();
       break;
+    case "removeEnvironment":
+      actions.edit?.removeEnvironment?.(activeEnv(tracker, view));
+      break;
     case "edit":
-      edit((editor, name) => editor.edit(name));
+      edit((editor, name, at) => editor.edit(name, at));
       break;
     case "remove":
-      edit((editor, name) => editor.remove(name));
+      edit((editor, name, at) => editor.remove(name, at));
       break;
     case "undo":
     case "redo":
-      if (elsewhere) say(view, elsewhere);
-      else actions.edit?.[command]();
+      actions.edit?.[command]();
       break;
     default:
       command satisfies never;

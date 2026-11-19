@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { DOUBLE_CLICK_MS } from "../src/constants";
-import { paletteEntries } from "../src/dashboard/keymap";
+import { helpBarItems, paletteEntries } from "../src/dashboard/keymap";
 import { Tracker } from "../src/dashboard/native/history";
 import {
   handleInput,
@@ -37,7 +37,11 @@ const http = (name: string, ok = true): CheckResult => ({
   response: { statusText: "OK", headers: [], body: `body of ${name}` },
 });
 
-function setup(init: Partial<ViewState> = {}, environments = ["local"]) {
+function setup(
+  init: Partial<ViewState> = {},
+  environments = ["local"],
+  more: Partial<ViewActions> = {},
+) {
   const tracker = new Tracker(environments);
   for (const env of environments) {
     tracker.record(env, [http("api"), http("web", false)], 1);
@@ -49,6 +53,7 @@ function setup(init: Partial<ViewState> = {}, environments = ["local"]) {
     refresh: () => calls.push("refresh"),
     open: (service) => calls.push(`open ${service}`),
     parameter: (name, value) => calls.push(`${name}=${value}`),
+    ...more,
   };
   const draw = (ascii = false, mode: "truecolor" | "none" = "truecolor") => {
     const screen = new Screen(W, H, mode);
@@ -459,5 +464,66 @@ describe("the environment tabs", () => {
     tracker.add("prod");
     expect(header(draw())).toMatch(/all\s+local\s+prod/);
     expect(tabHits(view).length).toBe(3);
+  });
+});
+
+describe("the + env tab", () => {
+  const header = (screen: Screen) => screen.toPlainText().split("\n")[0] ?? "";
+  const newTab = (view: ViewState) =>
+    view.hits.toArray().find((h) => h.action === "key" && h.input === "n" && h.y === 0);
+  const creator = (calls: string[]) =>
+    ({
+      edit: { elsewhere: () => undefined, environment: () => calls.push("new environment") },
+    }) as unknown as Partial<ViewActions>;
+
+  it("should be the only entry with a single environment", () => {
+    const { view, draw } = setup({ canCreateEnvironment: true });
+
+    expect(header(draw())).toMatch(/probe\s+\+ env/);
+    expect(header(draw())).not.toMatch(/\ball\b|\blocal\b/);
+    expect(newTab(view)).toBeDefined();
+  });
+
+  it("should end the tab bar with several environments", () => {
+    const { draw } = setup({ canCreateEnvironment: true }, ["local", "prod"]);
+
+    expect(header(draw())).toMatch(/all\s+local\s+prod\s+\+ env/);
+  });
+
+  it("should not be drawn where no environment can be created", () => {
+    const { view, draw } = setup({}, ["local", "prod"]);
+
+    expect(header(draw())).not.toContain("+ env");
+    expect(newTab(view)).toBeUndefined();
+  });
+
+  it("should open the new environment form on a click, as n does", () => {
+    const calls: string[] = [];
+    const { send, view } = setup({ canCreateEnvironment: true }, ["local"], creator(calls));
+    const at = newTab(view);
+
+    send(click((at?.x ?? 0) + 1, 0));
+    send(key("n"));
+
+    expect(calls).toEqual(["new environment", "new environment"]);
+  });
+
+  it("should light up under the pointer like the other tabs", () => {
+    const { send, view } = setup({ canCreateEnvironment: true }, ["local", "prod"]);
+    const at = newTab(view);
+
+    send(click((at?.x ?? 0) + 1, 0, "move"));
+
+    expect(view.hover?.input).toBe("n");
+  });
+
+  it("should show n new env in the footer bar, and give it up before the service key", () => {
+    const wide = setup().draw().toPlainText().split("\n").at(-1) ?? "";
+    expect(wide).toContain("n new env");
+    const bar = (columns: number) =>
+      helpBarItems("list", true, columns).map(({ action }) => action);
+    expect(bar(200)).toContain("new env");
+    expect(bar(30)).not.toContain("new env");
+    expect(bar(30)).toContain("service");
   });
 });

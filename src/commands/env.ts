@@ -4,7 +4,7 @@ import { environmentPaths, listEnvironments } from "../config/environments";
 import { LOCAL_ENVIRONMENT } from "../constants";
 import { ProbeError } from "../errors";
 import { linkFile } from "../ui/links";
-import { createEnvironment, environmentFile } from "./env-create";
+import { createEnvironment, EMPTY_ENVIRONMENT, environmentFile } from "./env-create";
 import { stdoutTerminal } from "./shared";
 
 export default defineCommand({
@@ -19,14 +19,18 @@ export default defineCommand({
       valueHint: "name",
       description: `Environment whose services are copied (default: ${LOCAL_ENVIRONMENT})`,
     },
+    empty: {
+      type: "boolean",
+      description: "Create it with no service, instead of copying one (conflicts with --from)",
+    },
   },
   async run({ args }) {
     const { name } = args;
     if (name === undefined) {
-      if (args.from !== undefined) {
+      if (args.from !== undefined || args.empty) {
         throw new ProbeError(
           "USAGE",
-          "--from expects the name to create: probe env prod --from dev",
+          "--from and --empty expect the name to create: probe env prod --from dev",
         );
       }
       const paths = requireProbeDir(process.cwd());
@@ -42,8 +46,19 @@ export default defineCommand({
       }
       return;
     }
+    if (args.empty && args.from !== undefined)
+      throw new ProbeError(
+        "USAGE",
+        "--empty and --from conflict: an empty environment copies nothing",
+      );
     const from = args.from ?? LOCAL_ENVIRONMENT;
     const paths = requireProbeDir(process.cwd());
+    if (args.empty) {
+      await createEnvironment(paths, name, EMPTY_ENVIRONMENT);
+      console.log(`Created ${environmentFile(name)}, with no service.`);
+      console.log(`Add services there, then: probe check --env ${name}`);
+      return;
+    }
     const { variables } = await createEnvironment(paths, name, from);
     console.log(`Created ${environmentFile(name)} from ${environmentFile(from)}.`);
     console.log(`Change the addresses there, then: probe check --env ${name}`);

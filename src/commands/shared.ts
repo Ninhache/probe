@@ -141,6 +141,9 @@ export async function writeServices(
   loaded: LoadedConfig,
   services: Record<string, RawConfig>,
 ): Promise<{ saved: LoadedConfig; warning?: string }> {
+  // The Makefile block and the lock come from the services of config.yml only.
+  if (loaded.paths.environment !== undefined)
+    return { saved: await saveConfig(loaded, { ...loaded.raw, services }) };
   const block = await blockState(loaded.paths, loaded.config);
   const saved = await saveConfig(loaded, { ...loaded.raw, services });
   if (block === "missing") return { saved };

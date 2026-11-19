@@ -147,6 +147,39 @@ describe("createUndoJournal", () => {
     expect(await readFile(lock.path, "utf8")).toBe("l1\n");
   });
 
+  it("should restore a file the write deleted, and delete it again on redo", async () => {
+    const env = { path: join(dir, "prod.yml"), label: ".probe/envs/prod.yml" };
+    await writeFile(env.path, "services: {}\n");
+    const journal = createUndoJournal([config]);
+
+    await journal.record("remove environment prod", async () => {
+      await rm(env.path);
+      return true;
+    }, [env]);
+    await expect(readFile(env.path, "utf8")).rejects.toThrow();
+
+    expect(await journal.undo()).toEqual({ kind: "undone", label: "remove environment prod" });
+    expect(await readFile(env.path, "utf8")).toBe("services: {}\n");
+    expect(await readFile(config.path, "utf8")).toBe("v1\n");
+
+    await journal.redo();
+    await expect(readFile(env.path, "utf8")).rejects.toThrow();
+  });
+
+  it("should refuse to undo a deletion when the file was written back since", async () => {
+    const env = { path: join(dir, "prod.yml"), label: ".probe/envs/prod.yml" };
+    await writeFile(env.path, "a\n");
+    const journal = createUndoJournal([config]);
+    await journal.record("remove environment prod", async () => {
+      await rm(env.path);
+      return true;
+    }, [env]);
+    await writeFile(env.path, "other\n");
+
+    expect(await journal.undo()).toEqual({ kind: "changed", file: ".probe/envs/prod.yml" });
+    expect(await readFile(env.path, "utf8")).toBe("other\n");
+  });
+
   it("should forget the oldest write past its limit", async () => {
     const journal = createUndoJournal([config], 2);
     for (const text of ["v2\n", "v3\n", "v4\n"]) await journal.record(text, write(config, text));
@@ -165,5 +198,19 @@ describe("createUndoJournal", () => {
 
     expect(kept).toContain(paths.config);
     expect(kept).not.toContain(paths.local);
+  });
+
+  it("should keep only the environment file for a write to an environment", async () => {
+    const paths = await tempProject("schemaVersion: 1\nservices: {}\n");
+
+    const files = journalFiles({
+      ...paths,
+      environment: "prod",
+      config: join(paths.dir, "envs", "prod.yml"),
+    });
+
+    expect(files).toEqual([
+      { path: join(paths.dir, "envs", "prod.yml"), label: ".probe/envs/prod.yml" },
+    ]);
   });
 });

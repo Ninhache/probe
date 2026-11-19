@@ -56,32 +56,34 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 
 ## Keys
 
-| Key             | What it does                                   |
-| --------------- | ---------------------------------------------- |
-| `↑` `↓` `j` `k` | Move                                           |
-| `←` `→` `h` `l` | Change environment                             |
-| `r`             | Check now                                      |
-| `Enter`         | Open the detail of the selected service        |
-| `1` `2`         | Log tab, response tab                          |
-| `PgUp` `PgDn`   | Scroll the log or the response tab             |
-| `End`           | Follow the newest line of the log tab          |
-| `f`             | Log tab: only the changes of state, or all     |
-| `y`             | Copy the lines on screen of the log tab        |
-| `u`             | Open its URL in the browser                    |
-| `c`             | Copy its curl command                          |
-| `b`             | Copy the body of its last response             |
-| `/`             | Filter by name; `Enter` keeps it, `Esc` clears |
-| `p`             | Choose, add or edit [parameters](#parameters)  |
-| `a`             | Add a service                                  |
-| `e`             | Edit the selected service                      |
-| `d`             | Remove the selected service, after a question  |
-| `n`             | Create an [environment](#several-environments) |
-| `z`             | Undo the last change to `config.yml`           |
-| `Z`             | Redo what `z` undid                            |
-| `:`             | Find a command by what it does; `Enter` runs   |
-| `o`             | Options: interval, timeout and notifications   |
-| `?`             | Every key; type to search; `?` or `Esc` closes |
-| `q`             | Quit                                           |
+| Key             | What it does                                      |
+| --------------- | ------------------------------------------------- |
+| `↑` `↓` `j` `k` | Move                                              |
+| `←` `→` `h` `l` | Change environment                                |
+| `r`             | Check now                                         |
+| `Enter`         | Open the detail of the selected service           |
+| `1` `2`         | Log tab, response tab                             |
+| `PgUp` `PgDn`   | Scroll the log or the response tab                |
+| `End`           | Follow the newest line of the log tab             |
+| `f`             | Log tab: only the changes of state, or all        |
+| `y`             | Copy the lines on screen of the log tab           |
+| `u`             | Open its URL in the browser                       |
+| `c`             | Copy its curl command                             |
+| `b`             | Copy the body of its last response                |
+| `/`             | Filter by name; `Enter` keeps it, `Esc` clears    |
+| `p`             | Choose, add or edit [parameters](#parameters)     |
+| `v`             | List the [variables](#variables) the headers send |
+| `a`             | Add a service                                     |
+| `e`             | Edit the selected service                         |
+| `d`             | Remove the selected service, after a question     |
+| `n`             | Create an [environment](#several-environments)    |
+| `D`             | Remove the environment of the open tab            |
+| `z`             | Undo the last change to `config.yml`              |
+| `Z`             | Redo what `z` undid                               |
+| `:`             | Find a command by what it does; `Enter` runs      |
+| `o`             | Options: interval, timeout and notifications      |
+| `?`             | Every key; type to search; `?` or `Esc` closes    |
+| `q`             | Quit                                              |
 
 The bar at the bottom shows the keys you need first. While you type (filter, form, command palette), `q` and
 `?` are letters.
@@ -110,9 +112,9 @@ hand.
 
 - A field left empty takes its default. A header left empty is removed.
 - `d` asks first: only `y` removes.
-- `z` undoes the last write to `config.yml` made here (add, edit, remove, a timeout, a parameter), then the one
-  before. It puts back `config.yml`, `lock.yml` and the Makefile as they were, and does nothing if one of them
-  changed since. Kept in memory only, until you quit. `local.yml` is never undone: options, skips, the chosen
+- `z` undoes the last write to `config.yml` or to an environment file made here (add, edit, remove, a timeout,
+  a parameter), then the one before. It puts back the files that write changed (`config.yml`, `lock.yml` and
+  the Makefile, or the environment file) as they were, and does nothing if one of them changed since. Kept in memory only, until you quit. `local.yml` is never undone: options, skips, the chosen
   values and a variable kept for a header stay as they are.
 - `Z` (Shift+Z) writes again what `z` undid, last undone first, with the same check. A new change forgets it.
 - All three write `.probe/config.yml` as `probe add` and `probe rm` do: your comments are kept, and the
@@ -165,6 +167,22 @@ Under it, the panel has:
 - skip: leave the service out on this machine;
 - the variables its headers use, and where each is set. `Enter` on one asks for its value, hidden, and keeps
   it in `.probe/local.yml`, as `probe var` does. A variable set in the environment is not changed there.
+  On an environment tab, or on the column of that environment on the `all` tab, the panel has the variables
+  alone: the value is kept under `envs.<name>.variables`, and "where it is set" reads that environment only.
+
+## Variables
+
+`v` lists every variable the headers of the services of the shown environment send (`${NAME}`), once each, and
+where it is set there: in the environment of the process, in `.probe/local.yml`, or not set. A value is never
+shown, not even a part of it.
+
+- `↑` `↓` choose a variable. `Enter` asks for its value, hidden, and keeps it in `.probe/local.yml`.
+- `d` removes the value from `.probe/local.yml`, after a question. The other values stay.
+- A variable set in the environment of the process is not changed: unset it there.
+- The scope is the one of the open tab: `local` writes the top-level `variables`, an environment writes
+  `envs.<name>.variables`, and nothing falls back on another environment's value. On the `all` tab, the panel
+  opens on the environment of the selected service, as the service panel does.
+- A value removed is not in the undo history: `z` never brings a secret back.
 
 ## Parameters
 
@@ -248,6 +266,9 @@ With [environments](environments.md) in `.probe/envs/`, the services table gets 
 `.probe/envs/`), `all` and `local` would be the same list: the tabs are hidden, and `←` `→` `h` `l` and `Tab`
 do nothing. They appear as soon as there are two environments, right after `n` creates one.
 
+The tab bar always ends with `+ env`, even with a single environment, where it is the only entry.
+A click on it does what `n` does, and it lights up under the pointer like the tabs.
+
 ```
  probe   all   local   prod
 │ service   local     prod         last  uptime trend │
@@ -258,7 +279,19 @@ do nothing. They appear as soon as there are two environments, right after `n` c
 - `←` `→` or `h` `l` change environment. The latency, uptime and response panels follow the selected one.
 - `·` is a service the environment does not have.
 - `Enter`, `u`, `c` and `b` work on the selected cell.
-- `n` creates an environment: it asks for a name and writes its file in `.probe/envs/`.
-- The other environments are read-only: `a`, `e` and `d` say which file to change.
+- `n` (or `+ env`) creates an environment: it asks for a name and writes its file in `.probe/envs/`. `Copy from`
+  lists the environments to copy and, last, `empty`: a file with `schemaVersion` and no service.
+- `D` on an environment tab asks `Remove prod?`, then deletes `.probe/envs/prod.yml`, closes its tab and goes back
+  to `all` (or to the single view left). The values `.probe/local.yml` keeps for it, secrets included, stay.
+  `local` cannot be removed. `z` brings the file and its tab back, `Z` removes it again.
+- `a`, `e` and `d` on an environment tab write to that environment's file, `.probe/envs/<name>.yml`, and
+  `z` and `Z` undo and redo them. The form names its target (`add to prod`, `edit api in prod`). `config.yml`,
+  the Makefile and `lock.yml` are not touched by a write to an environment.
+- On the `all` tab, `a` adds to `local`. `e` and `d` act on the first environment that has the selected
+  service, the one its detail shows; to change another, go to its tab.
+- A secret typed in a header on an environment tab is kept in `.probe/local.yml` under `envs.<name>.variables`,
+  for that environment only, and the file of the environment gets the `${NAME}` reference.
+- The variables in the service panel (`Enter`) follow the same rule: the value goes under `envs.<name>.variables`
+  and never falls back on another environment's. The timeout and skip of a service stay local.
 - A file that cannot be read shows `!` next to its name, with the reason when you select it.
 - A notification names the environment (`prod/api`).

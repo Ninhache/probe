@@ -2,10 +2,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
-import { createEnvironment } from "../src/commands/env-create";
+import {
+  createEnvironment,
+  EMPTY_ENVIRONMENT,
+  type EnvironmentOrigin,
+} from "../src/commands/env-create";
 import type { ParameterWrite } from "../src/commands/parameter-writes";
 import type { ServiceWrite } from "../src/commands/service-writes";
 import { reference } from "../src/config/headers";
+import { loadConfig } from "../src/config/loader";
 import { parameterChoices } from "../src/config/parameters";
 import type { Config } from "../src/config/schema";
 import type { ParameterWriteOutcome } from "../src/dashboard/editing";
@@ -41,13 +46,14 @@ const answered = (name: string): CheckResult =>
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 interface Options {
-  create?: (name: string, from: string) => Promise<string>;
+  create?: (name: string, from: EnvironmentOrigin) => Promise<string>;
+  remove?: (name: string) => Promise<string | undefined>;
   edits?: Partial<EditCallbacks>;
   config?: Config;
   environments?: string[];
 }
 
-function setup({ edits = {}, config = initial, environments = [], create }: Options = {}) {
+function setup({ edits = {}, config = initial, environments = [], create, remove }: Options = {}) {
   const writes: ServiceWrite[] = [];
   const kept: Record<string, string>[] = [];
   const callbacks: EditCallbacks = {
@@ -79,8 +85,8 @@ function setup({ edits = {}, config = initial, environments = [], create }: Opti
       changed(restart);
     },
     redraw: () => {},
-    fileOf: (env) => (env === "local" ? undefined : `${env}.yml`),
     declaredIn: () => ["prod.yml"],
+    removeEnvironment: remove,
     createEnvironment:
       create &&
       (async (name, from) => {
@@ -155,13 +161,6 @@ describe("removing a service", () => {
     await tick();
     expect(draw()).toContain("not saved: config.yml is read-only");
     expect(tracker.services()).toEqual(["api", "db"]);
-  });
-
-  it("says another environment is not edited here", () => {
-    const { press, draw, view } = setup({ environments: ["staging"] });
-    view.tab = 2;
-    press("d");
-    expect(draw()).toContain("staging is not edited here: change staging.yml");
   });
 });
 
@@ -703,7 +702,7 @@ describe("a new environment", () => {
       create: async (name, from) => {
         const { variables } = await createEnvironment(paths, name, from);
         added.push(name);
-        return `Created ${name} from ${from}. Sends ${variables.join(", ")}`;
+        return `Created ${name} from ${typeof from === "string" ? from : "nothing"}. Sends ${variables.join(", ")}`;
       },
     });
     return { ...test, paths, added };
@@ -862,5 +861,366 @@ describe("the bar", () => {
     expect(draw().split("\n").at(-1)).not.toContain("p parameters");
     view.canEditParameters = true;
     expect(draw().split("\n").at(-1)).toContain("p parameters");
+  });
+});
+
+describe("an empty environment", () => {
+  it("is the last choice of Copy from, whatever the sources", async () => {
+    const created: EnvironmentOrigin[] = [];
+    const { press, draw } = setup({
+      environments: ["dev"],
+      create: async (_name, from) => {
+        created.push(from);
+        return "Created";
+      },
+    });
+    press("nqa");
+    press(TAB);
+    expect(draw()).toMatch(/Copy from\s+‹?\s*local/);
+    press(`${ESC}[D`);
+    expect(draw()).toMatch(/Copy from\s+‹ dev|Copy from\s+‹?\s*empty/);
+    press(ENTER);
+    await settle();
+    expect(created).toEqual([EMPTY_ENVIRONMENT]);
+  });
+
+  it("creates its file with a schema version and no service", async () => {
+    const paths = await tempProject("schemaVersion: 1\nservices:\n  api: { port: 3000 }\n");
+    await writeFile(join(paths.dir, "local.yml"), "variables:\n  KEY: kept\n");
+
+    const { variables } = await createEnvironment(paths, "qa", EMPTY_ENVIRONMENT);
+
+    expect(variables).toEqual([]);
+    expect(await readFile(join(paths.dir, "envs", "qa.yml"), "utf8")).toBe(
+      "schemaVersion: 1\nservices: {}\n",
+    );
+    const { config } = await loadConfig({ ...paths, config: join(paths.dir, "envs", "qa.yml") });
+    expect(config.services).toEqual({});
+  });
+
+  it("refuses a name that is taken, and never overwrites the file", async () => {
+    const paths = await tempProject("schemaVersion: 1\nservices: {}\n");
+    await mkdir(join(paths.dir, "envs"));
+    await writeFile(join(paths.dir, "envs", "qa.yml"), "# mine\n");
+
+    await expect(createEnvironment(paths, "qa", EMPTY_ENVIRONMENT)).rejects.toThrow(
+      "already there",
+    );
+    expect(await readFile(join(paths.dir, "envs", "qa.yml"), "utf8")).toBe("# mine\n");
+  });
+});
+
+describe("removing an environment", () => {
+  const prod = () => {
+    const removed: string[] = [];
+    const made = setup({
+      environments: ["prod"],
+      remove: async (name) => {
+        removed.push(name);
+        return undefined;
+      },
+    });
+    return { ...made, removed };
+  };
+
+  it("asks first, naming the file and what stays", () => {
+    const { press, draw, view, removed } = prod();
+    view.tab = 2;
+    press("D");
+    const frame = draw();
+    expect(frame).toContain("Remove prod?");
+    expect(frame).toContain(".probe/envs/prod.yml is deleted");
+    expect(frame).toContain("Its values in .probe/local.yml stay.");
+    expect(removed).toEqual([]);
+  });
+
+  it("deletes after y, and says the values stay and z undoes", async () => {
+    const { press, draw, view, removed, changed } = prod();
+    view.tab = 2;
+    press("Dy");
+    await tick();
+    expect(removed).toEqual(["prod"]);
+    expect(draw()).toContain("Removed prod");
+    expect(draw()).toContain("its values in .probe/local.yml stay");
+    expect(changed).toHaveBeenCalled();
+  });
+
+  it("keeps the environment on n or escape", async () => {
+    const { press, view, removed } = prod();
+    view.tab = 2;
+    press("Dn");
+    press(`D${ESC}`);
+    await tick();
+    expect(removed).toEqual([]);
+  });
+
+  it("says why it was not removed, and not that it was", async () => {
+    const { press, draw, view } = setup({
+      environments: ["prod"],
+      remove: async () => ".probe/envs/prod.yml is already gone",
+    });
+    view.tab = 2;
+    press("Dy");
+    await tick();
+    const frame = draw();
+    expect(frame).toContain("not saved: .probe/envs/prod.yml is already gone");
+    expect(frame).not.toContain("Removed prod");
+  });
+
+  it("cannot remove local", () => {
+    const { press, draw, view, removed } = prod();
+    view.tab = 1;
+    press("D");
+    expect(draw()).toContain("local is .probe/config.yml: it cannot be removed");
+    expect(draw()).not.toContain("Remove local?");
+    expect(removed).toEqual([]);
+  });
+
+  it("asks for an environment tab on the all tab", () => {
+    const { press, draw, removed } = prod();
+    press("D");
+    expect(draw()).toContain("Open the tab of an environment to remove it");
+    expect(removed).toEqual([]);
+  });
+
+  it("is in the palette and the help", () => {
+    const { press, draw } = prod();
+    press(":");
+    press("remove env");
+    expect(draw()).toContain("Remove the environment");
+    press(ESC);
+    press("?");
+    expect(draw()).toContain("Remove the environment");
+  });
+
+  it("is offered nowhere when no environment can be removed", () => {
+    const { press, draw, view } = setup({ environments: ["prod"] });
+    view.tab = 2;
+    press("D");
+    expect(draw()).not.toContain("Remove prod?");
+  });
+});
+
+describe("the tabs follow the environment files", () => {
+  it("forgets an environment and what it measured", () => {
+    const tracker = new Tracker(["local", "prod"]);
+    tracker.record("local", [answered("api")], 1);
+    tracker.record("prod", [answered("api"), answered("globex")], 1);
+
+    tracker.remove("prod");
+
+    expect(tracker.environments).toEqual(["local"]);
+    expect(tracker.services()).toEqual(["api"]);
+    expect(tracker.result("api", "prod")).toBeUndefined();
+    expect(tracker.result("api", "local")).toBeDefined();
+  });
+
+  it("stops checking an environment taken out of a running monitor", async () => {
+    const ran: string[] = [];
+    const monitor = new Monitor([], {
+      intervalMs: 5,
+      onResults: (env) => void ran.push(env),
+      onFailure: () => {},
+    });
+    monitor.add({ name: "prod", run: async () => [answered("api")] });
+    monitor.add({ name: "dev", run: async () => [answered("api")] });
+    await settle();
+    monitor.remove("prod");
+    ran.length = 0;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    monitor.stop();
+    expect(ran).toContain("dev");
+    expect(ran).not.toContain("prod");
+  });
+});
+
+describe("editing on an environment tab", () => {
+  const prodConfig = {
+    schemaVersion: 1,
+    services: { globex: { url: "https://globex.example.com" } },
+  } as unknown as Config;
+
+  function inProd() {
+    const made = setup({ environments: ["prod"] });
+    made.editing.observe?.("prod", prodConfig);
+    made.tracker.record("prod", [answered("globex")], 1);
+    return made;
+  }
+
+  it("no longer refuses: d asks, then removes from the environment file", async () => {
+    const { press, draw, writes, view } = inProd();
+    view.tab = 2;
+    press("d");
+    expect(draw()).toContain("Remove globex from prod?");
+    press("y");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "globex", env: "prod" }]);
+    expect(draw()).not.toContain("is not edited here");
+  });
+
+  it("opens the form of a service with the target in its title", () => {
+    const { press, draw, view } = inProd();
+    view.tab = 2;
+    press("e");
+    expect(draw()).toContain("edit globex in prod");
+    expect(draw()).toContain("globex.example.com");
+  });
+
+  it("a adds to that environment only", async () => {
+    const { press, draw, view, writes } = inProd();
+    view.tab = 2;
+    press("a");
+    expect(draw()).toContain("add to prod");
+    press(`initech${TAB}8080${ENTER}`);
+    await tick();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ kind: "add", name: "initech", env: "prod" });
+  });
+
+  it("a on the all tab adds to local, as before", () => {
+    const { press, draw, view } = inProd();
+    expect(view.tab).toBe(0);
+    press("a");
+    expect(draw()).toContain("add a service");
+    expect(draw()).not.toContain("add to");
+  });
+
+  it("on the all tab, e and d target the column of the selected service", async () => {
+    const { press, draw, writes } = inProd();
+    // api and db answer in local, globex only in prod: the cursor goes to globex.
+    press("jjd");
+    expect(draw()).toContain("Remove globex from prod?");
+    press("y");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "globex", env: "prod" }]);
+  });
+
+  it("on the all tab, a service of local is still removed from local", async () => {
+    const { press, writes } = inProd();
+    press("dy");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "api" }]);
+  });
+
+  describe("variables in the detail panel", () => {
+    const DOWN = `${ESC}[B`;
+    const SECRET = "prod-only-secret";
+    const keyed = {
+      schemaVersion: 1,
+      services: {
+        globex: {
+          url: "https://globex.example.com",
+          headers: { Authorization: `Bearer ${reference("GLOBEX_TOKEN")}` },
+        },
+      },
+    } as unknown as Config;
+    const looked: Array<string | undefined> = [];
+    const sources = async (names: readonly string[], env?: string) => {
+      looked.push(env);
+      return env === "prod"
+        ? Object.fromEntries(names.map((name) => [name, "local" as const]))
+        : {};
+    };
+
+    function inProdWithVariables(onVariableWrite = vi.fn(async () => undefined)) {
+      looked.length = 0;
+      const made = setup({
+        environments: ["prod"],
+        edits: { variableSources: sources, onVariableWrite },
+      });
+      made.editing.observe?.("prod", keyed);
+      made.tracker.record("prod", [answered("globex")], 1);
+      return { ...made, onVariableWrite };
+    }
+
+    it("lists the variables on the tab, read in that environment's scope", async () => {
+      const { press, draw, view } = inProdWithVariables();
+      view.tab = 2;
+      press(ENTER);
+      await tick();
+      expect(draw()).toMatch(/GLOBEX_TOKEN\s+set in local\.yml/);
+      expect(looked).toContain("prod");
+      expect(draw()).not.toContain("skip");
+    });
+
+    it("sets the value under that environment, never drawn", async () => {
+      const { press, draw, view, onVariableWrite } = inProdWithVariables();
+      view.tab = 2;
+      press(ENTER);
+      await tick();
+      press(`${DOWN}${ENTER}${SECRET}`);
+      expect(draw()).not.toContain(SECRET);
+      press(ENTER);
+      await tick();
+      expect(onVariableWrite).toHaveBeenCalledWith("GLOBEX_TOKEN", SECRET, "prod");
+      const done = draw();
+      expect(done).toContain("Kept GLOBEX_TOKEN in .probe/local.yml, under envs.prod");
+      expect(done).not.toContain(SECRET);
+    });
+
+    it("targets the column of the selected service on the all tab", async () => {
+      const { press, onVariableWrite } = inProdWithVariables();
+      press("jj");
+      press(ENTER);
+      await tick();
+      press(`${DOWN}${ENTER}${SECRET}${ENTER}`);
+      await tick();
+      expect(onVariableWrite).toHaveBeenCalledWith("GLOBEX_TOKEN", SECRET, "prod");
+    });
+
+    it("shows no row of local for an environment not read yet", async () => {
+      const made = setup({ environments: ["prod"], edits: { variableSources: sources } });
+      made.tracker.record("prod", [answered("globex")], 1);
+      made.view.tab = 2;
+      made.press(ENTER);
+      await tick();
+      expect(made.draw()).not.toContain("GLOBEX_TOKEN");
+    });
+  });
+
+  it("undo and redo work from an environment tab", async () => {
+    const onUndo = vi.fn(async () => ({ undone: "Undone: edit globex" }));
+    const onRedo = vi.fn(async () => ({ undone: "Redone: edit globex" }));
+    const { press, view } = setup({ environments: ["prod"], edits: { onUndo, onRedo } });
+    view.tab = 2;
+    press("zZ");
+    await tick();
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onRedo).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a secret typed on prod for prod, and names the right files", async () => {
+    const secret = "s3cr3t-value";
+    const test = setup({
+      environments: ["prod"],
+      edits: { variableSources: async () => ({}) },
+    });
+    test.editing.observe?.("prod", prodConfig);
+    test.view.tab = 2;
+    test.press(`ainitech${TAB}8080`);
+    for (let i = 0; i < 20 && !test.draw().match(/› Header/); i += 1) test.press(TAB);
+    test.press(`Authorization: Bearer ${secret}`);
+    test.press(ENTER);
+    await tick();
+    const asking = test.draw();
+    expect(asking).toContain(".probe/envs/prod.yml gets a reference");
+    expect(asking).toContain("for prod only");
+    expect(asking).not.toContain(secret);
+    test.press(ENTER);
+    await tick();
+    await tick();
+    const frame = test.draw();
+    expect(frame).toContain("INITECH_TOKEN kept in .probe/local.yml, under envs.prod");
+    expect(frame).not.toContain(secret);
+    expect(test.kept).toEqual([{ INITECH_TOKEN: secret }]);
+    expect(test.writes[0]).toMatchObject({ kind: "add", name: "initech", env: "prod" });
+    expect(JSON.stringify(test.writes)).not.toContain(secret);
+  });
+
+  it("says so when the environment has not been read yet", () => {
+    const { press, draw, view } = setup({ environments: ["prod"] });
+    view.tab = 2;
+    press("a");
+    expect(draw()).toContain("prod is not read yet");
   });
 });
