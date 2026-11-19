@@ -36,6 +36,16 @@ describe("openUrl", () => {
     },
   );
 
+  it("starts on win32 rundll32 with the URL as an argument, no shell reads it", async () => {
+    const { spawn, calls } = fakeSpawn("spawn");
+    const url = "http://localhost:3000/a?b=1&c=2";
+
+    expect(await openUrl(url, "win32", spawn)).toBe(true);
+    expect(calls).toEqual([
+      { command: "rundll32", args: ["url.dll,FileProtocolHandler", url], unrefs: 1 },
+    ]);
+  });
+
   it("resolves to false when the command cannot be started", async () => {
     const { spawn } = fakeSpawn("error");
 
