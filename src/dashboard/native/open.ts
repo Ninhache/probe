@@ -214,6 +214,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     () => view,
     (env, declared) => {
       loaded.set(env, declared);
+      editing.observe?.(env, declared);
       view.choices = merge();
     },
   );
@@ -277,6 +278,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             () => view,
             (env, declared) => {
               loaded.set(env, declared);
+              editing.observe?.(env, declared);
               view.choices = merge();
             },
           ),
@@ -289,7 +291,6 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       view,
       tracker,
       editing,
-      fileOf: (env) => sources.get(env)?.file,
       redraw: () => app.requestRender(),
       declaredIn: (name) =>
         [...loaded]

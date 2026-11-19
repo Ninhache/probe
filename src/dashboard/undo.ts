@@ -1,6 +1,12 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import type { ProbePaths } from "../config/discovery";
-import { CONFIG_FILE, DEFAULT_MAKEFILE, LOCK_FILE, PROBE_DIR } from "../constants";
+import {
+  CONFIG_FILE,
+  DEFAULT_MAKEFILE,
+  ENVIRONMENTS_DIR,
+  LOCK_FILE,
+  PROBE_DIR,
+} from "../constants";
 import { makefilePath } from "../makefile/sync";
 
 /** A file the journal keeps: `label` is what a refusal names, never its content. */
@@ -15,8 +21,12 @@ export type UndoOutcome =
   | { kind: "changed"; file: string };
 
 export interface UndoJournal {
-  /** Runs `write`; when it resolves true and changed a file, `label` can be undone. */
-  record(label: string, write: () => Promise<boolean>): Promise<boolean>;
+  /** Runs `write`; when it resolves true and changed a file, `label` can be undone. `only` replaces the files watched for this step. */
+  record(
+    label: string,
+    write: () => Promise<boolean>,
+    only?: readonly JournalFile[],
+  ): Promise<boolean>;
   /** Puts back the files as they were before the last write recorded, if nothing changed them since. */
   undo(): Promise<UndoOutcome>;
   /** Writes again what the last undo took back, if nothing changed the files since; a new write forgets it. */
@@ -24,7 +34,16 @@ export interface UndoJournal {
 }
 
 /** What a dashboard write changes. local.yml is left out: it holds secret values, and the journal copies what it keeps. */
-export const journalFiles = (paths: ProbePaths): JournalFile[] => [
+export const journalFiles = (paths: ProbePaths): JournalFile[] =>
+  paths.environment === undefined ? localJournalFiles(paths) : [environmentJournalFile(paths)];
+
+/** An environment file stands alone: a write to it leaves config.yml, the lock and the Makefile as they are. */
+const environmentJournalFile = (paths: ProbePaths): JournalFile => ({
+  path: paths.config,
+  label: `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${paths.environment}.yml`,
+});
+
+const localJournalFiles = (paths: ProbePaths): JournalFile[] => [
   { path: paths.config, label: `${PROBE_DIR}/${CONFIG_FILE}` },
   { path: paths.lock, label: `${PROBE_DIR}/${LOCK_FILE}` },
   { path: makefilePath(paths), label: DEFAULT_MAKEFILE },
@@ -73,14 +92,15 @@ export function createUndoJournal(
     to.push(step);
     return { kind: "undone", label: step.label };
   };
-  const read = () => Promise.all(files.map(({ path }) => contents(path)));
+  const read = (watched: readonly JournalFile[]) =>
+    Promise.all(watched.map(({ path }) => contents(path)));
   return {
-    async record(label, write) {
-      const before = await read();
+    async record(label, write, only = files) {
+      const before = await read(only);
       const written = await write();
       if (!written) return written;
-      const after = await read();
-      const changed = files.flatMap((file, index) => {
+      const after = await read(only);
+      const changed = only.flatMap((file, index) => {
         const was = before[index];
         const now = after[index] ?? null;
         return was === null || was === undefined || was === now

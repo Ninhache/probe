@@ -7,8 +7,10 @@ export interface VariableRow {
   source?: VariableSource;
 }
 
+/** `env` looks the values up for that environment alone: none falls back on another's. */
 export type VariableSources = (
   names: readonly string[],
+  env?: string,
 ) => Promise<Readonly<Record<string, VariableSource | undefined>>>;
 
 export interface VariableTools {
@@ -30,7 +32,10 @@ export function proposedVariable(service: string, header: string): string {
 }
 
 // Only names and where they are set come through here: a value never reaches the screen.
-export function variableTools(config: () => Config, sources: VariableSources): VariableTools {
+export function variableTools(
+  config: () => Config,
+  sources: (names: readonly string[]) => ReturnType<VariableSources>,
+): VariableTools {
   const sentBy = (service: string) => serviceVariables(config().services[service]?.headers);
   const variableProblem: VariableTools["variableProblem"] = async (name, service) => {
     if (!VARIABLE_NAME.test(name)) return "Letters, digits and _ only, e.g. API_TOKEN";

@@ -79,7 +79,6 @@ function setup({ edits = {}, config = initial, environments = [], create }: Opti
       changed(restart);
     },
     redraw: () => {},
-    fileOf: (env) => (env === "local" ? undefined : `${env}.yml`),
     declaredIn: () => ["prod.yml"],
     createEnvironment:
       create &&
@@ -155,13 +154,6 @@ describe("removing a service", () => {
     await tick();
     expect(draw()).toContain("not saved: config.yml is read-only");
     expect(tracker.services()).toEqual(["api", "db"]);
-  });
-
-  it("says another environment is not edited here", () => {
-    const { press, draw, view } = setup({ environments: ["staging"] });
-    view.tab = 2;
-    press("d");
-    expect(draw()).toContain("staging is not edited here: change staging.yml");
   });
 });
 
@@ -862,5 +854,92 @@ describe("the bar", () => {
     expect(draw().split("\n").at(-1)).not.toContain("p parameters");
     view.canEditParameters = true;
     expect(draw().split("\n").at(-1)).toContain("p parameters");
+  });
+});
+
+describe("editing on an environment tab", () => {
+  const prodConfig = {
+    schemaVersion: 1,
+    services: { globex: { url: "https://globex.example.com" } },
+  } as unknown as Config;
+
+  function inProd() {
+    const made = setup({ environments: ["prod"] });
+    made.editing.observe?.("prod", prodConfig);
+    made.tracker.record("prod", [answered("globex")], 1);
+    return made;
+  }
+
+  it("no longer refuses: d asks, then removes from the environment file", async () => {
+    const { press, draw, writes, view } = inProd();
+    view.tab = 2;
+    press("d");
+    expect(draw()).toContain("Remove globex from prod?");
+    press("y");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "globex", env: "prod" }]);
+    expect(draw()).not.toContain("is not edited here");
+  });
+
+  it("opens the form of a service with the target in its title", () => {
+    const { press, draw, view } = inProd();
+    view.tab = 2;
+    press("e");
+    expect(draw()).toContain("edit globex in prod");
+    expect(draw()).toContain("globex.example.com");
+  });
+
+  it("a adds to that environment only", async () => {
+    const { press, draw, view, writes } = inProd();
+    view.tab = 2;
+    press("a");
+    expect(draw()).toContain("add to prod");
+    press(`initech${TAB}8080${ENTER}`);
+    await tick();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ kind: "add", name: "initech", env: "prod" });
+  });
+
+  it("a on the all tab adds to local, as before", () => {
+    const { press, draw, view } = inProd();
+    expect(view.tab).toBe(0);
+    press("a");
+    expect(draw()).toContain("add a service");
+    expect(draw()).not.toContain("add to");
+  });
+
+  it("on the all tab, e and d target the column of the selected service", async () => {
+    const { press, draw, writes } = inProd();
+    // api and db answer in local, globex only in prod: the cursor goes to globex.
+    press("jjd");
+    expect(draw()).toContain("Remove globex from prod?");
+    press("y");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "globex", env: "prod" }]);
+  });
+
+  it("on the all tab, a service of local is still removed from local", async () => {
+    const { press, writes } = inProd();
+    press("dy");
+    await tick();
+    expect(writes).toEqual([{ kind: "remove", name: "api" }]);
+  });
+
+  it("undo and redo work from an environment tab", async () => {
+    const onUndo = vi.fn(async () => ({ undone: "Undone: edit globex" }));
+    const onRedo = vi.fn(async () => ({ undone: "Redone: edit globex" }));
+    const { press, view } = setup({ environments: ["prod"], edits: { onUndo, onRedo } });
+    view.tab = 2;
+    press("zZ");
+    await tick();
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onRedo).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so when the environment has not been read yet", () => {
+    const { press, draw, view } = setup({ environments: ["prod"] });
+    view.tab = 2;
+    press("a");
+    expect(draw()).toContain("prod is not read yet");
   });
 });

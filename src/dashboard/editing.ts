@@ -62,8 +62,12 @@ export const timeoutsOf = ({ services }: Config): Record<string, number> =>
   );
 
 export interface Editing {
-  /** The local config as it is now: every write and undo replaces it. */
+  /** The config as it is now: every write and undo replaces it. */
   config(): Config;
+  /** Hands over an environment file as read by a pass, so its services can be edited. */
+  observe?(env: string, config: Config): void;
+  /** The same editing on the file of `env`; undefined while that file has not been read. */
+  environment?(env: string): Editing | undefined;
   serviceForm(name?: string): ServiceForm;
   serviceFields(name: string): ServiceFields | undefined;
   parameterFields(name: string): Parameter | undefined;
@@ -77,53 +81,79 @@ export interface Editing {
   writeVariable?: (name: string, value: string) => Saved;
 }
 
-/** The local config the dashboard edits, kept in step with what the writes and undos leave. */
+const reads = (config: () => Config) => ({
+  serviceForm(name?: string): ServiceForm {
+    const service = name === undefined ? undefined : config().services[name];
+    return (service ? serviceType(service) : defaultType()).form;
+  },
+  serviceFields(name: string): ServiceFields | undefined {
+    const service = config().services[name];
+    return service && pickFields(service);
+  },
+  parameterFields: (name: string) => config().parameters?.[name],
+  addresses: (): Addresses =>
+    Object.fromEntries(
+      Object.entries(config().services).map(([name, service]) => [name, { ...service.urls }]),
+    ),
+  urlParameter(): UrlParameter | undefined {
+    const found = Object.entries(config().parameters ?? {}).find(
+      ([, { strategy }]) => strategy.kind === "url",
+    );
+    return found && { name: found[0], values: found[1].values };
+  },
+});
+
+/** The config the dashboard edits, kept in step with what the writes and undos leave. */
 export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing {
   let config = initial;
+  const environments = new Map<string, Config>();
   const revert = async (way: NonNullable<EditCallbacks["onUndo"]>) => {
     const { config: restored, ...outcome } = await way();
     if (restored) config = restored;
     return { ...outcome, timeouts: restored && timeoutsOf(restored) };
   };
   const variables = edits.variableSources && variableTools(() => config, edits.variableSources);
-  const unsetNote = async (name: string) => {
-    const sent = serviceVariables(config.services[name]?.headers);
-    const found = (await edits.variableSources?.(sent)) ?? {};
+  const { onServiceWrite, onParameterWrite, onUndo, onRedo } = edits;
+  const unsetNote = async (current: Config, name: string, env?: string) => {
+    const sent = serviceVariables(current.services[name]?.headers);
+    const found = (await edits.variableSources?.(sent, env)) ?? {};
     const unset = sent.filter((variable) => !found[variable]);
     if (!edits.variableSources || unset.length === 0) return undefined;
     return `${unset.join(", ")} not set: open ${name} with enter, then enter on the variable`;
   };
-  const { onServiceWrite, onParameterWrite, onUndo, onRedo } = edits;
-  return {
-    config: () => config,
-    serviceForm(name) {
-      const service = name === undefined ? undefined : config.services[name];
-      return (service ? serviceType(service) : defaultType()).form;
-    },
-    serviceFields(name) {
-      const service = config.services[name];
-      return service && pickFields(service);
-    },
-    parameterFields: (name) => config.parameters?.[name],
-    addresses: () =>
-      Object.fromEntries(
-        Object.entries(config.services).map(([name, service]) => [name, { ...service.urls }]),
-      ),
-    urlParameter() {
-      const found = Object.entries(config.parameters ?? {}).find(
-        ([, { strategy }]) => strategy.kind === "url",
-      );
-      return found && { name: found[0], values: found[1].values };
-    },
-    writeService:
-      onServiceWrite &&
-      (async (write, secrets) => {
-        const { config: written, ...outcome } = await onServiceWrite(write, secrets);
-        if (written) config = written;
-        const notes = [outcome.warning, written && (await unsetNote(write.name))];
+  /** Writes to config.yml, or to the file of `env`: the config each leaves is kept apart. */
+  const writer =
+    onServiceWrite &&
+    ((env: string | undefined) =>
+      async (write: ServiceWrite, secrets?: Secrets): Promise<ServiceWriteOutcome> => {
+        const { config: written, ...outcome } = await onServiceWrite(
+          env === undefined ? write : { ...write, env },
+          secrets,
+        );
+        if (written) {
+          if (env === undefined) config = written;
+          else environments.set(env, written);
+        }
+        const notes = [outcome.warning, written && (await unsetNote(written, write.name, env))];
         const warning = notes.filter(Boolean).join("\n") || undefined;
         return { ...outcome, warning, saved: written !== undefined };
-      }),
+      });
+  return {
+    config: () => config,
+    ...reads(() => config),
+    observe: (env, declared) => void environments.set(env, declared),
+    environment(env) {
+      if (!environments.has(env)) return undefined;
+      const read = () => environments.get(env) as Config;
+      const sources = edits.variableSources;
+      return {
+        config: read,
+        ...reads(read),
+        writeService: writer?.(env),
+        variables: sources && variableTools(read, (names) => sources(names, env)),
+      };
+    },
+    writeService: writer?.(undefined),
     writeParameter:
       onParameterWrite &&
       (async (write) => {

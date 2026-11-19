@@ -103,9 +103,9 @@ hand.
 
 - A field left empty takes its default. A header left empty is removed.
 - `d` asks first: only `y` removes.
-- `z` undoes the last write to `config.yml` made here (add, edit, remove, a timeout, a parameter), then the one
-  before. It puts back `config.yml`, `lock.yml` and the Makefile as they were, and does nothing if one of them
-  changed since. Kept in memory only, until you quit. `local.yml` is never undone: options, skips, the chosen
+- `z` undoes the last write to `config.yml` or to an environment file made here (add, edit, remove, a timeout,
+  a parameter), then the one before. It puts back the files that write changed (`config.yml`, `lock.yml` and
+  the Makefile, or the environment file) as they were, and does nothing if one of them changed since. Kept in memory only, until you quit. `local.yml` is never undone: options, skips, the chosen
   values and a variable kept for a header stay as they are.
 - `Z` (Shift+Z) writes again what `z` undid, last undone first, with the same check. A new change forgets it.
 - All three write `.probe/config.yml` as `probe add` and `probe rm` do: your comments are kept, and the
@@ -250,6 +250,13 @@ With [environments](environments.md) in `.probe/envs/`, the services table gets 
 - `·` is a service the environment does not have.
 - `Enter`, `u`, `c` and `b` work on the selected cell.
 - `n` creates an environment: it asks for a name and writes its file in `.probe/envs/`.
-- The other environments are read-only: `a`, `e` and `d` say which file to change.
+- `a`, `e` and `d` on an environment tab write to that environment's file, `.probe/envs/<name>.yml`, and
+  `z` and `Z` undo and redo them. The form names its target (`add to prod`, `edit api in prod`). `config.yml`,
+  the Makefile and `lock.yml` are not touched by a write to an environment.
+- On the `all` tab, `a` adds to `local`. `e` and `d` act on the first environment that has the selected
+  service, the one its detail shows; to change another, go to its tab.
+- A secret typed in a header on an environment tab is kept in `.probe/local.yml` under `envs.<name>.variables`,
+  for that environment only, and the file of the environment gets the `${NAME}` reference.
+- The timeout and skip of a service stay local, in the service panel (`Enter`).
 - A file that cannot be read shows `!` next to its name, with the reason when you select it.
 - A notification names the environment (`prod/api`).

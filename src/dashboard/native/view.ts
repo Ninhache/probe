@@ -782,10 +782,9 @@ export function runCommand(
 ): void {
   const service = selectedService(tracker, view);
   const env = service === undefined ? undefined : focusEnv(tracker, view, service);
-  const elsewhere = actions.edit?.elsewhere(activeEnv(tracker, view));
-  const edit = (act: (editor: Editor, name: string) => void) => {
-    if (elsewhere) say(view, elsewhere);
-    else if (actions.edit && service !== undefined) act(actions.edit, service);
+  // On the all tab, `env` is the first environment that has the service: the one its detail shows.
+  const edit = (act: (editor: Editor, name: string, env?: string) => void) => {
+    if (actions.edit && service !== undefined) act(actions.edit, service, env);
   };
   switch (command) {
     case "check":
@@ -847,22 +846,20 @@ export function runCommand(
         (command === "open" ? actions.open : actions.copy)?.(service, env);
       break;
     case "add":
-      if (elsewhere) say(view, elsewhere);
-      else actions.edit?.add();
+      actions.edit?.add(activeEnv(tracker, view));
       break;
     case "environment":
       actions.edit?.environment?.();
       break;
     case "edit":
-      edit((editor, name) => editor.edit(name));
+      edit((editor, name, at) => editor.edit(name, at));
       break;
     case "remove":
-      edit((editor, name) => editor.remove(name));
+      edit((editor, name, at) => editor.remove(name, at));
       break;
     case "undo":
     case "redo":
-      if (elsewhere) say(view, elsewhere);
-      else actions.edit?.[command]();
+      actions.edit?.[command]();
       break;
     default:
       command satisfies never;

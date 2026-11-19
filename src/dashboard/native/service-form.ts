@@ -46,6 +46,8 @@ export interface ServiceFormContext {
   editing: Editing;
   stack: ModalStack;
   redraw(): void;
+  /** The environment whose file the form writes; absent for config.yml. */
+  target?: string;
   /** Writes the change and tells the outcome; resolves once the files are written. */
   write(change: ServiceWrite, done: string, secrets?: Secrets): Promise<void>;
 }
@@ -84,6 +86,11 @@ function modalValues(values: InkValues, urls: Readonly<Record<string, string>>):
     ...Object.fromEntries(Object.entries(urls).map(([value, url]) => [`${URL_ID}${value}`, url])),
   };
 }
+
+const formTitle = (editing: string | undefined, target: string | undefined) => {
+  if (editing === undefined) return target === undefined ? "add a service" : `add to ${target}`;
+  return target === undefined ? `edit ${editing}` : `edit ${editing} in ${target}`;
+};
 
 /** The form that adds a service, or edits `editing`. */
 export function serviceFormModal(context: ServiceFormContext, editing?: string): Panel {
@@ -220,7 +227,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
   };
 
   const modal = formModal({
-    title: editing === undefined ? "add a service" : `edit ${editing}`,
+    title: formTitle(editing, context.target),
     width: FORM_WIDTH,
     values: initial,
     layout,
