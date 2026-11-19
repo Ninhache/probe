@@ -290,13 +290,13 @@ describe("help bar, help overlay and filter", () => {
     expect(rows.join("\n")).toContain("┤help├");
     expect(rows.join("\n")).toContain("Filter by name");
     expect(rows.at(-1)).toContain("? esc close");
-    run(tracker, view, "j", "escape");
+    run(tracker, view, "down", "escape");
     expect(view.modals.depth).toBe(0);
     expect(view.selected).toBeUndefined();
     expect(draw(tracker, view).join("\n")).not.toContain("┤help├");
   });
 
-  it("quits from the help modal and does not leak other keys to the list", () => {
+  it("types q and r into the help search instead of quitting or reaching the list", () => {
     const tracker = sample();
     const view = initialView();
     draw(tracker, view);
@@ -304,7 +304,8 @@ describe("help bar, help overlay and filter", () => {
     const a = actions();
     handleInput(key("q"), tracker, view, a);
     handleInput(key("r"), tracker, view, a);
-    expect(a.calls).toEqual({ quit: 1, refresh: 0 });
+    expect(a.calls).toEqual({ quit: 0, refresh: 0 });
+    expect(view.modals.depth).toBe(1);
   });
 
   it("filters services by name after /, keeps it on Enter and clears it on Esc", () => {

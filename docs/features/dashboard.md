@@ -80,11 +80,16 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 | `Z`             | Redo what `z` undid                            |
 | `:`             | Find a command by what it does; `Enter` runs   |
 | `o`             | Options: interval, timeout and notifications   |
-| `?`             | Every key, scrolling; `?` or `Esc` closes      |
+| `?`             | Every key; type to search; `?` or `Esc` closes |
 | `q`             | Quit                                           |
 
 The bar at the bottom shows the keys you need first. While you type (filter, form, command palette), `q` and
 `?` are letters.
+
+In the help (`?`), typing searches: only the lines whose key or description contain what you typed stay, whatever
+the case, under the heading of their section (`enter` finds `↵`). The query is on the first row, `Backspace` edits
+it, and the help says when nothing matches. `Esc` clears a query, and closes the help once it is empty. Every
+letter goes into the query, `q` included, so scroll with `↑` `↓`, `PgUp`, `PgDn`, `Home` and `End`.
 
 `c` and `b` use `pbcopy` on macOS, `wl-copy` or `xclip` on Linux. Without one of them, the text is shown to copy by
 hand.
