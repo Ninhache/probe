@@ -52,6 +52,8 @@ services:
 | `hint`     | none        | What to do when it is down, one line                                                         | 0.19.0 |
 | `tags`     | none        | Groups it belongs to: `tags: [back]`                                                         | 0.20.0 |
 | `contains` | none        | Text the response body must contain                                                          | 0.20.0 |
+| `type`     | `http`      | `http`, or `command` to [run a command](#command-services)                                   | 1.3.0  |
+| `command`  | none        | The command of a `type: command` service                                                     | 1.3.0  |
 
 A `probe` older than the "Since" version refuses a config that uses the key: upgrade it.
 
@@ -114,6 +116,46 @@ It is shared with the config: nothing secret goes in it.
 ### tags
 
 A list of names, to check a group of services at once: `probe check --tag back`. See [Tags](features/tags.md).
+
+### Command services
+
+A service can be checked by running a command: it is up when the command exits `0`. Since 1.3.0.
+
+```yaml
+services:
+  db:
+    type: command
+    command: [docker, compose, exec, -T, db, pg_isready]
+    timeout: 5
+  cache:
+    type: command
+    command: "redis-cli ping"
+```
+
+`command` takes one of two forms:
+
+| Form   | Run as                                      | Use it for                                                      |
+| ------ | ------------------------------------------- | --------------------------------------------------------------- |
+| list   | the program and its arguments, no shell     | what a team shares: it means the same on Linux, macOS, Windows  |
+| string | one line for the system shell (`sh`, `cmd`) | pipes, `&&`, variables: it depends on the shell of each machine |
+
+- Prefer the list. A string with a pipe or `$VAR` is read by `sh` on Linux and macOS and by `cmd.exe` on Windows.
+- On Windows, a program that is a `.cmd` or `.bat` file (`npm`, `pnpm`, `yarn`...) cannot be started from a
+  list: write it as a string, `command: "pnpm test"`.
+- The command runs from the root of the project, with the environment of `probe`. It reads no input.
+- When it fails, the reason is the last line it wrote to stderr, else `exit <code>`. `check --json` adds
+  `exitCode` to a command service.
+- Past its `timeout` (3 s by default) the command is killed, with everything it started. Give a slow one a
+  larger `timeout`.
+- It takes `timeout`, `hint` and `tags` like any service, and none of the keys that describe a request: `url`,
+  `urls`, `host`, `port`, `path`, `method`, `headers`, `expect`, `contains`. `probe open` has nothing to open, and
+  [parameters](features/parameters.md) leave it as it is.
+- Add one with `probe add db --command "redis-cli ping"`, or `probe add db -- pg_isready -q` for the list form.
+  In the dashboard, edit its command with `e`: a list is shown as JSON, `["pg_isready", "-q"]`.
+
+Trust: `config.yml` is committed, and every `probe check`, `probe wait` and dashboard refresh runs each command in
+it. Read the commands of a config you pull as you read its Makefile. Never put a secret in one: it is shared
+with the repository, and it shows in the process list.
 
 ### https
 
