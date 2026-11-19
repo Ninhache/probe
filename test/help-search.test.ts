@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { helpColumns } from "../src/dashboard/keymap";
-import { helpModal, searchRows } from "../src/dashboard/native/help";
+import { helpModal, helpRows, searchRows } from "../src/dashboard/native/help";
 import { parseInput } from "../src/tui/input";
 import { Screen } from "../src/tui/screen";
 
@@ -39,7 +39,7 @@ describe("the help search", () => {
     const { screen, modal } = open();
 
     expect(screen()).toContain("search:");
-    expect(screen()).toContain("Filter by name");
+    expect(screen()).toContain("Palette");
     expect(modal.footer).toBe("type to search · esc close");
   });
 
@@ -63,7 +63,7 @@ describe("the help search", () => {
   it("should keep the heading of a section that has a match, and drop the others", () => {
     const texts = searchRows("filter by name", false).map(({ cells }) => cells[0]?.text);
 
-    expect(texts[0]).toBe("List");
+    expect(texts[0]).toBe("Move");
     expect(texts).toHaveLength(2);
   });
 
@@ -90,7 +90,7 @@ describe("the help search", () => {
 
     press("\x7f\x7f\x7f\x7f");
 
-    expect(screen()).toContain("Filter by name");
+    expect(screen()).toContain("Palette");
   });
 
   it("should clear a query on esc, and close only when the query is empty", () => {
@@ -99,7 +99,7 @@ describe("the help search", () => {
     expect(modal.footer).toBe("esc clear");
 
     expect(press(ESC)).toBe(true);
-    expect(screen()).toContain("Filter by name");
+    expect(screen()).toContain("Palette");
     expect(modal.footer).toBe("type to search · esc close");
     expect(press(ESC)).toBe(false);
   });
@@ -140,7 +140,7 @@ describe("the help by screen", () => {
   it("should show the list keys on the list, and not the ones of the response", () => {
     const frame = open(AREA, "list").screen();
 
-    expect(frame).toContain("Filter by name");
+    expect(frame).toContain("Palette");
     expect(frame).not.toContain("Copy the response\n");
     expect(frame).not.toContain("Back to the detail");
   });
@@ -187,4 +187,16 @@ describe("the help by screen", () => {
     expect(current.length).toBeGreaterThan(0);
     expect(ids("rest").filter((id) => current.includes(id))).toEqual([]);
   });
+
+  it.each([false, true])(
+    "should fit the keys of the list in 10 rows, and the folded help in 80x24 (grid: %s)",
+    (grid) => {
+      const area = { x: 0, y: 0, w: 80, h: 24 };
+      const modal = helpModal(area, grid, "list");
+
+      expect(helpRows(80 - 8 - 4, grid, "list", "current").length).toBeLessThanOrEqual(10);
+      expect(modal.size.h).toBeLessThanOrEqual(area.h);
+      expect(modal.size.w).toBeLessThanOrEqual(area.w);
+    },
+  );
 });
