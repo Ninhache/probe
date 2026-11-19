@@ -13,7 +13,7 @@ import completionCommand from "./commands/completion";
 import curl from "./commands/curl";
 import doctor from "./commands/doctor";
 import environment from "./commands/env";
-import { createEnvironment, environmentFile } from "./commands/env-create";
+import { createEnvironment, EMPTY_ENVIRONMENT, environmentFile } from "./commands/env-create";
 import init, { initProject } from "./commands/init";
 import ls from "./commands/ls";
 import migrate from "./commands/migrate";
@@ -200,9 +200,14 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
       const sends = variables.map(
         (variable) => `It sends ${variable}: probe var ${variable} --env ${name} (or export it).`,
       );
-      const told = `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
+      const told =
+        from === EMPTY_ENVIRONMENT
+          ? `Created ${environmentFile(name)}, with no service.`
+          : `Created ${environmentFile(name)} from ${environmentFile(from)}.`;
       return { source: source(paths, name), message: [told, ...sends].join("\n") };
     },
+    onEnvironmentsList: async () =>
+      (await listEnvironments(paths)).map((name) => source(paths, name)),
     ...writes,
   });
   await saves.idle();

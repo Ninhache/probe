@@ -1,4 +1,5 @@
 import { runChecks } from "../../checkers/run";
+import type { EnvironmentOrigin } from "../../commands/env-create";
 import type { Variables } from "../../config/local";
 import {
   applySelection,
@@ -47,8 +48,12 @@ export interface NativeDashboardOptions extends EditCallbacks {
   /** Creates the file of a new environment, copied from `from`; absent where none can be created. */
   onEnvironmentCreate?: (
     name: string,
-    from: string,
+    from: EnvironmentOrigin,
   ) => Promise<{ source: EnvironmentSource; message: string }>;
+  /** Deletes the file of an environment, undoably; resolves to why it could not. */
+  onEnvironmentRemove?: (name: string) => Promise<string | undefined>;
+  /** The environments declared now: an undo or a redo can bring a tab back or take it away. */
+  onEnvironmentsList?: () => Promise<EnvironmentSource[]>;
 }
 
 /** What the next pass runs with: the screen changes it while it runs. */
@@ -198,6 +203,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   });
   const editing = liveEditing(options.config, options);
   view.canAdd = editing.writeService !== undefined;
+  view.canCreateEnvironment = options.onEnvironmentCreate !== undefined;
   view.canEditParameters = editing.writeParameter !== undefined;
   // The writes and the undos replace the config: a pass reads it as it is when it starts.
   const live: NativeDashboardOptions = {
@@ -245,6 +251,8 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     const monitor = new Monitor(checks, {
       intervalMs: options.settings.intervalMs,
       onResults: (env, results) => {
+        // A pass that was under way when its environment was removed must not bring it back.
+        if (!tracker.environments.includes(env)) return;
         // A pass that began before a removal still reports the service.
         const declared =
           env === LOCAL_ENVIRONMENT ? editing.config() : editing.environment?.(env)?.config();
@@ -256,6 +264,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         app.requestRender();
       },
       onFailure: (env, message) => {
+        if (!tracker.environments.includes(env)) return;
         tracker.recordFailure(env, message);
         app.requestRender();
       },
@@ -265,25 +274,48 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       say(view, cfg ? await work(cfg) : `${env} cannot be read`);
       app.requestRender();
     };
+    const showEnvironment = (source: EnvironmentSource) => {
+      sources.set(source.name, source);
+      tracker.add(source.name);
+      monitor.add(
+        sourceCheck(
+          source,
+          () => view,
+          (env, declared) => {
+            loaded.set(env, declared);
+            editing.observe?.(env, declared);
+            view.choices = merge();
+          },
+        ),
+      );
+    };
+    const hideEnvironment = (name: string) => {
+      const shown = tracker.environments[view.tab - 1];
+      sources.delete(name);
+      loaded.delete(name);
+      monitor.remove(name);
+      tracker.remove(name);
+      view.choices = merge();
+      // The tab that was open is gone: `all`, which is the only view left when one environment remains.
+      if (shown === name) view.tab = 0;
+      else view.tab = Math.max(0, tracker.environments.indexOf(shown ?? "") + 1);
+    };
+    /** Puts the tabs back in step with the files: an undo restores a file, a redo deletes it again. */
+    const reconcileEnvironments = async () => {
+      const found = await options.onEnvironmentsList?.();
+      if (!found) return;
+      const names = new Set(found.map(({ name }) => name));
+      for (const name of [...sources.keys()]) if (!names.has(name)) hideEnvironment(name);
+      for (const source of found) if (!sources.has(source.name)) showEnvironment(source);
+      app.requestRender();
+    };
     const created = options.onEnvironmentCreate;
     const createEnvironment =
       created &&
-      (async (name: string, from: string) => {
+      (async (name: string, from: EnvironmentOrigin) => {
         const { source, message } = await created(name, from);
-        sources.set(name, source);
-        tracker.add(name);
+        showEnvironment(source);
         view.tab = tracker.environments.indexOf(name) + 1;
-        monitor.add(
-          sourceCheck(
-            source,
-            () => view,
-            (env, declared) => {
-              loaded.set(env, declared);
-              editing.observe?.(env, declared);
-              view.choices = merge();
-            },
-          ),
-        );
         app.requestRender();
         return message;
       });
@@ -302,6 +334,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     };
     const edit = createEditor({
       createEnvironment,
+      removeEnvironment: options.onEnvironmentRemove,
       view,
       tracker,
       editing,
@@ -320,6 +353,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         retainEnvironments();
         monitor.invalidate();
         monitor.refresh();
+        void reconcileEnvironments();
         app.requestRender();
       },
     });

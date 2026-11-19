@@ -2,10 +2,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
-import { createEnvironment } from "../src/commands/env-create";
+import {
+  createEnvironment,
+  EMPTY_ENVIRONMENT,
+  type EnvironmentOrigin,
+} from "../src/commands/env-create";
 import type { ParameterWrite } from "../src/commands/parameter-writes";
 import type { ServiceWrite } from "../src/commands/service-writes";
 import { reference } from "../src/config/headers";
+import { loadConfig } from "../src/config/loader";
 import { parameterChoices } from "../src/config/parameters";
 import type { Config } from "../src/config/schema";
 import type { ParameterWriteOutcome } from "../src/dashboard/editing";
@@ -41,13 +46,14 @@ const answered = (name: string): CheckResult =>
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 interface Options {
-  create?: (name: string, from: string) => Promise<string>;
+  create?: (name: string, from: EnvironmentOrigin) => Promise<string>;
+  remove?: (name: string) => Promise<string | undefined>;
   edits?: Partial<EditCallbacks>;
   config?: Config;
   environments?: string[];
 }
 
-function setup({ edits = {}, config = initial, environments = [], create }: Options = {}) {
+function setup({ edits = {}, config = initial, environments = [], create, remove }: Options = {}) {
   const writes: ServiceWrite[] = [];
   const kept: Record<string, string>[] = [];
   const callbacks: EditCallbacks = {
@@ -80,6 +86,7 @@ function setup({ edits = {}, config = initial, environments = [], create }: Opti
     },
     redraw: () => {},
     declaredIn: () => ["prod.yml"],
+    removeEnvironment: remove,
     createEnvironment:
       create &&
       (async (name, from) => {
@@ -695,7 +702,7 @@ describe("a new environment", () => {
       create: async (name, from) => {
         const { variables } = await createEnvironment(paths, name, from);
         added.push(name);
-        return `Created ${name} from ${from}. Sends ${variables.join(", ")}`;
+        return `Created ${name} from ${typeof from === "string" ? from : "nothing"}. Sends ${variables.join(", ")}`;
       },
     });
     return { ...test, paths, added };
@@ -854,6 +861,176 @@ describe("the bar", () => {
     expect(draw().split("\n").at(-1)).not.toContain("p parameters");
     view.canEditParameters = true;
     expect(draw().split("\n").at(-1)).toContain("p parameters");
+  });
+});
+
+describe("an empty environment", () => {
+  it("is the last choice of Copy from, whatever the sources", async () => {
+    const created: EnvironmentOrigin[] = [];
+    const { press, draw } = setup({
+      environments: ["dev"],
+      create: async (_name, from) => {
+        created.push(from);
+        return "Created";
+      },
+    });
+    press("nqa");
+    press(TAB);
+    expect(draw()).toMatch(/Copy from\s+‹?\s*local/);
+    press(`${ESC}[D`);
+    expect(draw()).toMatch(/Copy from\s+‹ dev|Copy from\s+‹?\s*empty/);
+    press(ENTER);
+    await settle();
+    expect(created).toEqual([EMPTY_ENVIRONMENT]);
+  });
+
+  it("creates its file with a schema version and no service", async () => {
+    const paths = await tempProject("schemaVersion: 1\nservices:\n  api: { port: 3000 }\n");
+    await writeFile(join(paths.dir, "local.yml"), "variables:\n  KEY: kept\n");
+
+    const { variables } = await createEnvironment(paths, "qa", EMPTY_ENVIRONMENT);
+
+    expect(variables).toEqual([]);
+    expect(await readFile(join(paths.dir, "envs", "qa.yml"), "utf8")).toBe(
+      "schemaVersion: 1\nservices: {}\n",
+    );
+    const { config } = await loadConfig({ ...paths, config: join(paths.dir, "envs", "qa.yml") });
+    expect(config.services).toEqual({});
+  });
+
+  it("refuses a name that is taken, and never overwrites the file", async () => {
+    const paths = await tempProject("schemaVersion: 1\nservices: {}\n");
+    await mkdir(join(paths.dir, "envs"));
+    await writeFile(join(paths.dir, "envs", "qa.yml"), "# mine\n");
+
+    await expect(createEnvironment(paths, "qa", EMPTY_ENVIRONMENT)).rejects.toThrow(
+      "already there",
+    );
+    expect(await readFile(join(paths.dir, "envs", "qa.yml"), "utf8")).toBe("# mine\n");
+  });
+});
+
+describe("removing an environment", () => {
+  const prod = () => {
+    const removed: string[] = [];
+    const made = setup({
+      environments: ["prod"],
+      remove: async (name) => {
+        removed.push(name);
+        return undefined;
+      },
+    });
+    return { ...made, removed };
+  };
+
+  it("asks first, naming the file and what stays", () => {
+    const { press, draw, view, removed } = prod();
+    view.tab = 2;
+    press("D");
+    const frame = draw();
+    expect(frame).toContain("Remove prod?");
+    expect(frame).toContain(".probe/envs/prod.yml is deleted");
+    expect(frame).toContain("Its values in .probe/local.yml stay.");
+    expect(removed).toEqual([]);
+  });
+
+  it("deletes after y, and says the values stay and z undoes", async () => {
+    const { press, draw, view, removed, changed } = prod();
+    view.tab = 2;
+    press("Dy");
+    await tick();
+    expect(removed).toEqual(["prod"]);
+    expect(draw()).toContain("Removed prod");
+    expect(draw()).toContain("its values in .probe/local.yml stay");
+    expect(changed).toHaveBeenCalled();
+  });
+
+  it("keeps the environment on n or escape", async () => {
+    const { press, view, removed } = prod();
+    view.tab = 2;
+    press("Dn");
+    press(`D${ESC}`);
+    await tick();
+    expect(removed).toEqual([]);
+  });
+
+  it("says why it was not removed, and not that it was", async () => {
+    const { press, draw, view } = setup({
+      environments: ["prod"],
+      remove: async () => ".probe/envs/prod.yml is already gone",
+    });
+    view.tab = 2;
+    press("Dy");
+    await tick();
+    const frame = draw();
+    expect(frame).toContain("not saved: .probe/envs/prod.yml is already gone");
+    expect(frame).not.toContain("Removed prod");
+  });
+
+  it("cannot remove local", () => {
+    const { press, draw, view, removed } = prod();
+    view.tab = 1;
+    press("D");
+    expect(draw()).toContain("local is .probe/config.yml: it cannot be removed");
+    expect(draw()).not.toContain("Remove local?");
+    expect(removed).toEqual([]);
+  });
+
+  it("asks for an environment tab on the all tab", () => {
+    const { press, draw, removed } = prod();
+    press("D");
+    expect(draw()).toContain("Open the tab of an environment to remove it");
+    expect(removed).toEqual([]);
+  });
+
+  it("is in the palette and the help", () => {
+    const { press, draw } = prod();
+    press(":");
+    press("remove env");
+    expect(draw()).toContain("Remove the environment");
+    press(ESC);
+    press("?");
+    expect(draw()).toContain("Remove the environment");
+  });
+
+  it("is offered nowhere when no environment can be removed", () => {
+    const { press, draw, view } = setup({ environments: ["prod"] });
+    view.tab = 2;
+    press("D");
+    expect(draw()).not.toContain("Remove prod?");
+  });
+});
+
+describe("the tabs follow the environment files", () => {
+  it("forgets an environment and what it measured", () => {
+    const tracker = new Tracker(["local", "prod"]);
+    tracker.record("local", [answered("api")], 1);
+    tracker.record("prod", [answered("api"), answered("globex")], 1);
+
+    tracker.remove("prod");
+
+    expect(tracker.environments).toEqual(["local"]);
+    expect(tracker.services()).toEqual(["api"]);
+    expect(tracker.result("api", "prod")).toBeUndefined();
+    expect(tracker.result("api", "local")).toBeDefined();
+  });
+
+  it("stops checking an environment taken out of a running monitor", async () => {
+    const ran: string[] = [];
+    const monitor = new Monitor([], {
+      intervalMs: 5,
+      onResults: (env) => void ran.push(env),
+      onFailure: () => {},
+    });
+    monitor.add({ name: "prod", run: async () => [answered("api")] });
+    monitor.add({ name: "dev", run: async () => [answered("api")] });
+    await settle();
+    monitor.remove("prod");
+    ran.length = 0;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    monitor.stop();
+    expect(ran).toContain("dev");
+    expect(ran).not.toContain("prod");
   });
 });
 

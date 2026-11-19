@@ -1,3 +1,4 @@
+import { type EnvironmentOrigin, environmentFile } from "../../commands/env-create";
 import type { ParameterWrite } from "../../commands/parameter-writes";
 import type { ServiceWrite } from "../../commands/service-writes";
 import { CONFIG_FILE, LOCAL_ENVIRONMENT, LOCAL_FILE, PROBE_DIR } from "../../constants";
@@ -23,6 +24,8 @@ export interface Editor {
   redo(): void;
   /** Opens the form of a new environment; absent when none can be created. */
   environment?(): void;
+  /** Asks, then deletes the file of the environment whose tab is open; `undefined` is the `all` tab. Absent when none can be removed. */
+  removeEnvironment?(env: string | undefined): void;
   /** The keys of the parameters panel; absent when no writer was given. */
   parameters?: {
     add(): void;
@@ -49,7 +52,9 @@ export interface EditorDeps {
   /** The files changed: the services and parameters are read again and a pass starts. `restart` also forgets what was measured. */
   changed(restart?: boolean): void;
   /** Creates an environment and its tab; resolves to what to tell. Absent where none can be created. */
-  createEnvironment?(name: string, from: string): Promise<string>;
+  createEnvironment?(name: string, from: EnvironmentOrigin): Promise<string>;
+  /** Deletes the file of an environment, undoably; resolves to why it could not. Absent where none can be removed. */
+  removeEnvironment?(name: string): Promise<string | undefined>;
   /** The files of the other environments that declare this parameter. */
   declaredIn(parameter: string): string[];
   redraw(): void;
@@ -64,6 +69,7 @@ export function createEditor({
   declaredIn,
   tracker,
   createEnvironment,
+  removeEnvironment,
 }: EditorDeps): Editor {
   const { writeService, writeParameter, variables } = editing;
 
@@ -204,6 +210,35 @@ export function createEditor({
             },
           }),
         )),
+    removeEnvironment:
+      removeEnvironment &&
+      ((env) => {
+        if (env === undefined) return say(view, "Open the tab of an environment to remove it");
+        if (env === LOCAL_ENVIRONMENT)
+          return say(
+            view,
+            `${LOCAL_ENVIRONMENT} is ${environmentFile(LOCAL_ENVIRONMENT)}: it cannot be removed`,
+          );
+        const file = environmentFile(env);
+        view.modals.push(
+          confirmModal(
+            `remove ${env}`,
+            `Remove ${env}? ${file} is deleted. Its values in ${LOCAL} stay.`,
+            () =>
+              void removeEnvironment(env).then((failure) => {
+                view.unsaved = failure;
+                say(
+                  view,
+                  failure
+                    ? `not saved: ${failure}`
+                    : `Removed ${env}: ${file} is deleted, its values in ${LOCAL} stay. z undoes`,
+                );
+                if (!failure) changed();
+                redraw();
+              }),
+          ),
+        );
+      }),
     parameters: writeParameter && {
       add: () => view.modals.push(parameterFormModal(parameterContext)),
       edit(name) {
