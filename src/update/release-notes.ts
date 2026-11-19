@@ -15,6 +15,19 @@ export const IMPORTANT_KINDS: readonly NoteKind[] = ["schema", "completion", "br
  */
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: "1.3.0",
+    items: [
+      {
+        kind: "info",
+        text: "A service can be checked by running a command: type: command, up when it exits 0 (probe add <name> --command).",
+      },
+      {
+        kind: "completion",
+        text: "probe add has new options: regenerate your saved shell completion.",
+      },
+    ],
+  },
+  {
     version: "1.2.0",
     items: [
       {
