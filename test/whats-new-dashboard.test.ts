@@ -30,6 +30,7 @@ describe("what's new in the dashboard", () => {
 
     expect(draw(view)).toContain("What's new · 1.2.0");
     expect(draw(view)).toContain("grouped help");
+    expect(draw(view)).toContain("Esc close · ⇧w reopen");
     handleInput(key("escape"), new Tracker(["local"]), view, actions);
 
     expect(view.modals.depth).toBe(0);
@@ -54,6 +55,6 @@ describe("what's new in the dashboard", () => {
       cells.map((c) => c.text).join(" "),
     );
 
-    expect(rows.join("\n")).toMatch(/W\s+What.s new/);
+    expect(rows.join("\n")).toMatch(/⇧w\s+What.s new/);
   });
 });

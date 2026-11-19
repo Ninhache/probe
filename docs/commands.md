@@ -175,7 +175,7 @@ After an update, the first run in a terminal shows what is new, once, on stderr:
 the items that need an action (`!`: a schema change, a stale saved completion) first, then the others (`+`),
 about 8 lines at most. A first install shows nothing. It stays silent with `--json`, when stderr is not a
 terminal, for `probe completion`, `--help` and `--version`, and under the same switches as the update
-check. In the dashboard the same notes open as a "What's new" window, and `W` opens them again.
+check. In the dashboard the same notes open as a "What's new" window, and `⇧w` (Shift+w) opens them again.
 
 ## probe sync
 

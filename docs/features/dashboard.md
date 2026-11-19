@@ -78,14 +78,16 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 | `e`             | Edit the selected service                         |
 | `d`             | Remove the selected service, after a question     |
 | `n`             | Create an [environment](#several-environments)    |
-| `D`             | Remove the environment of the open tab            |
+| `⇧d`            | Remove the environment of the open tab            |
 | `z`             | Undo the last change to `config.yml`              |
-| `Z`             | Redo what `z` undid                               |
+| `⇧z`            | Redo what `z` undid                               |
 | `:`             | Find a command by what it does; `Enter` runs      |
 | `o`             | Options: interval, timeout and notifications      |
-| `W`             | What's new in this version                        |
+| `⇧w`            | What's new (Shift+w)                              |
 | `?`             | This screen's keys, `Tab` for all, type to search |
 | `q`             | Quit                                              |
+
+A capital letter key is shown as `⇧` and the letter (`⇧w` is Shift+w); in ASCII terminals it stays `W`.
 
 The bar at the bottom shows the keys you need first. While you type (filter, form, command palette), `q` and
 `?` are letters.
@@ -122,7 +124,7 @@ hand.
   a parameter), then the one before. It puts back the files that write changed (`config.yml`, `lock.yml` and
   the Makefile, or the environment file) as they were, and does nothing if one of them changed since. Kept in memory only, until you quit. `local.yml` is never undone: options, skips, the chosen
   values and a variable kept for a header stay as they are.
-- `Z` (Shift+Z) writes again what `z` undid, last undone first, with the same check. A new change forgets it.
+- `⇧z` (Shift+z) writes again what `z` undid, last undone first, with the same check. A new change forgets it.
 - All three write `.probe/config.yml` as `probe add` and `probe rm` do: your comments are kept, and the
   [Makefile](makefile.md) block stays up to date.
 - The address takes `3000`, `localhost:3000/health`, `api.example.com` or `https://api.example.com:8443/health`.
@@ -288,11 +290,11 @@ A click on it does what `n` does, and it lights up under the pointer like the ta
 - `Enter`, `u`, `c` and `b` work on the selected cell.
 - `n` (or `+ env`) creates an environment: it asks for a name and writes its file in `.probe/envs/`. `Copy from`
   lists the environments to copy and, last, `empty`: a file with `schemaVersion` and no service.
-- `D` on an environment tab asks `Remove prod?`, then deletes `.probe/envs/prod.yml`, closes its tab and goes back
+- `⇧d` (Shift+d) on an environment tab asks `Remove prod?`, then deletes `.probe/envs/prod.yml`, closes its tab and goes back
   to `all` (or to the single view left). The values `.probe/local.yml` keeps for it, secrets included, stay.
-  `local` cannot be removed. `z` brings the file and its tab back, `Z` removes it again.
+  `local` cannot be removed. `z` brings the file and its tab back, `⇧z` removes it again.
 - `a`, `e` and `d` on an environment tab write to that environment's file, `.probe/envs/<name>.yml`, and
-  `z` and `Z` undo and redo them. The form names its target (`add to prod`, `edit api in prod`). `config.yml`,
+  `z` and `⇧z` undo and redo them. The form names its target (`add to prod`, `edit api in prod`). `config.yml`,
   the Makefile and `lock.yml` are not touched by a write to an environment.
 - On the `all` tab, `a` adds to `local`. `e` and `d` act on the first environment that has the selected
   service, the one its detail shows; to change another, go to its tab.

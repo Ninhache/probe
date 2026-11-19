@@ -2,6 +2,7 @@ import type { Modal } from "../../tui/modal";
 import { defaultTheme as t } from "../../tui/theme";
 import { strWidth } from "../../tui/width";
 import type { News } from "../../update/whats-new";
+import { keyLabel } from "../keymap";
 
 /** Notes wrap here, as the terminal width is not known when the dashboard opens. */
 const WRAP_WIDTH = 54;
@@ -32,7 +33,7 @@ export function whatsNewModal(news: News): Modal {
   );
   return {
     title: `What's new · ${news.version}`,
-    footer: "esc close",
+    footer: `Esc close · ${keyLabel("W", true)} reopen`,
     size: { w: widest + 2 * PADDING + 2, h: rows.length + 4 },
     draw(screen, inner) {
       const x = inner.x + PADDING;

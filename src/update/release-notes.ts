@@ -21,7 +21,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       { kind: "info", text: "In the dashboard, ? shows the keys of the current screen first." },
       {
         kind: "info",
-        text: "probe tells you once what changed after an update (W in the dashboard).",
+        text: "probe tells you once what changed after an update (Shift+w in the dashboard).",
       },
     ],
   },
