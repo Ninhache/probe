@@ -6,7 +6,7 @@ export type NotifySpawn = (
   command: string,
   args: string[],
   // Nothing the tool prints may reach the terminal: the dashboard draws there.
-  options: { stdio: "ignore" },
+  options: { stdio: "ignore"; windowsHide: true; env?: NodeJS.ProcessEnv },
 ) => {
   once(event: "exit", listener: (code: number | null) => void): unknown;
   once(event: "error", listener: (error: Error) => void): unknown;
@@ -19,9 +19,16 @@ export function sendNotification(
   platform: Platform = currentPlatform,
   spawn: NotifySpawn = nodeSpawn,
 ): Promise<boolean> {
-  const [command = "", ...args] = platform.notifier.command(title, text);
+  const { notifier } = platform;
+  const [command = "", ...args] = notifier.command(title, text);
+  const extra = notifier.env?.(title, text);
+  const env = extra && { ...process.env, ...extra };
   return new Promise<boolean>((resolve) => {
-    const child = spawn(command, args, { stdio: "ignore" });
+    const child = spawn(command, args, {
+      stdio: "ignore",
+      windowsHide: true,
+      ...(env && { env }),
+    });
     // Without a desktop the tool can wait a long time for an answer.
     const late = setTimeout(() => {
       child.kill();

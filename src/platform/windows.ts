@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { NOTIFY_SEND, utf8Locale } from "./shared";
+import { utf8Locale } from "./shared";
 import type { ClipboardTool, Platform } from "./types";
 
 type Spawn = typeof nodeSpawn;
@@ -35,6 +35,26 @@ const POWERSHELL: ClipboardTool = [
 ];
 const CLIP: ClipboardTool = ["clip"];
 
+const TOAST_TITLE_VAR = "PROBE_TOAST_TITLE";
+const TOAST_TEXT_VAR = "PROBE_TOAST_TEXT";
+// The AUMID of PowerShell itself: a toast needs an app id, and this one is registered on every Windows.
+const TOAST_APP_ID =
+  "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe";
+// Fixed text: title and text come in through the environment, and the DOM escapes them as text nodes.
+// No double quote in it, so that the command line of the child needs no escaping.
+export const TOAST_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  "[void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]",
+  "[void][Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]",
+  "$xml = New-Object Windows.Data.Xml.Dom.XmlDocument",
+  "$xml.LoadXml('<toast><visual><binding template=''ToastGeneric''><text/><text/></binding></visual></toast>')",
+  "$lines = $xml.GetElementsByTagName('text')",
+  `$lines.Item(0).InnerText = $env:${TOAST_TITLE_VAR}`,
+  `$lines.Item(1).InnerText = $env:${TOAST_TEXT_VAR}`,
+  "$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)",
+  `[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${TOAST_APP_ID}').Show($toast)`,
+].join("; ");
+
 const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
 
 // Windows names variables without regard to case, but a copy of process.env is a plain object: `Path` is the usual spelling.
@@ -64,8 +84,20 @@ export function windowsPlatform(spawn: Spawn = nodeSpawn): Platform {
     // rundll32 takes the URL as an argument no shell reads: `cmd /c start` would run an `&` of a URL.
     openUrlCommand: (url) => ({ command: "rundll32", args: ["url.dll,FileProtocolHandler", url] }),
     clipboardTools: () => [POWERSHELL, CLIP],
-    // No tool is known to show one: the action says it could not, as it does on a Linux without libnotify.
-    notifier: { name: "notify-send", command: NOTIFY_SEND },
+    // powershell.exe, not pwsh: only Windows PowerShell 5.1 loads the WinRT toast types.
+    notifier: {
+      name: "powershell",
+      command: () => [
+        "powershell.exe",
+        "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle",
+        "Hidden",
+        "-Command",
+        TOAST_SCRIPT,
+      ],
+      env: (title, text) => ({ [TOAST_TITLE_VAR]: title, [TOAST_TEXT_VAR]: text }),
+    },
     // `file://host/C:/x` is read as a share, `file:///C:/x` as the local drive.
     localFileHost: () => undefined,
     pathEntries: (env) =>
