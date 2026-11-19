@@ -2,6 +2,7 @@ import { defineCommand } from "citty";
 import { requireProbeDir } from "../config/discovery";
 import { loadConfig, pendingMigration } from "../config/loader";
 import { type BlockState, blockState } from "../makefile/sync";
+import { isOnPath } from "../platform/on-path";
 import type { Colors } from "../ui/colors";
 import { type Glyphs, UNICODE_GLYPHS } from "../ui/glyphs";
 import { cacheDir, readCache, updateCheckDisabled, updateNotice } from "../update/notifier";
@@ -12,7 +13,10 @@ export function describeBlock(
   state: BlockState,
   colors: Colors,
   glyphs: Glyphs = UNICODE_GLYPHS,
+  hasMake = true,
 ): string {
+  // Without make the block cannot be run, so its state asks nothing of anyone: `probe check` does the same.
+  if (!hasMake) return colors.dim("make not installed: `probe check` does the same");
   switch (state) {
     case "in-sync":
       return colors.green("in sync");
@@ -49,7 +53,10 @@ export default defineCommand({
     } else {
       const { config } = await loadConfig(paths);
       line("migration", colors.green("none pending"));
-      line("makefile", describeBlock(await blockState(paths, config), colors, glyphs));
+      line(
+        "makefile",
+        describeBlock(await blockState(paths, config), colors, glyphs, await isOnPath("make")),
+      );
     }
     line("update", describeUpdate(colors, glyphs));
   },
