@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configSchemaV1 } from "../src/config/schema";
 import { type ActionDeps, serviceActions } from "../src/dashboard/actions";
+import { platformFor } from "../src/platform";
 
 const config = configSchemaV1.parse({
   schemaVersion: 1,
@@ -17,7 +18,7 @@ function deps(works: boolean, over: Partial<ActionDeps> = {}) {
   return {
     seen,
     deps: {
-      platform: "linux",
+      platform: platformFor("linux"),
       env: {},
       openUrl: act,
       copyText: act,
@@ -81,7 +82,7 @@ describe("serviceActions", () => {
   });
 
   it("should name pbcopy when on macOS", async () => {
-    const { deps: system } = deps(false, { platform: "darwin" });
+    const { deps: system } = deps(false, { platform: platformFor("darwin") });
 
     expect(await serviceActions(() => config, system).onCopy("api", undefined)).toContain(
       "No pbcopy ",
@@ -118,7 +119,7 @@ describe("serviceActions", () => {
   ] as const)(
     "should name the tool of %s when no notification could be shown",
     async (platform, tool) => {
-      const { deps: system } = deps(false, { platform });
+      const { deps: system } = deps(false, { platform: platformFor(platform) });
 
       expect(await serviceActions(() => config, system).onNotify("api is down")).toBe(
         `${tool} could not show a desktop notification`,

@@ -1,7 +1,8 @@
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NOTIFY_WAIT_MS } from "../src/constants";
-import { type NotifySpawn, notifierCommand, notifierName, sendNotification } from "../src/notify";
+import { type NotifySpawn, sendNotification } from "../src/notify";
+import { platformFor } from "../src/platform";
 
 type Outcome = "shown" | "missing" | "failed" | "silent";
 
@@ -28,12 +29,12 @@ afterEach(() => vi.useRealTimers());
 
 describe("notifierCommand", () => {
   it("should name notify-send on Linux and osascript on macOS", () => {
-    expect(notifierName("linux")).toBe("notify-send");
-    expect(notifierName("darwin")).toBe("osascript");
+    expect(platformFor("linux").notifier.name).toBe("notify-send");
+    expect(platformFor("darwin").notifier.name).toBe("osascript");
   });
 
   it("should end the options of notify-send before the texts", () => {
-    expect(notifierCommand("linux", "probe", "--urgency is down")).toEqual([
+    expect(platformFor("linux").notifier.command("probe", "--urgency is down")).toEqual([
       "notify-send",
       "--app-name=probe",
       "--",
@@ -45,7 +46,7 @@ describe("notifierCommand", () => {
   it("should give osascript the texts as arguments, outside the script", () => {
     const text = 'api" & (do shell script "id") & " is down';
 
-    const command = notifierCommand("darwin", "probe", text);
+    const command = platformFor("darwin").notifier.command("probe", text);
 
     expect(command.slice(-2)).toEqual(["probe", text]);
     expect(command.slice(0, -2).join(" ")).not.toContain("api");
@@ -56,7 +57,7 @@ describe("sendNotification", () => {
   it("should run the tool without a terminal to write on when it shows the notification", async () => {
     const { spawn, calls } = fakeSpawn("shown");
 
-    expect(await sendNotification("probe", "api is down", "linux", spawn)).toBe(true);
+    expect(await sendNotification("probe", "api is down", platformFor("linux"), spawn)).toBe(true);
     expect(calls).toEqual([
       {
         command: "notify-send",
@@ -70,14 +71,14 @@ describe("sendNotification", () => {
   it.each(["missing", "failed"] as const)("should say no when the tool is %s", async (outcome) => {
     const { spawn } = fakeSpawn(outcome);
 
-    expect(await sendNotification("probe", "api is down", "linux", spawn)).toBe(false);
+    expect(await sendNotification("probe", "api is down", platformFor("linux"), spawn)).toBe(false);
   });
 
   it("should stop a tool that does not answer and say no", async () => {
     vi.useFakeTimers();
     const { spawn, calls } = fakeSpawn("silent");
 
-    const shown = sendNotification("probe", "api is down", "linux", spawn);
+    const shown = sendNotification("probe", "api is down", platformFor("linux"), spawn);
     await vi.advanceTimersByTimeAsync(NOTIFY_WAIT_MS);
 
     expect(await shown).toBe(false);

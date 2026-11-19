@@ -10,6 +10,7 @@ import type { Config } from "../src/config/schema";
 import { type ActionDeps, serviceActions } from "../src/dashboard/actions";
 import { sourceCheck } from "../src/dashboard/native/open";
 import { environmentSource } from "../src/dashboard/sources";
+import { platformFor } from "../src/platform";
 
 describe("the check of an environment", () => {
   let dir: string | undefined;
@@ -86,7 +87,7 @@ describe("the check of an environment", () => {
     const { paths, seen } = await project();
     const copied: string[] = [];
     const deps: ActionDeps = {
-      platform: "linux",
+      platform: platformFor("linux"),
       env: {},
       openUrl: async () => true,
       copyText: async (text) => {

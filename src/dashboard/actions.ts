@@ -1,16 +1,17 @@
 import { serviceType } from "../checkers/registry";
 import type { ServiceTypes } from "../checkers/types";
-import { clipboardTools, copyText } from "../clipboard";
+import { copyText } from "../clipboard";
 import type { Selection } from "../config/parameters";
 import type { Config } from "../config/schema";
-import { notifierName, sendNotification } from "../notify";
-import { openerCommand, openUrl } from "../open-url";
+import { sendNotification } from "../notify";
+import { openUrl } from "../open-url";
+import { currentPlatform, type Platform } from "../platform";
 import type { ResponsePart } from "./response";
 
 const NOTIFICATION_TITLE = "probe";
 
 export interface ActionDeps {
-  platform: NodeJS.Platform;
+  platform: Platform;
   env: NodeJS.ProcessEnv;
   openUrl: (url: string) => Promise<boolean>;
   copyText: (text: string) => Promise<boolean>;
@@ -19,7 +20,7 @@ export interface ActionDeps {
 }
 
 const system = (): ActionDeps => ({
-  platform: process.platform,
+  platform: currentPlatform,
   env: process.env,
   openUrl,
   copyText,
@@ -52,7 +53,7 @@ export function serviceActions(
       if (!open) return `${name} has no address to open`;
       const url = open(found);
       if (await deps.openUrl(url)) return `Opened ${url}`;
-      return `${openerCommand(deps.platform)} not found. The URL:\n${url}`;
+      return `${deps.platform.openUrlCommand(url).command} not found. The URL:\n${url}`;
     },
     async onCopy(name, timeout, selection) {
       const found = service(name, selection);
@@ -63,7 +64,7 @@ export function serviceActions(
       if (await deps.copyText(command)) {
         return note ? `Copied: ${command}\n${note}` : `Copied: ${command}`;
       }
-      const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
+      const tools = deps.platform.clipboardTools(deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy with. The command:\n${command}`;
     },
     async onCopyResponse(text, cut, part = "response", formatted = false) {
@@ -71,17 +72,17 @@ export function serviceActions(
         if (formatted) return `Copied the ${part} (formatted JSON)`;
         return cut ? `Copied the ${part}, its body cut` : `Copied the ${part}`;
       }
-      const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
+      const tools = deps.platform.clipboardTools(deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy the ${part} with`;
     },
     async onCopyLog(text) {
       if (await deps.copyText(text)) return "Copied the log lines";
-      const tools = clipboardTools(deps.platform, deps.env).map(([tool]) => tool);
+      const tools = deps.platform.clipboardTools(deps.env).map(([tool]) => tool);
       return `No ${tools.join(" or ")} to copy the log with`;
     },
     async onNotify(message) {
       if (await deps.notify(NOTIFICATION_TITLE, message)) return undefined;
-      return `${notifierName(deps.platform)} could not show a desktop notification`;
+      return `${deps.platform.notifier.name} could not show a desktop notification`;
     },
   };
 }

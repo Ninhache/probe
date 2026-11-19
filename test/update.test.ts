@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { UPDATE_CHECK_TTL_MS } from "../src/constants";
+import { platformFor } from "../src/platform";
 import {
   cacheDir,
   isNewer,
@@ -38,18 +39,20 @@ describe("updateCheckDisabled", () => {
 
 describe("cacheDir", () => {
   it("follows XDG_CACHE_HOME, else ~/.cache", () => {
-    expect(cacheDir({ XDG_CACHE_HOME: "/xdg" }, "linux")).toBe(join("/xdg", "probe"));
-    expect(cacheDir({}, "linux")).toBe(join(homedir(), ".cache", "probe"));
+    expect(cacheDir({ XDG_CACHE_HOME: "/xdg" }, platformFor("linux"))).toBe(join("/xdg", "probe"));
+    expect(cacheDir({}, platformFor("linux"))).toBe(join(homedir(), ".cache", "probe"));
   });
 
   it("uses LOCALAPPDATA on Windows when XDG_CACHE_HOME is not set", () => {
     const local = join("C:", "Users", "me", "AppData", "Local");
 
-    expect(cacheDir({ LOCALAPPDATA: local }, "win32")).toBe(join(local, "probe"));
-    expect(cacheDir({ LOCALAPPDATA: local, XDG_CACHE_HOME: "/xdg" }, "win32")).toBe(
+    expect(cacheDir({ LOCALAPPDATA: local }, platformFor("win32"))).toBe(join(local, "probe"));
+    expect(cacheDir({ LOCALAPPDATA: local, XDG_CACHE_HOME: "/xdg" }, platformFor("win32"))).toBe(
       join("/xdg", "probe"),
     );
-    expect(cacheDir({ LOCALAPPDATA: local }, "linux")).toBe(join(homedir(), ".cache", "probe"));
+    expect(cacheDir({ LOCALAPPDATA: local }, platformFor("linux"))).toBe(
+      join(homedir(), ".cache", "probe"),
+    );
   });
 });
 

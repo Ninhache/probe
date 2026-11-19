@@ -18,6 +18,7 @@ import type { Config } from "../src/config/schema";
 import { type ActionDeps, serviceActions } from "../src/dashboard/actions";
 import { sourceCheck } from "../src/dashboard/native/open";
 import { environmentSource } from "../src/dashboard/sources";
+import { platformFor } from "../src/platform";
 import { expectMode, tempProject } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -591,7 +592,7 @@ describe("a value kept for an environment", () => {
     ).run(new AbortController().signal);
     const config = declared as Config;
     const deps: ActionDeps = {
-      platform: "linux",
+      platform: platformFor("linux"),
       env: {},
       openUrl: async () => true,
       copyText: async () => true,

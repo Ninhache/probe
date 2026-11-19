@@ -15,6 +15,7 @@ import {
   renderDashboard,
   type ViewActions,
 } from "../src/dashboard/native/view";
+import { platformFor } from "../src/platform";
 import { parseInput } from "../src/tui/input";
 import { Screen } from "../src/tui/screen";
 import { formatCheckResults } from "../src/ui/report";
@@ -62,7 +63,7 @@ describe("a service type", () => {
   it("should say there is nothing to open when the type has no address", async () => {
     const opened: string[] = [];
     const deps = {
-      platform: "linux" as const,
+      platform: platformFor("linux"),
       env: {},
       openUrl: async (url: string) => Boolean(opened.push(url)),
       copyText: async () => true,

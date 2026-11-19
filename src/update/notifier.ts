@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PACKAGE_NAME,
@@ -10,6 +10,7 @@ import {
   UPDATE_CACHE_FILE,
   UPDATE_CHECK_TTL_MS,
 } from "../constants";
+import { currentPlatform, type Platform } from "../platform";
 import { type Glyphs, UNICODE_GLYPHS } from "../ui/glyphs";
 
 export interface UpdateCache {
@@ -17,13 +18,11 @@ export interface UpdateCache {
   checkedAt: number;
 }
 
-/** `XDG_CACHE_HOME`, else `%LOCALAPPDATA%` on Windows, else `~/.cache`; always with `probe` under it. */
 export function cacheDir(
   env: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
+  platform: Platform = currentPlatform,
 ): string {
-  const windowsCache = platform === "win32" ? env.LOCALAPPDATA : undefined;
-  return join(env.XDG_CACHE_HOME || windowsCache || join(homedir(), ".cache"), "probe");
+  return platform.cacheDir(env);
 }
 
 export function updateCheckDisabled(env: NodeJS.ProcessEnv = process.env): boolean {

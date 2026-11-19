@@ -1,6 +1,7 @@
 import { serviceType, targetOf } from "../checkers/registry";
 import type { CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
+import type { Platform } from "../platform";
 import {
   type Connect,
   type ContainerLookup,
@@ -44,7 +45,7 @@ export interface DiagnoseDeps {
   run: RunCommand;
   connect: Connect;
   executable: ExecutableName;
-  platform: NodeJS.Platform;
+  platform: Platform;
 }
 
 const REMOTE = "remote host";

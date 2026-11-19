@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { openerCommand } from "../src/open-url";
+import { currentPlatform } from "../src/platform";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -630,7 +630,7 @@ describe("probe open / curl", () => {
   it("prints the URL and exits 1 when the opener is not installed", async () => {
     const root = await project();
     await addApi(root);
-    const opener = openerCommand(process.platform);
+    const opener = currentPlatform.openUrlCommand("").command;
 
     const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: await tempDir() });
 

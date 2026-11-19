@@ -1,8 +1,7 @@
 import { execFile } from "node:child_process";
-import { readlink } from "node:fs/promises";
 import { connect as netConnect } from "node:net";
-import { basename } from "node:path";
 import { DOCTOR_COMMAND_TIMEOUT_MS, DOCTOR_CONNECT_TIMEOUT_MS } from "../constants";
+import { currentPlatform, type Platform } from "../platform";
 
 export type CommandResult =
   | { state: "missing" }
@@ -43,15 +42,7 @@ export interface ProcessInfo {
 
 export type ExecutableName = (pid: number) => Promise<string | undefined>;
 
-// On Linux lsof and ss name a process after its main thread: every Node server is "MainThread" there.
-export const executableName: ExecutableName = async (pid) => {
-  if (process.platform !== "linux") return undefined;
-  try {
-    return basename(await readlink(`/proc/${pid}/exe`)).replace(/ \(deleted\)$/, "");
-  } catch {
-    return undefined;
-  }
-};
+export const executableName: ExecutableName = (pid) => currentPlatform.executableName(pid);
 
 function portOf(address: string): number | undefined {
   const port = Number(address.slice(address.lastIndexOf(":") + 1));
@@ -97,15 +88,12 @@ export type OwnerLookup =
 const LSOF_ARGS = ["-nP", "+c", "0", "-iTCP", "-sTCP:LISTEN", "-Fpcn"];
 const SS_ARGS = ["-H", "-ltnp"];
 
-export async function listenerOwners(
-  run: RunCommand,
-  platform: NodeJS.Platform,
-): Promise<OwnerLookup> {
+export async function listenerOwners(run: RunCommand, platform: Platform): Promise<OwnerLookup> {
   const lsof = await run("lsof", LSOF_ARGS);
   // lsof exits 1 when no socket matches: what it printed is read whatever the code.
   if (lsof.state === "done") return { state: "done", owners: parseLsof(lsof.stdout) };
   if (lsof.state === "failed") return { state: "skipped", reason: "lsof did not answer" };
-  if (platform !== "linux") return { state: "skipped", reason: "lsof not found" };
+  if (!platform.hasSs) return { state: "skipped", reason: "lsof not found" };
   const ss = await run("ss", SS_ARGS);
   if (ss.state === "done" && ss.code === 0) return { state: "done", owners: parseSs(ss.stdout) };
   return { state: "skipped", reason: "lsof not found" };

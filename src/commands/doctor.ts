@@ -10,6 +10,7 @@ import { diagnoseServices, type ServiceReport } from "../doctor/diagnose";
 import { formatDiagnosis } from "../doctor/format";
 import { executableName, runCommand, tcpConnect } from "../doctor/system";
 import { type BlockState, blockState } from "../makefile/sync";
+import { currentPlatform } from "../platform";
 import { formatCheckResults } from "../ui/report";
 import { cacheDir, readCache, updateCheckDisabled } from "../update/notifier";
 import { CLI_VERSION } from "../version";
@@ -76,7 +77,7 @@ export default defineCommand({
         run: runCommand,
         connect: tcpConnect,
         executable: executableName,
-        platform: process.platform,
+        platform: currentPlatform,
       });
     }
 

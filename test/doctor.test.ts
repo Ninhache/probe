@@ -16,6 +16,7 @@ import {
   runCommand,
   tcpConnect,
 } from "../src/doctor/system";
+import { currentPlatform, platformFor } from "../src/platform";
 import { createColors } from "../src/ui/colors";
 
 const plain = createColors(false);
@@ -96,13 +97,13 @@ describe("parsers", () => {
 describe("lookups", () => {
   it("falls back on ss when lsof is missing on Linux", async () => {
     const run = fakeRun({ ss: done('LISTEN 0 1 *:3000 *:* users:(("node",pid=1,fd=2))') });
-    const lookup = await listenerOwners(run, "linux");
+    const lookup = await listenerOwners(run, platformFor("linux"));
     expect(lookup.state === "done" && lookup.owners.get(3000)?.name).toBe("node");
   });
 
   it("skips the owner when lsof is missing, without trying ss on macOS", async () => {
     const run = fakeRun({});
-    expect(await listenerOwners(run, "darwin")).toEqual({
+    expect(await listenerOwners(run, platformFor("darwin"))).toEqual({
       state: "skipped",
       reason: "lsof not found",
     });
@@ -110,7 +111,7 @@ describe("lookups", () => {
   });
 
   it("reads what lsof printed even when it exits 1", async () => {
-    const lookup = await listenerOwners(fakeRun({ lsof: done("", 1) }), "linux");
+    const lookup = await listenerOwners(fakeRun({ lsof: done("", 1) }), platformFor("linux"));
     expect(lookup).toEqual({ state: "done", owners: new Map() });
   });
 
@@ -166,7 +167,7 @@ describe("diagnoseServices", () => {
       run,
       connect: async (_host, port) => port === 3000,
       executable: noExecutable,
-      platform: "linux",
+      platform: platformFor("linux"),
     });
     expect(reports[0]?.checks).toEqual({
       port: { status: "listening" },
@@ -192,7 +193,7 @@ describe("diagnoseServices", () => {
       run: fakeRun({ lsof: done("p4242\ncMainThread\nn*:3000\n") }),
       connect: async () => true,
       executable: async (pid) => (pid === 4242 ? "node" : undefined),
-      platform: "linux",
+      platform: platformFor("linux"),
     });
     expect(report?.checks?.process).toEqual({ status: "found", name: "node", pid: 4242 });
   });
@@ -202,7 +203,7 @@ describe("diagnoseServices", () => {
       run: fakeRun({ "docker ps": done("") }),
       connect: async () => true,
       executable: noExecutable,
-      platform: "darwin",
+      platform: platformFor("darwin"),
     });
     expect(report?.checks).toEqual({
       port: { status: "listening" },
@@ -218,7 +219,7 @@ describe("diagnoseServices", () => {
       run: fakeRun({ lsof: done("", 1) }),
       connect: async () => true,
       executable: noExecutable,
-      platform: "linux",
+      platform: platformFor("linux"),
     });
     expect(report?.checks?.process).toEqual({ status: "hidden" });
     expect(report?.checks?.docker).toEqual({ status: "skipped", reason: "docker not found" });
@@ -234,7 +235,7 @@ describe("diagnoseServices", () => {
         throw new Error("no connection expected");
       },
       executable: noExecutable,
-      platform: "linux",
+      platform: platformFor("linux"),
     });
     expect(report?.checks?.port).toEqual({ status: "skipped", reason: "remote host" });
     expect(formatDiagnosis(report as never, plain)).toHaveLength(1);
@@ -242,7 +243,7 @@ describe("diagnoseServices", () => {
       run,
       connect: async () => true,
       executable: noExecutable,
-      platform: "linux",
+      platform: platformFor("linux"),
     });
     expect(run.calls).toEqual([]);
   });
@@ -256,7 +257,7 @@ describe("on this machine", () => {
     const { port } = server.address() as AddressInfo;
 
     expect(await tcpConnect("127.0.0.1", port)).toBe(true);
-    const lookup = await listenerOwners(runCommand, process.platform);
+    const lookup = await listenerOwners(runCommand, currentPlatform);
     if (lookup.state === "skipped") return skip(lookup.reason);
     expect(lookup.owners.get(port)?.pid).toBe(process.pid);
   });

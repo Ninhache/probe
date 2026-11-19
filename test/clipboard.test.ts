@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
-import { type ClipboardSpawn, clipboardTools, copyText } from "../src/clipboard";
+import { type ClipboardSpawn, copyText } from "../src/clipboard";
+import { platformFor } from "../src/platform";
 
 const TEXT = "curl -i -L --max-time 3 'http://localhost:3000/health'";
 
@@ -35,7 +36,11 @@ describe("clipboardTools", () => {
     ["linux", {}, ["xclip", "wl-copy"]],
     ["win32", {}, ["powershell", "clip"]],
   ] as const)("should list on %s with %o the tools %o", (platform, env, tools) => {
-    expect(clipboardTools(platform, env).map(([tool]) => tool)).toEqual(tools);
+    expect(
+      platformFor(platform)
+        .clipboardTools(env)
+        .map(([tool]) => tool),
+    ).toEqual(tools);
   });
 });
 
@@ -43,14 +48,16 @@ describe("copyText", () => {
   it("should write the text as it is to pbcopy when on macOS", async () => {
     const { spawn, calls } = fakeSpawn({ pbcopy: "copied" });
 
-    expect(await copyText(TEXT, "darwin", {}, spawn)).toBe(true);
+    expect(await copyText(TEXT, platformFor("darwin"), {}, spawn)).toBe(true);
     expect(calls).toEqual([{ command: "pbcopy", args: [], written: TEXT }]);
   });
 
   it("should use the clipboard selection of xclip when wl-copy is missing", async () => {
     const { spawn, calls } = fakeSpawn({ xclip: "copied" });
 
-    expect(await copyText(TEXT, "linux", { WAYLAND_DISPLAY: "wayland-1" }, spawn)).toBe(true);
+    expect(
+      await copyText(TEXT, platformFor("linux"), { WAYLAND_DISPLAY: "wayland-1" }, spawn),
+    ).toBe(true);
     expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
       ["wl-copy"],
       ["xclip", "-selection", "clipboard"],
@@ -60,13 +67,13 @@ describe("copyText", () => {
   it("should try the next tool when one exits with an error", async () => {
     const { spawn, calls } = fakeSpawn({ xclip: "failed", "wl-copy": "copied" });
 
-    expect(await copyText(TEXT, "linux", {}, spawn)).toBe(true);
+    expect(await copyText(TEXT, platformFor("linux"), {}, spawn)).toBe(true);
     expect(calls.map(({ command }) => command)).toEqual(["xclip", "wl-copy"]);
   });
 
   it("should resolve to false when no tool works", async () => {
     const { spawn } = fakeSpawn({ xclip: "failed" });
 
-    expect(await copyText(TEXT, "linux", {}, spawn)).toBe(false);
+    expect(await copyText(TEXT, platformFor("linux"), {}, spawn)).toBe(false);
   });
 });

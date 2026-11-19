@@ -8,6 +8,7 @@ import {
   say,
   type ViewActions,
 } from "../src/dashboard/native/view";
+import { platformFor } from "../src/platform";
 import { drawFrame } from "../src/tui/app";
 import { detectColorMode } from "../src/tui/color";
 import type { InputEvent } from "../src/tui/input";
@@ -123,7 +124,7 @@ describe("native screen on a limited terminal", () => {
     [{ PROBE_ASCII: "0", LANG: "en_US.UTF-8" }, true],
     [{ PROBE_ASCII: "", LANG: "en_US.UTF-8" }, true],
   ])("should read the locale %j as unicode: %s", (env, unicode) => {
-    expect(supportsUnicode(env, "linux")).toBe(unicode);
+    expect(supportsUnicode(env, platformFor("linux"))).toBe(unicode);
   });
 
   it.each([
@@ -139,11 +140,11 @@ describe("native screen on a limited terminal", () => {
     [{ WT_SESSION: "1", PROBE_ASCII: "1" }, false],
     [{ LANG: "en_US.UTF-8" }, true],
   ])("should read the windows terminal %j as unicode: %s", (env, unicode) => {
-    expect(supportsUnicode(env, "win32")).toBe(unicode);
+    expect(supportsUnicode(env, platformFor("win32"))).toBe(unicode);
   });
 
   it("should ignore the windows terminals elsewhere", () => {
-    expect(supportsUnicode({ WT_SESSION: "1" }, "linux")).toBe(false);
+    expect(supportsUnicode({ WT_SESSION: "1" }, platformFor("linux"))).toBe(false);
   });
 });
 

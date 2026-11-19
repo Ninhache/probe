@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { currentPlatform, type Platform } from "./platform";
 
 export type Spawn = (
   command: string,
@@ -10,27 +11,14 @@ export type Spawn = (
   unref(): void;
 };
 
-export function openerCommand(platform: NodeJS.Platform): string {
-  if (platform === "win32") return "rundll32";
-  return platform === "darwin" ? "open" : "xdg-open";
-}
-
-// rundll32 takes the URL as an argument no shell reads: `cmd /c start` would run an `&` of a URL.
-function openerArgs(platform: NodeJS.Platform, url: string): string[] {
-  return platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
-}
-
-// Not waited for: some openers stay in the foreground for as long as the browser runs.
 export function openUrl(
   url: string,
-  platform: NodeJS.Platform = process.platform,
+  platform: Platform = currentPlatform,
   spawn: Spawn = nodeSpawn,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn(openerCommand(platform), openerArgs(platform, url), {
-      detached: true,
-      stdio: "ignore",
-    });
+    const { command, args } = platform.openUrlCommand(url);
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
     child.once("error", () => resolve(false));
     child.once("spawn", () => {
       child.unref();

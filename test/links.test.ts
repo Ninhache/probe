@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { configSchemaV1 } from "../src/config/schema";
+import { platformFor } from "../src/platform";
 import { fileUrl, link, linkFile, linkFileIn } from "../src/ui/links";
 import { formatCheckResults, formatServices } from "../src/ui/report";
 import { detectTerminal } from "../src/ui/terminal";
@@ -60,12 +61,12 @@ describe("link", () => {
   });
 
   it("points a file at this machine", () => {
-    const expected =
-      process.platform === "win32"
-        ? pathToFileURL("/tmp/a b/config.yml").href
-        : `file://${hostname().toLowerCase()}/tmp/a%20b/config.yml`;
-
-    expect(fileUrl("/tmp/a b/config.yml")).toBe(expected);
+    expect(fileUrl("/tmp/a b/config.yml", platformFor("linux"))).toBe(
+      `file://${hostname().toLowerCase()}/tmp/a%20b/config.yml`,
+    );
+    expect(fileUrl("/tmp/a b/config.yml", platformFor("win32"))).toBe(
+      pathToFileURL("/tmp/a b/config.yml").href,
+    );
     expect(linkFile(".probe/config.yml", "/p/.probe/config.yml", false)).toBe(".probe/config.yml");
   });
 });
