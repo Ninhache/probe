@@ -57,3 +57,25 @@ export function makeEnv(installed: boolean): NodeJS.ProcessEnv {
     PATHEXT: process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD",
   };
 }
+
+/** What a spawned probe inherits: the variables a process needs to run, not the whole environment of the test run. */
+const INHERITED = [
+  "PATH",
+  "PATHEXT",
+  "HOME",
+  "XDG_CACHE_HOME",
+  "USERPROFILE",
+  "LOCALAPPDATA",
+  "APPDATA",
+  "SYSTEMROOT",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+];
+
+export function inheritedEnv(): NodeJS.ProcessEnv {
+  const wanted = new Set(INHERITED);
+  const inherited = Object.entries(process.env).filter(([name]) => wanted.has(name.toUpperCase()));
+  // A terminal that draws Unicode, announced as each OS announces it, so that the glyphs do not depend on the host.
+  return { ...Object.fromEntries(inherited), LANG: "en_US.UTF-8", WT_SESSION: "probe-test" };
+}

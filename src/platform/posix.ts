@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { readlink } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { basename, delimiter, join } from "node:path";
+import { basename, join } from "node:path";
 import { NOTIFY_SEND, utf8Locale } from "./shared";
 import type { ClipboardTool, Platform } from "./types";
 
@@ -53,7 +53,7 @@ function linuxLike(name: NodeJS.Platform): Platform {
     clipboardTools: (env) => (env.WAYLAND_DISPLAY ? [WL_COPY, XCLIP] : [XCLIP, WL_COPY]),
     notifier: { name: "notify-send", command: NOTIFY_SEND },
     localFileHost: () => hostname(),
-    pathEntries: (env) => (env.PATH ?? "").split(delimiter).filter(Boolean),
+    pathEntries: (env) => (env.PATH ?? "").split(":").filter(Boolean),
     programNames: (program) => [program],
     hasSs: name === "linux",
     executableName: async (pid) => (name === "linux" ? procExecutableName(pid) : undefined),
