@@ -3,9 +3,17 @@ import type { InputEvent } from "../../tui/input";
 import type { Rect } from "../../tui/layout";
 import type { Modal } from "../../tui/modal";
 import type { Screen } from "../../tui/screen";
+import { drawField, fieldKey, fieldValue, textField } from "../../tui/textfield";
 import { defaultTheme as t } from "../../tui/theme";
 import { strWidth } from "../../tui/width";
-import { HELP_GAP, helpBarItems, helpColumns, type Screen as KeymapScreen } from "../keymap";
+import {
+  HELP_GAP,
+  type HelpLine,
+  helpBarItems,
+  helpColumns,
+  helpLines,
+  type Screen as KeymapScreen,
+} from "../keymap";
 
 /** The terminal draws every symbol the keymap can show. */
 const UNICODE = true;
@@ -65,34 +73,90 @@ export function helpRows(width: number, grid: boolean): { cells: HelpCell[]; wid
   }));
 }
 
-/** The help overlay: every binding by section, scrollable when the terminal is short. */
+const PROMPT = "search: ";
+
+/** Whether a line of the help has `wanted` in its keys or its description, whichever way the keys are written. */
+const matches = (texts: readonly (string | undefined)[], wanted: string) =>
+  texts.some((text) => text?.toLowerCase().includes(wanted));
+
+/**
+ * The lines that match `query`, under the headings of their sections, in one column.
+ * Both writings of the keys count: `↵` and `enter` find the same line.
+ */
+export function searchRows(query: string, grid: boolean): { cells: HelpCell[]; width: number }[] {
+  const wanted = query.trim().toLowerCase();
+  const ascii = new Map(helpLines(false, grid).map(({ id, text }) => [id, text]));
+  const kept: HelpLine[] = [];
+  let heading: HelpLine | undefined;
+  for (const line of helpLines(UNICODE, grid)) {
+    if (line.heading) heading = line;
+    else if (matches([line.text, ascii.get(line.id)], wanted)) {
+      if (heading) kept.push(heading);
+      heading = undefined;
+      kept.push(line);
+    }
+  }
+  return kept.map(({ text, heading: isHeading }) => ({
+    cells: [{ text, heading: isHeading, x: 0 }],
+    width: strWidth(text),
+  }));
+}
+
+/**
+ * The help overlay: every binding by section, scrollable when the terminal is short.
+ * Typing narrows it to the lines that match; the letters are the query, `q` included.
+ */
 export function helpModal(area: Rect, grid: boolean): Modal {
   const maxWidth = Math.max(10, area.w - MODAL_MARGIN * 2);
-  const lines = helpRows(maxWidth - 2 * PADDING, grid);
-  const wanted = Math.max(...lines.map(({ width }) => width)) + 2 * PADDING;
+  const everything = helpRows(maxWidth - 2 * PADDING, grid);
+  const wanted = Math.max(...everything.map(({ width }) => width)) + 2 * PADDING;
+  let query = textField();
   let top = 0;
-  const clamp = (inner: Rect) => Math.max(0, Math.min(top, lines.length - inner.h));
+  const lines = () =>
+    fieldValue(query).trim() === "" ? everything : searchRows(fieldValue(query), grid);
+  // The first row of the box is the query: the lines scroll below it.
+  const room = (inner: Rect) => Math.max(1, inner.h - 1);
+  const clamp = (inner: Rect) => Math.max(0, Math.min(top, lines().length - room(inner)));
   const keyDelta = (name: string, page: number): number | undefined =>
     ({
       up: -1,
-      k: -1,
       down: 1,
-      j: 1,
       pageup: -page,
       pagedown: page,
-      home: -lines.length,
-      end: lines.length,
+      home: -lines().length,
+      end: lines().length,
     })[name];
   return {
     title: "help",
-    footer: "esc close",
-    size: { w: Math.min(wanted, maxWidth), h: lines.length + 2 },
+    get footer() {
+      return fieldValue(query) === "" ? "type to search · esc close" : "esc clear";
+    },
+    // Letters are typed: `q` is part of the query, it does not quit.
+    typing: true,
+    size: { w: Math.min(wanted, maxWidth), h: everything.length + 3 },
     draw(screen, inner) {
+      const prompt = screen.text(inner.x + PADDING, inner.y, PROMPT, { fg: t.accent, bold: true });
+      query = drawField(
+        screen,
+        inner.x + PADDING + prompt,
+        inner.y,
+        inner.w - prompt - 2 * PADDING,
+        query,
+        {
+          fg: t.fg,
+        },
+      );
+      const shown = lines();
       top = clamp(inner);
-      for (let i = 0; i < inner.h; i++) {
-        for (const cell of lines[top + i]?.cells ?? []) {
+      if (shown.length === 0) {
+        const text = `No key matches "${fieldValue(query).trim()}"`;
+        screen.text(inner.x + PADDING, inner.y + 1, text, { fg: t.muted }, inner.w - PADDING);
+        return;
+      }
+      for (let i = 0; i < room(inner); i++) {
+        for (const cell of shown[top + i]?.cells ?? []) {
           const style = cell.heading ? { fg: t.accent, bold: true } : { fg: t.fg };
-          screen.text(inner.x + PADDING + cell.x, inner.y + i, cell.text, style, inner.w);
+          screen.text(inner.x + PADDING + cell.x, inner.y + 1 + i, cell.text, style, inner.w);
         }
       }
     },
@@ -102,10 +166,21 @@ export function helpModal(area: Rect, grid: boolean): Modal {
         top = clamp(inner) + (event.action === "wheel-up" ? -WHEEL_LINES : WHEEL_LINES);
         return true;
       }
+      if (event.name === "escape" && !event.ctrl && !event.alt) {
+        if (fieldValue(query) === "") return false;
+        query = textField();
+        top = 0;
+        return true;
+      }
       if (event.name === "?") return "close";
-      const delta = keyDelta(event.name, Math.max(1, inner.h - 1));
-      if (delta === undefined) return false;
-      top = clamp(inner) + delta;
+      const delta = keyDelta(event.name, Math.max(1, room(inner) - 1));
+      if (delta !== undefined) {
+        top = clamp(inner) + delta;
+        return true;
+      }
+      const next = fieldKey(query, event);
+      if (fieldValue(next) !== fieldValue(query)) top = 0;
+      query = next;
       return true;
     },
   };
