@@ -29,6 +29,10 @@ export interface Platform {
   };
   /** The host name `file:` URLs carry so that a terminal over ssh opens no file of the wrong machine. */
   localFileHost(): string | undefined;
+  /** The directories of the PATH, in order. */
+  pathEntries(env: NodeJS.ProcessEnv): string[];
+  /** The file names a program can have in a directory of the PATH (`make.exe` for `make` on Windows). */
+  programNames(program: string, env: NodeJS.ProcessEnv): string[];
   /** Whether `ss` can stand in for a missing `lsof`. */
   readonly hasSs: boolean;
   /** Whether `netstat` and `tasklist` name the owner of a port, where there is no lsof. */
