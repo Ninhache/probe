@@ -15,8 +15,12 @@ export type UndoOutcome =
   | { kind: "changed"; file: string };
 
 export interface UndoJournal {
-  /** Runs `write`; when it resolves true and changed a file, `label` can be undone. */
-  record(label: string, write: () => Promise<boolean>): Promise<boolean>;
+  /** Runs `write`; when it resolves true and changed a file, `label` can be undone. `only` replaces the files watched for this step. */
+  record(
+    label: string,
+    write: () => Promise<boolean>,
+    only?: readonly JournalFile[],
+  ): Promise<boolean>;
   /** Puts back the files as they were before the last write recorded, if nothing changed them since. */
   undo(): Promise<UndoOutcome>;
   /** Writes again what the last undo took back, if nothing changed the files since; a new write forgets it. */
@@ -73,14 +77,15 @@ export function createUndoJournal(
     to.push(step);
     return { kind: "undone", label: step.label };
   };
-  const read = () => Promise.all(files.map(({ path }) => contents(path)));
+  const read = (watched: readonly JournalFile[]) =>
+    Promise.all(watched.map(({ path }) => contents(path)));
   return {
-    async record(label, write) {
-      const before = await read();
+    async record(label, write, only = files) {
+      const before = await read(only);
       const written = await write();
       if (!written) return written;
-      const after = await read();
-      const changed = files.flatMap((file, index) => {
+      const after = await read(only);
+      const changed = only.flatMap((file, index) => {
         const was = before[index];
         const now = after[index] ?? null;
         return was === null || was === undefined || was === now

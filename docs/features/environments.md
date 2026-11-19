@@ -25,9 +25,12 @@ Environments need `probe` 0.15.0 or later; `probe env` and per-environment value
 probe env                        # list the environments
 probe env staging                # create .probe/envs/staging.yml from config.yml
 probe env staging --from prod    # or from envs/prod.yml
+probe env staging --empty        # or with no service: schemaVersion and an empty services map
 ```
 
 `probe env` never overwrites a file. It copies the services, no secret value, then names the variables to set.
+`--empty` copies nothing and conflicts with `--from`. To delete an environment, remove its file, or press `D` on
+its tab in the dashboard: the values `local.yml` keeps for it stay, and `z` brings the file back.
 
 ## Which commands take `--env`
 

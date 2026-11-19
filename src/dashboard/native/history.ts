@@ -123,6 +123,13 @@ export class Tracker {
     if (!this.environments.includes(env)) this.environments.push(env);
   }
 
+  /** Forgets an environment: its tab, and what was measured in it. */
+  remove(env: string): void {
+    const at = this.environments.indexOf(env);
+    if (at >= 0) this.environments.splice(at, 1);
+    this.retain(env, new Set());
+  }
+
   /** Service names seen so far, in the order they first appeared, then sorted. */
   services(env?: string): string[] {
     const names = new Set<string>();

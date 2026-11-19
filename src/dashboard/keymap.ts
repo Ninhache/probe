@@ -28,6 +28,7 @@ export type Command =
   | "remove"
   | "add"
   | "environment"
+  | "removeEnvironment"
   | "filter"
   | "options"
   | "parameters"
@@ -141,9 +142,10 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
   peek({ keys: "1", action: "log", drop: 4 }),
   list({
     keys: "n",
-    action: "new environment",
+    action: "new env",
     help: "New environment",
-    barless: true,
+    // First to go: at 80 columns the bar stays what it was.
+    drop: 0,
     command: "environment",
   }),
 ];
@@ -192,6 +194,13 @@ const BINDINGS: readonly Binding[] = [
   list({ keys: "c", action: "copy", help: "Copy curl command", barless: true, command: "copy" }),
   list({ keys: "e", action: "edit", help: "Edit the service", barless: true, command: "edit" }),
   list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
+  list({
+    keys: "D",
+    action: "remove env",
+    help: "Remove the environment",
+    barless: true,
+    command: "removeEnvironment",
+  }),
   list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
   list({ keys: "z", action: "undo", help: "Undo last change", barless: true, command: "undo" }),
   list({ keys: "Z", action: "redo", help: "Redo what z undid", barless: true, command: "redo" }),

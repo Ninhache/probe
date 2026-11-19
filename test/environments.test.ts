@@ -640,6 +640,38 @@ describe("probe env", () => {
     expect((await loadVariables(staging, {})).lookup("API_KEY")).toBeUndefined();
   });
 
+  it("creates an empty one with --empty, which loads and checks nothing", async () => {
+    const paths = await project({ "prod.yml": PROD() });
+    await writeFile(paths.local, KEPT_FOR_PROD);
+
+    const result = await probe(paths.root, ["env", "qa", "--empty"]);
+
+    expect(result).toMatchObject({
+      code: 0,
+      stdout:
+        "Created .probe/envs/qa.yml, with no service.\nAdd services there, then: probe check --env qa\n",
+    });
+    expect(await readFile(join(paths.dir, "envs", "qa.yml"), "utf8")).toBe(
+      "schemaVersion: 1\nservices: {}\n",
+    );
+    expect(await readFile(paths.local, "utf8")).toBe(KEPT_FOR_PROD);
+    expect((await probe(paths.root, ["env"])).stdout).toContain(".probe/envs/qa.yml");
+    expect((await probe(paths.root, ["ls", "--env", "qa"])).code).toBe(0);
+  });
+
+  it("refuses --empty with --from, and without a name, and writes nothing", async () => {
+    const paths = await project({ "prod.yml": PROD() });
+
+    const both = await probe(paths.root, ["env", "qa", "--empty", "--from", "prod"]);
+    const nameless = await probe(paths.root, ["env", "--empty"]);
+
+    expect(both.code).not.toBe(0);
+    expect(both.stderr).toContain("--empty and --from conflict");
+    expect(nameless.code).not.toBe(0);
+    expect(nameless.stderr).toContain("expect the name to create");
+    expect(await listEnvironments(paths)).toEqual(["prod"]);
+  });
+
   it("copies the local services by default, in a project without envs/", async () => {
     const paths = await tempProject(config(`  api: ${at("/local")}\n`));
 
@@ -657,7 +689,7 @@ describe("probe env", () => {
     [["env", "local"], "local is .probe/config.yml"],
     [["env", "../x"], "an environment name is made of letters"],
     [["env", "qa", "--from", "nope"], 'no environment "nope"'],
-    [["env", "--from", "dev"], "--from expects the name to create"],
+    [["env", "--from", "dev"], "--from and --empty expect the name to create"],
   ])("refuses %j", async (args, message) => {
     const paths = await twoEnvironments();
     const before = await readFile(join(paths.dir, "envs", "prod.yml"), "utf8");

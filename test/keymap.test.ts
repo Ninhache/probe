@@ -23,6 +23,12 @@ describe("helpBar", () => {
     );
   });
 
+  it("should show n new env when there is room, and give it up first", () => {
+    expect(helpBar("list", true, 100)).toContain("n new env");
+    expect(helpBar("list", true, 80)).not.toContain("new env");
+    expect(helpBar("list", true, 80)).toContain(": commands");
+  });
+
   it("should show other keys in a panel", () => {
     expect(helpBar("panel", true, 100)).toBe(
       "↑↓ jk move · ←→ hl change · esc close · ? help · q quit",
@@ -83,8 +89,8 @@ describe("helpLines", () => {
   it.each(["list", "panel"] as const)("should have a line for each key of the %s bar", (screen) => {
     const help = helpLines(true).map(({ text }) => text);
 
-    for (const item of helpBar(screen, true, 100).split(" · ")) {
-      const keys = item.slice(0, item.lastIndexOf(" "));
+    // The items, not the bar text: an action can be several words ("new env").
+    for (const { keys } of helpBarItems(screen, true, 100)) {
       expect(help.some((line) => line.startsWith(`  ${keys} `))).toBe(true);
     }
   });

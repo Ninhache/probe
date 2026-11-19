@@ -76,6 +76,7 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 | `e`             | Edit the selected service                      |
 | `d`             | Remove the selected service, after a question  |
 | `n`             | Create an [environment](#several-environments) |
+| `D`             | Remove the environment of the open tab         |
 | `z`             | Undo the last change to `config.yml`           |
 | `Z`             | Redo what `z` undid                            |
 | `:`             | Find a command by what it does; `Enter` runs   |
@@ -243,6 +244,9 @@ With [environments](environments.md) in `.probe/envs/`, the services table gets 
 `.probe/envs/`), `all` and `local` would be the same list: the tabs are hidden, and `←` `→` `h` `l` and `Tab`
 do nothing. They appear as soon as there are two environments, right after `n` creates one.
 
+The tab bar always ends with `+ env`, even with a single environment, where it is the only entry.
+A click on it does what `n` does, and it lights up under the pointer like the tabs.
+
 ```
  probe   all   local   prod
 │ service   local     prod         last  uptime trend │
@@ -253,7 +257,11 @@ do nothing. They appear as soon as there are two environments, right after `n` c
 - `←` `→` or `h` `l` change environment. The latency, uptime and response panels follow the selected one.
 - `·` is a service the environment does not have.
 - `Enter`, `u`, `c` and `b` work on the selected cell.
-- `n` creates an environment: it asks for a name and writes its file in `.probe/envs/`.
+- `n` (or `+ env`) creates an environment: it asks for a name and writes its file in `.probe/envs/`. `Copy from`
+  lists the environments to copy and, last, `empty`: a file with `schemaVersion` and no service.
+- `D` on an environment tab asks `Remove prod?`, then deletes `.probe/envs/prod.yml`, closes its tab and goes back
+  to `all` (or to the single view left). The values `.probe/local.yml` keeps for it, secrets included, stay.
+  `local` cannot be removed. `z` brings the file and its tab back, `Z` removes it again.
 - The other environments are read-only: `a`, `e` and `d` say which file to change.
 - A file that cannot be read shows `!` next to its name, with the reason when you select it.
 - A notification names the environment (`prod/api`).
