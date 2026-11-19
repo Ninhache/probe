@@ -46,6 +46,8 @@ export interface EditCallbacks {
   variableSources?: VariableSources;
   /** `env` keeps the value under that environment in local.yml: none is the top level. */
   onVariableWrite?: (name: string, value: string, env?: string) => Saved;
+  /** Removes the value `env` keeps in local.yml: none is the top level. */
+  onVariableRemove?: (name: string, env?: string) => Saved;
 }
 
 const pickFields = (service: Service): ServiceFields => {
@@ -80,6 +82,7 @@ export interface Editing {
   redo?: () => Promise<{ undone?: string; failure?: string; timeouts?: ServiceTimeouts }>;
   variables?: VariableTools;
   writeVariable?: (name: string, value: string) => Saved;
+  removeVariable?: (name: string) => Saved;
 }
 
 const reads = (config: () => Config) => ({
@@ -108,6 +111,10 @@ const writeIn =
   (write: NonNullable<EditCallbacks["onVariableWrite"]>, env: string) =>
   (name: string, value: string) =>
     write(name, value, env);
+
+const removeIn =
+  (remove: NonNullable<EditCallbacks["onVariableRemove"]>, env: string) => (name: string) =>
+    remove(name, env);
 
 /** The config the dashboard edits, kept in step with what the writes and undos leave. */
 export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing {
@@ -158,6 +165,7 @@ export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing
         writeService: writer?.(env),
         variables: sources && variableTools(read, (names) => sources(names, env)),
         writeVariable: edits.onVariableWrite && writeIn(edits.onVariableWrite, env),
+        removeVariable: edits.onVariableRemove && removeIn(edits.onVariableRemove, env),
       };
     },
     writeService: writer?.(undefined),
@@ -172,5 +180,6 @@ export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing
     redo: onRedo && (() => revert(onRedo)),
     variables,
     writeVariable: edits.onVariableWrite,
+    removeVariable: edits.onVariableRemove && ((name) => edits.onVariableRemove?.(name) as Saved),
   };
 }

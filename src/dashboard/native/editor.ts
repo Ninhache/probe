@@ -35,6 +35,10 @@ export interface Editor {
     load(service: string, env?: string): Promise<VariableRow[]>;
     /** `done` runs once the value is kept in `env`: the rows are then looked up again. */
     set(row: VariableRow, env: string | undefined, done: () => void): void;
+    /** Every variable the services of `env` send, where each is set there. */
+    all(env?: string): Promise<VariableRow[]>;
+    /** Asks, then removes the value `env` keeps in local.yml; `done` runs once it is gone. */
+    remove(row: VariableRow, env: string | undefined, done: () => void): void;
   };
 }
 
@@ -74,6 +78,9 @@ export function createEditor({
     if (tell) say(view, `${env} is not read yet: try again in a moment`);
     return undefined;
   };
+
+  /** Where the values of `env` are kept: local.yml, under its own key unless it is the top level. */
+  const placeOf = (env?: string) => (env === undefined ? LOCAL : `${LOCAL}, under envs.${env}`);
 
   const writer =
     (edits: Editing, env?: string) =>
@@ -224,13 +231,39 @@ export function createEditor({
       // An environment not read yet has no rows: the local ones would say where a value is set for another file.
       load: async (service, env) =>
         (await target(env, false)?.edits.variables?.serviceVariables(service)) ?? [],
+      all: async (env) => (await target(env, false)?.edits.variables?.allVariables()) ?? [],
+      remove({ name, source }, env, done) {
+        const found = target(env);
+        const remove = found?.edits.removeVariable;
+        if (!found || !remove) return;
+        if (source === "environment")
+          return say(view, `${name} comes from the environment: unset it there`);
+        if (source === undefined) return say(view, `${name} has no value in ${LOCAL}`);
+        const where = placeOf(found.env);
+        view.modals.push(
+          confirmModal(
+            `remove ${name}`,
+            `Remove the value of ${name} from ${where}?`,
+            () =>
+              void remove(name).then((failure) => {
+                view.unsaved = failure;
+                say(view, failure ? `not saved: ${failure}` : `Removed ${name} from ${where}`);
+                if (!failure) {
+                  changed();
+                  done();
+                }
+                redraw();
+              }),
+          ),
+        );
+      },
       set({ name, source }, env, done) {
         const found = target(env);
         const write = found?.edits.writeVariable;
         if (!found || !write) return;
         if (source === "environment")
           return say(view, `${name} comes from the environment, which is read first`);
-        const where = found.env === undefined ? LOCAL : `${LOCAL}, under envs.${found.env}`;
+        const where = placeOf(found.env);
         view.modals.push(
           variableModal(name, (value) => {
             void write(name, value).then((failure) => {

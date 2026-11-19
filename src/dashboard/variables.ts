@@ -15,6 +15,8 @@ export type VariableSources = (
 
 export interface VariableTools {
   serviceVariables: (service: string) => Promise<VariableRow[]>;
+  /** Every variable the headers of any service send, once each, in the order they appear. */
+  allVariables: () => Promise<VariableRow[]>;
   variableProblem: (name: string, service: string) => Promise<string | undefined>;
   variableName: (service: string, header: string, taken: readonly string[]) => Promise<string>;
 }
@@ -51,12 +53,14 @@ export function variableTools(
       return `${name} is already set: ${instead}`;
     return undefined;
   };
+  const rowsOf = async (names: readonly string[]) => {
+    const found = await sources(names);
+    return names.map((name) => ({ name, source: found[name] }));
+  };
   return {
-    async serviceVariables(service) {
-      const names = sentBy(service);
-      const found = await sources(names);
-      return names.map((name) => ({ name, source: found[name] }));
-    },
+    serviceVariables: (service) => rowsOf(sentBy(service)),
+    allVariables: () =>
+      rowsOf([...new Set(Object.keys(config().services).flatMap((service) => sentBy(service)))]),
     variableProblem,
     async variableName(service, header, taken) {
       const base = proposedVariable(service, header);

@@ -53,6 +53,7 @@ import {
   type ResponseRow,
   responseRows,
 } from "./panels";
+import { variablesPanel } from "./variables-panel";
 
 /** Uptime the services are held to, in percent. Not configurable on purpose. */
 export const SLO_PERCENT = 99;
@@ -812,6 +813,13 @@ export function runCommand(
             ? "No parameter declared"
             : `${PROBE_DIR}/${CONFIG_FILE} declares no parameter`,
         );
+      break;
+    case "variables":
+      if (actions.edit?.variables)
+        view.modals.push(
+          variablesPanel(activeEnv(tracker, view) ?? env ?? LOCAL_ENVIRONMENT, actions),
+        );
+      else say(view, "No variable can be looked up here");
       break;
     case "detail":
       if (service !== undefined && env !== undefined)

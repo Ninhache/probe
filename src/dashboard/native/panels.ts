@@ -29,7 +29,7 @@ const PANEL_WIDTH = 72;
 const RESPONSE_WIDTH = 120;
 const MARGIN = 2;
 const OPTIONS_WIDTH = 40;
-const PAD = 1;
+export const PAD = 1;
 const SOURCES = { environment: "set in the environment", local: `set in ${LOCAL_FILE}` };
 
 /** A modal and the keymap screen whose bindings the help bar shows while it is open. */
@@ -37,11 +37,25 @@ export type Panel = Modal & { bar: KeymapScreen };
 
 export const tones = { good: t.ok, bad: t.err, dim: t.muted } as const;
 const seconds = (ms: number) => `${ms / 1000}s`;
-const row = (screen: Screen, inner: Rect, i: number, label: string, value: string, on: boolean) => {
+export const row = (
+  screen: Screen,
+  inner: Rect,
+  i: number,
+  label: string,
+  value: string,
+  on: boolean,
+) => {
   const style = on ? { fg: t.title, bg: t.selectedBg, bold: true } : { fg: t.fg };
   screen.fill({ x: inner.x, y: inner.y + i, w: inner.w, h: 1 }, " ", style);
   screen.text(inner.x + PAD, inner.y + i, pad(label, 14), style, inner.w - PAD);
   screen.text(inner.x + PAD + 14, inner.y + i, value, { ...style, fg: t.accent }, inner.w);
+};
+
+/** Where a variable is set, and what enter does to it on the selected row: its value is never shown. */
+export const variableText = ({ source }: VariableRow, on: boolean, removable = false) => {
+  const offer = on && source !== "environment" ? ` · ↵ ${source ? "changes" : "sets"} it` : "";
+  const drop = on && removable && source === "local" ? " · d removes it" : "";
+  return `${source ? SOURCES[source] : "not set"}${offer}${drop}`;
 };
 
 /** A line cut in pieces of the width of the view: nothing of a long line is lost. */
@@ -272,15 +286,13 @@ export function detailPanel(
         );
         row(screen, inner, first + 1, "skip", view.skipped.has(service) ? "yes" : "no", false);
       }
-      found.forEach(({ name, source }, i) => {
-        const offer =
-          at === i && source !== "environment" ? ` · ↵ ${source ? "changes" : "sets"} it` : "";
+      found.forEach((variable, i) => {
         row(
           screen,
           inner,
           variablesAt + i,
-          name,
-          `${source ? SOURCES[source] : "not set"}${offer}`,
+          variable.name,
+          variableText(variable, at === i),
           at === i,
         );
       });
