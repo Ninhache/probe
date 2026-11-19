@@ -12,7 +12,7 @@ const probe = (cache: string, cwd: string, args: string[], env: NodeJS.ProcessEn
     execFile(
       process.execPath,
       [CLI, ...args],
-      { cwd, env: { ...process.env, XDG_CACHE_HOME: cache, HOME: cache, CI: "", ...env } },
+      { cwd, env: { PATH: process.env.PATH, XDG_CACHE_HOME: cache, HOME: cache, ...env } },
       (_error, stdout, stderr) => done({ stdout, stderr }),
     );
   });
