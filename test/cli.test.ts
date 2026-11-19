@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { openerCommand } from "../src/open-url";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -608,24 +609,28 @@ describe("probe open / curl", () => {
     return { bin, opened };
   }
 
-  it("opens the URL of the service with the opener of the platform", async () => {
-    const root = await project();
-    await addApi(root);
-    const { bin, opened } = await fakeOpener();
-    const url = `http://127.0.0.1:${port}/health`;
+  // The fake opener is a sh script on PATH; Windows opens with rundll32, which no PATH entry replaces.
+  it.skipIf(process.platform === "win32")(
+    "opens the URL of the service with the opener of the platform",
+    async () => {
+      const root = await project();
+      await addApi(root);
+      const { bin, opened } = await fakeOpener();
+      const url = `http://127.0.0.1:${port}/health`;
 
-    const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: bin });
+      const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: bin });
 
-    expect(run).toEqual({ code: 0, stdout: `Opened ${url}\n`, stderr: "" });
-    await vi.waitFor(async () => expect(await readFile(opened, "utf8")).toBe(url), {
-      timeout: 10_000,
-    });
-  });
+      expect(run).toEqual({ code: 0, stdout: `Opened ${url}\n`, stderr: "" });
+      await vi.waitFor(async () => expect(await readFile(opened, "utf8")).toBe(url), {
+        timeout: 10_000,
+      });
+    },
+  );
 
   it("prints the URL and exits 1 when the opener is not installed", async () => {
     const root = await project();
     await addApi(root);
-    const opener = process.platform === "darwin" ? "open" : "xdg-open";
+    const opener = openerCommand(process.platform);
 
     const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: await tempDir() });
 
