@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { stripVTControlCharacters } from "node:util";
 import type { Service } from "../config/schema";
 import { COMMAND_STDERR_BYTES, COMMAND_STDERR_CHARACTERS, EXIT_DRAIN_MS } from "../constants";
+import { currentPlatform, type Platform } from "../platform";
 import { truncate } from "../ui/terminal";
 import { commandForm } from "./command-form";
 import { CONFIG } from "./diagnosis";
@@ -34,28 +35,6 @@ export const shellCommand = (command: Command): string =>
 const programOf = (command: Command): string =>
   typeof command === "string" ? command : (command[0] as string);
 
-/** Kills the command and everything it started: a timeout must not leave a server running. */
-function killTree(child: ChildProcess, platform: NodeJS.Platform = process.platform): void {
-  const { pid } = child;
-  if (pid === undefined) return;
-  if (platform === "win32") {
-    const killer = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    killer.on("error", () => child.kill());
-    return;
-  }
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    // The group is gone already, or never was one: the child itself is all that is left.
-    try {
-      child.kill("SIGKILL");
-    } catch {}
-  }
-}
-
 function lastLine(stderr: string): string | undefined {
   const lines = stripVTControlCharacters(stderr)
     .split(/\r?\n|\r/)
@@ -68,6 +47,7 @@ function lastLine(stderr: string): string | undefined {
 function run(
   command: Command,
   { timeoutMs, signal, cwd }: Pick<CheckContext, "timeoutMs" | "signal" | "cwd">,
+  platform: Platform = currentPlatform,
 ): Promise<Outcome> {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve({ kind: "aborted" });
@@ -76,7 +56,7 @@ function run(
       stdio: ["ignore", "ignore", "pipe"] as ["ignore", "ignore", "pipe"],
       windowsHide: true,
       // Its own process group on POSIX, so the whole tree can be killed at once.
-      detached: process.platform !== "win32",
+      detached: platform.ownProcessGroup,
     };
     let child: ChildProcess;
     try {
@@ -101,7 +81,8 @@ function run(
       resolve(outcome);
     };
     const stop = (kind: "timeout" | "aborted") => {
-      killTree(child);
+      // A timeout must not leave a server of the command running.
+      platform.killTree(child);
       finish({ kind });
     };
     const onAbort = () => stop("aborted");
@@ -127,7 +108,12 @@ function run(
 const CMD_SHIM_HINT =
   'on Windows, npm, pnpm and other .cmd programs need the string form: command: "pnpm test"';
 
-function failure(command: Command, outcome: Outcome, timeoutMs: number) {
+function failure(
+  command: Command,
+  outcome: Outcome,
+  timeoutMs: number,
+  platform: Platform = currentPlatform,
+) {
   if (outcome.kind === "timeout") {
     return {
       error: `timeout after ${timeoutMs / 1000}s`,
@@ -138,7 +124,7 @@ function failure(command: Command, outcome: Outcome, timeoutMs: number) {
   if (outcome.kind === "error") {
     const { code } = outcome.error;
     const program = programOf(command);
-    const windows = process.platform === "win32" && typeof command !== "string";
+    const windows = platform.hasCmdShims && typeof command !== "string";
     if (code === "ENOENT" && typeof command !== "string") {
       return {
         error: `command not found: ${program}`,

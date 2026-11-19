@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { type ClipboardTool, currentPlatform, type Platform } from "./platform";
 
 export type ClipboardSpawn = (
   command: string,
@@ -13,17 +14,7 @@ export type ClipboardSpawn = (
   once(event: "error", listener: (error: Error) => void): unknown;
 };
 
-type Tool = readonly [command: string, ...args: string[]];
-
-const WL_COPY: Tool = ["wl-copy"];
-const XCLIP: Tool = ["xclip", "-selection", "clipboard"];
-
-export function clipboardTools(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Tool[] {
-  if (platform === "darwin") return [["pbcopy"]];
-  return env.WAYLAND_DISPLAY ? [WL_COPY, XCLIP] : [XCLIP, WL_COPY];
-}
-
-function copiedWith([command, ...args]: Tool, text: string, spawn: ClipboardSpawn) {
+function copiedWith([command, ...args]: ClipboardTool, text: string, spawn: ClipboardSpawn) {
   return new Promise<boolean>((resolve) => {
     const child = spawn(command, args, { stdio: ["pipe", "ignore", "ignore"] });
     child.once("error", () => resolve(false));
@@ -37,11 +28,11 @@ function copiedWith([command, ...args]: Tool, text: string, spawn: ClipboardSpaw
 
 export async function copyText(
   text: string,
-  platform: NodeJS.Platform = process.platform,
+  platform: Platform = currentPlatform,
   env: NodeJS.ProcessEnv = process.env,
   spawn: ClipboardSpawn = nodeSpawn,
 ): Promise<boolean> {
-  for (const tool of clipboardTools(platform, env)) {
+  for (const tool of platform.clipboardTools(env)) {
     if (await copiedWith(tool, text, spawn)) return true;
   }
   return false;

@@ -1,6 +1,7 @@
 import { relative } from "node:path";
 import { defineCommand } from "citty";
 import { makefilePath, syncMakefile } from "../makefile/sync";
+import { isOnPath } from "../platform/on-path";
 import { openProject } from "./shared";
 
 export default defineCommand({
@@ -12,8 +13,12 @@ export default defineCommand({
     const { config, paths } = await openProject();
     const { created, changed } = await syncMakefile(paths, config);
     const file = relative(process.cwd(), makefilePath(paths)) || "Makefile";
-    if (created) console.log(`Created ${file}. Try: make help`);
-    else if (changed) console.log(`Updated the probe block in ${file}.`);
+    if (created) {
+      const next = (await isOnPath("make"))
+        ? "Try: make help"
+        : "make is not installed here: run `probe check` (or `probe check <name>`)";
+      console.log(`Created ${file}. ${next}`);
+    } else if (changed) console.log(`Updated the probe block in ${file}.`);
     else console.log(`${file} is already in sync.`);
   },
 });

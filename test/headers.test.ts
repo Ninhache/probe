@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -20,7 +20,7 @@ import { loadVariables, readLocalVariables, writeVariable } from "../src/config/
 import { formatIssues } from "../src/config/migrations";
 import { type Service, serviceSchemaV1 } from "../src/config/schema";
 import { Tracker } from "../src/dashboard/native/history";
-import { tempProject } from "./helpers";
+import { expectMode, tempProject } from "./helpers";
 
 const SECRET = "s3cret-value";
 const lookup = (values: Record<string, string>) => (name: string) => values[name];
@@ -262,7 +262,7 @@ describe("variables in local.yml", () => {
 
     expect(await writeVariable(paths, "API_TOKEN", SECRET)).toBe(true);
     // Made by hand and readable by all: not once it holds a secret.
-    expect((await stat(paths.local)).mode & 0o777).toBe(0o600);
+    await expectMode(paths.local, 0o600);
     expect(await writeVariable(paths, "OTHER", "1234")).toBe(true);
 
     expect(await readFile(paths.local, "utf8")).toBe(
@@ -276,7 +276,7 @@ describe("variables in local.yml", () => {
 
     await writeVariable(paths, "API_TOKEN", SECRET);
 
-    expect((await stat(paths.local)).mode & 0o777).toBe(0o600);
+    await expectMode(paths.local, 0o600);
   });
 
   it("forgets a value, and the section with the last one", async () => {

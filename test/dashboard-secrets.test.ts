@@ -1,7 +1,7 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { tempProject } from "./helpers";
+import { expectMode, tempProject } from "./helpers";
 import { ENTER, hasPython, onTerminal } from "./terminal";
 
 const SECRET = "s3cr3t-token-0123456789";
@@ -36,7 +36,7 @@ describe.skipIf(!hasPython())("a secret typed in the dashboard", () => {
     expect(await read(paths.lock)).not.toContain(SECRET);
     expect(await read(join(paths.root, "Makefile"))).not.toContain(SECRET);
     expect(await read(paths.local)).toContain(`API_TOKEN: ${SECRET}`);
-    expect((await stat(paths.local)).mode & 0o777).toBe(0o600);
+    await expectMode(paths.local, 0o600);
     expect(await read(join(paths.root, ".gitignore"))).toContain(".probe/local.yml");
   });
 
@@ -58,7 +58,7 @@ describe.skipIf(!hasPython())("a secret typed in the dashboard", () => {
 
     expect(screen).not.toContain(SECRET);
     expect(await read(paths.local)).toContain(`API_TOKEN: ${SECRET}`);
-    expect((await stat(paths.local)).mode & 0o777).toBe(0o600);
+    await expectMode(paths.local, 0o600);
     expect(await read(paths.config)).not.toContain(SECRET);
   });
 });

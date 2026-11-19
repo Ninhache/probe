@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { tempDir } from "./helpers";
+import { expectMode, tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const SECRET = "s3cret-value";
@@ -215,7 +215,7 @@ describe("probe var", () => {
       stderr: "",
     });
     expect(await local(root)).toBe(`variables:\n  API_KEY: ${SECRET}\n`);
-    expect((await stat(join(root, ".probe", "local.yml"))).mode & 0o777).toBe(0o600);
+    await expectMode(join(root, ".probe", "local.yml"), 0o600);
     expect(check.code).toBe(0);
     expect(await config(root)).not.toContain(SECRET);
   });

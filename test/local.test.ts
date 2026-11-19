@@ -1,13 +1,4 @@
-import {
-  chmod,
-  mkdir,
-  readdir,
-  readFile,
-  readlink,
-  stat,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -20,7 +11,7 @@ import {
   writeDashboardSelection,
   writeServiceSkip,
 } from "../src/config/local";
-import { tempProject } from "./helpers";
+import { expectMode, tempProject } from "./helpers";
 
 const CONFIG = "schemaVersion: 1\nservices: {}\n";
 
@@ -70,11 +61,11 @@ describe("dashboard preferences in local.yml", () => {
     const paths = await tempProject(CONFIG);
 
     await writeDashboardPreferences(paths, { interval: 5 });
-    expect((await stat(paths.local)).mode & 0o777).toBe(0o600);
+    await expectMode(paths.local, 0o600);
 
     await chmod(paths.local, 0o640);
     await writeDashboardPreferences(paths, { interval: 10 });
-    expect((await stat(paths.local)).mode & 0o777).toBe(0o640);
+    await expectMode(paths.local, 0o640);
   });
 
   it("writes through a symlink instead of replacing it", async () => {

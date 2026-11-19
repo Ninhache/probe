@@ -7,7 +7,9 @@ const PTY = resolve(import.meta.dirname, "fixtures", "on-terminal.py");
 export const ENTER = "\r";
 export const CTRL_C = "\u0003";
 
+/** The harness needs python3 and its `pty` module, which exist on POSIX only: Windows has no pseudo-terminal of that kind. */
 export function hasPython(): boolean {
+  if (process.platform === "win32") return false;
   try {
     execFileSync("python3", ["--version"], { stdio: "ignore" });
     return true;

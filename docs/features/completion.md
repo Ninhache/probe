@@ -9,6 +9,15 @@ eval "$(probe completion bash)"    # in ~/.bashrc (macOS: ~/.bash_profile)
 probe completion fish | source     # in ~/.config/fish/config.fish
 ```
 
+In PowerShell, add one of these to your profile (`$PROFILE`, usually
+`Documents/PowerShell/Microsoft.PowerShell_profile.ps1`):
+
+```powershell
+probe completion powershell | Out-String | Invoke-Expression
+```
+
+or append the script to it once with `probe completion powershell >> $PROFILE`.
+
 To save the script once instead:
 
 - zsh: `probe completion zsh > ~/.zfunc/_probe`, with `~/.zfunc` in your `fpath`.
@@ -16,6 +25,9 @@ To save the script once instead:
 - bash: `probe completion bash > ~/.local/share/bash-completion/completions/probe`.
 
 It works with the bash 3.2 of macOS.
+
+A script appended to `$PROFILE` is not looked at after an update (the profile holds other things): prefer the
+`Invoke-Expression` line, which never goes stale.
 
 ## After an update
 

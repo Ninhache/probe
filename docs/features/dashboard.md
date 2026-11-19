@@ -264,7 +264,7 @@ services:
   (since 0.20.0). Nothing is notified while the terminal of the dashboard has the focus. The terminal reports
   it at each change of window (in tmux: `set -g focus-events on`): until the first one, or when it never does,
   the focus is not known and the notification is shown. A notification names the services and nothing
-  else. It needs `notify-send` on Linux; nothing to install on macOS.
+  else. It needs `notify-send` on Linux; nothing to install on macOS or on Windows (a toast through PowerShell).
 
 A change that cannot be saved (a read-only file, or one that is not valid YAML) still applies until you quit.
 The dashboard shows `not saved: …`, and says it again when it closes.

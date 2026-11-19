@@ -1,5 +1,5 @@
-import { hostname } from "node:os";
 import { pathToFileURL } from "node:url";
+import { currentPlatform, type Platform } from "../platform";
 
 const ESC = "\u001b";
 const OPEN = `${ESC}]8;;`;
@@ -16,10 +16,10 @@ export function link(text: string, url: string, enabled: boolean): string {
   return `${OPEN}${href}${END}${text}${OPEN}${END}`;
 }
 
-// With the host name: a terminal reached over ssh does not open a file of the wrong machine.
-export function fileUrl(path: string): string {
+export function fileUrl(path: string, platform: Platform = currentPlatform): string {
   const url = pathToFileURL(path);
-  url.hostname = hostname();
+  const host = platform.localFileHost();
+  if (host !== undefined) url.hostname = host;
   return url.href;
 }
 

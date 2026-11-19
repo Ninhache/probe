@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PACKAGE_NAME,
@@ -10,6 +10,7 @@ import {
   UPDATE_CACHE_FILE,
   UPDATE_CHECK_TTL_MS,
 } from "../constants";
+import { currentPlatform, type Platform } from "../platform";
 import { type Glyphs, UNICODE_GLYPHS } from "../ui/glyphs";
 
 export interface UpdateCache {
@@ -17,8 +18,11 @@ export interface UpdateCache {
   checkedAt: number;
 }
 
-export function cacheDir(env: NodeJS.ProcessEnv = process.env): string {
-  return join(env.XDG_CACHE_HOME || join(homedir(), ".cache"), "probe");
+export function cacheDir(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: Platform = currentPlatform,
+): string {
+  return platform.cacheDir(env);
 }
 
 export function updateCheckDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -69,6 +73,8 @@ export function scheduleRefresh(dir: string, cliPath: string, now: number = Date
     spawn(process.execPath, [cliPath, REFRESH_COMMAND], {
       detached: true,
       stdio: "ignore",
+      // On Windows a running process locks its working directory: not the project of the user.
+      cwd: tmpdir(),
     }).unref();
     return true;
   } catch {

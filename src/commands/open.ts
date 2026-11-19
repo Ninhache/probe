@@ -3,7 +3,8 @@ import { serviceType } from "../checkers/registry";
 import { applySelection } from "../config/parameters";
 import { EXIT_DOWN } from "../constants";
 import { ProbeError } from "../errors";
-import { openerCommand, openUrl } from "../open-url";
+import { openUrl } from "../open-url";
+import { currentPlatform } from "../platform";
 import { namedService, openProject, SET_ARG, selectionFrom } from "./shared";
 
 export default defineCommand({
@@ -24,7 +25,9 @@ export default defineCommand({
     }
     // The URL alone on stdout, so it can still be copied or piped.
     console.log(url);
-    console.error(`probe: ${openerCommand(process.platform)} not found, open the URL yourself.`);
+    console.error(
+      `probe: ${currentPlatform.openUrlCommand(url).command} not found, open the URL yourself.`,
+    );
     process.exitCode = EXIT_DOWN;
   },
 });

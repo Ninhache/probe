@@ -1,11 +1,13 @@
 import { execFile, spawn } from "node:child_process";
-import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { tempDir } from "./helpers";
+import { currentPlatform } from "../src/platform";
+import { isOnPath } from "../src/platform/on-path";
+import { inheritedEnv, makeEnv, tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const ANSI = "\u001b[";
@@ -30,7 +32,7 @@ function exec(
     execFile(
       file,
       args,
-      { cwd, timeout, env: { ...process.env, PROBE_NO_UPDATE_CHECK: "1", ...env } },
+      { cwd, timeout, env: { ...inheritedEnv(), PROBE_NO_UPDATE_CHECK: "1", ...env } },
       (error, stdout, stderr) => {
         const code = error ? ((error as { code?: number }).code ?? 1) : 0;
         if (error?.killed) return done({ code: KILLED, stdout, stderr });
@@ -40,7 +42,11 @@ function exec(
   });
 }
 
-const probe = (cwd: string, ...args: string[]) => exec(process.execPath, [CLI, ...args], cwd);
+// make is found, so that the Makefile messages do not depend on what the machine has installed.
+const probe = (cwd: string, ...args: string[]) =>
+  exec(process.execPath, [CLI, ...args], cwd, makeEnv(true));
+const probeWithoutMake = (cwd: string, ...args: string[]) =>
+  exec(process.execPath, [CLI, ...args], cwd, makeEnv(false));
 
 const SLOW_MS = 500;
 
@@ -249,7 +255,8 @@ describe("probe add / rm / ls", () => {
     const result = await probe(root, "add", "api", "-p", "3000");
 
     expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/^probe: .*EACCES/);
+    // Windows reports a read-only file as EPERM.
+    expect(result.stderr).toMatch(/^probe: .*(EACCES|EPERM)/);
     expect(result.stderr).not.toContain("    at ");
   });
 
@@ -607,24 +614,28 @@ describe("probe open / curl", () => {
     return { bin, opened };
   }
 
-  it("opens the URL of the service with the opener of the platform", async () => {
-    const root = await project();
-    await addApi(root);
-    const { bin, opened } = await fakeOpener();
-    const url = `http://127.0.0.1:${port}/health`;
+  // The fake opener is a sh script on PATH; Windows opens with rundll32, which no PATH entry replaces.
+  it.skipIf(process.platform === "win32")(
+    "opens the URL of the service with the opener of the platform",
+    async () => {
+      const root = await project();
+      await addApi(root);
+      const { bin, opened } = await fakeOpener();
+      const url = `http://127.0.0.1:${port}/health`;
 
-    const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: bin });
+      const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: bin });
 
-    expect(run).toEqual({ code: 0, stdout: `Opened ${url}\n`, stderr: "" });
-    await vi.waitFor(async () => expect(await readFile(opened, "utf8")).toBe(url), {
-      timeout: 10_000,
-    });
-  });
+      expect(run).toEqual({ code: 0, stdout: `Opened ${url}\n`, stderr: "" });
+      await vi.waitFor(async () => expect(await readFile(opened, "utf8")).toBe(url), {
+        timeout: 10_000,
+      });
+    },
+  );
 
   it("prints the URL and exits 1 when the opener is not installed", async () => {
     const root = await project();
     await addApi(root);
-    const opener = process.platform === "darwin" ? "open" : "xdg-open";
+    const opener = currentPlatform.openUrlCommand("").command;
 
     const run = await exec(process.execPath, [CLI, "open", "api"], root, { PATH: await tempDir() });
 
@@ -830,6 +841,42 @@ describe("probe status / sync", () => {
     expect(await readFile(makefile, "utf8")).toContain("@$(PROBE) check api");
   });
 
+  it("tells sync without make to use probe check, and still writes the block", async () => {
+    const root = await makefileProject();
+    await addApi(root);
+    await rm(join(root, "Makefile"));
+
+    const sync = await probeWithoutMake(root, "sync");
+
+    expect(sync.stdout).toBe(
+      "Created Makefile. make is not installed here: run `probe check` (or `probe check <name>`)\n",
+    );
+    expect(await readFile(join(root, "Makefile"), "utf8")).toContain("check-api:");
+  });
+
+  it("says in status and doctor that make is missing, and does not call a stale block a problem", async () => {
+    const root = await makefileProject();
+    await addApi(root);
+    const makefile = join(root, "Makefile");
+    const generated = await readFile(makefile, "utf8");
+    await writeFile(makefile, generated.replace("@$(PROBE) check api", "@echo hacked"));
+    const missing = "makefile   make not installed: `probe check` does the same";
+
+    const status = await probeWithoutMake(root, "status");
+    const doctor = await probeWithoutMake(root, "doctor");
+    const json = await probeWithoutMake(root, "doctor", "--json");
+    const withMake = await probe(root, "doctor");
+
+    expect(status.stdout).toContain(missing);
+    expect(status.stdout).not.toContain("probe sync");
+    expect(doctor.stdout).toContain(missing);
+    expect(doctor.stdout).not.toContain("probe sync");
+    expect(doctor.code).toBe(0);
+    expect(JSON.parse(json.stdout)).toMatchObject({ ok: true, project: { makefile: "modified" } });
+    expect(withMake.stdout).toContain("block edited by hand");
+    expect(withMake.code).toBe(1);
+  });
+
   it("reports a config edited by hand as out of date", async () => {
     const root = await makefileProject();
     const config = join(root, ".probe", "config.yml");
@@ -954,7 +1001,10 @@ describe("probe (top level)", () => {
   );
 });
 
-describe("generated Makefile with real make", () => {
+const makeInstalled = await isOnPath("make");
+
+// Only where make is found on PATH, as probe itself decides: a runner without it has nothing to run.
+describe.skipIf(!makeInstalled)("generated Makefile with real make", () => {
   const make = (root: string, target: string) =>
     exec("make", [target, `PROBE=${process.execPath} ${CLI}`], root);
 

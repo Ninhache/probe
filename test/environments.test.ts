@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
@@ -18,7 +18,8 @@ import type { Config } from "../src/config/schema";
 import { type ActionDeps, serviceActions } from "../src/dashboard/actions";
 import { sourceCheck } from "../src/dashboard/native/open";
 import { environmentSource } from "../src/dashboard/sources";
-import { tempProject } from "./helpers";
+import { platformFor } from "../src/platform";
+import { expectMode, tempProject } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const SECRET = "s3cr3t-value";
@@ -385,7 +386,7 @@ describe("what local.yml keeps for an environment", () => {
     expect(await writeVariable(prod, "API_KEY", SECRET)).toBe(true);
 
     expect(await readFile(local.local, "utf8")).toBe(`dashboard:\n  interval: 5\n${KEPT_FOR_PROD}`);
-    expect((await stat(local.local)).mode & 0o777).toBe(0o600);
+    await expectMode(local.local, 0o600);
   });
 
   it("forgets a value and the maps it leaves empty, and nothing else", async () => {
@@ -591,7 +592,7 @@ describe("a value kept for an environment", () => {
     ).run(new AbortController().signal);
     const config = declared as Config;
     const deps: ActionDeps = {
-      platform: "linux",
+      platform: platformFor("linux"),
       env: {},
       openUrl: async () => true,
       copyText: async () => true,

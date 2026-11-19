@@ -12,6 +12,7 @@ import {
   renderDashboard,
   type ViewActions,
 } from "../src/dashboard/native/view";
+import { platformFor } from "../src/platform";
 import type { InputEvent } from "../src/tui/input";
 import { Screen } from "../src/tui/screen";
 
@@ -213,7 +214,7 @@ describe("copying a JSON body", () => {
 
   it("should say the body was formatted", async () => {
     const deps: ActionDeps = {
-      platform: "linux",
+      platform: platformFor("linux"),
       env: {},
       openUrl: async () => true,
       copyText: async () => true,

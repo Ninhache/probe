@@ -1,7 +1,9 @@
 import { hostname } from "node:os";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { configSchemaV1 } from "../src/config/schema";
+import { platformFor } from "../src/platform";
 import { fileUrl, link, linkFile, linkFileIn } from "../src/ui/links";
 import { formatCheckResults, formatServices } from "../src/ui/report";
 import { detectTerminal } from "../src/ui/terminal";
@@ -58,10 +60,20 @@ describe("link", () => {
     expect(linked).not.toContain(String.fromCharCode(7));
   });
 
-  it("points a file at this machine", () => {
-    expect(fileUrl("/tmp/a b/config.yml")).toBe(
+  // pathToFileURL reads a POSIX path as a drive path on a Windows machine.
+  it.skipIf(process.platform === "win32")("points a file at this machine", () => {
+    expect(fileUrl("/tmp/a b/config.yml", platformFor("linux"))).toBe(
       `file://${hostname().toLowerCase()}/tmp/a%20b/config.yml`,
     );
+  });
+
+  it("leaves the host out of the file URL on Windows", () => {
+    expect(fileUrl("/tmp/a b/config.yml", platformFor("win32"))).toBe(
+      pathToFileURL("/tmp/a b/config.yml").href,
+    );
+  });
+
+  it("leaves the text alone when links are off", () => {
     expect(linkFile(".probe/config.yml", "/p/.probe/config.yml", false)).toBe(".probe/config.yml");
   });
 });

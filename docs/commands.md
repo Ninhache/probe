@@ -195,4 +195,4 @@ Brings `.probe/config.yml` up to date with the current schema. See [Config](conf
 
 ## probe completion
 
-`probe completion zsh|bash|fish` prints the completion script. See [Completion](features/completion.md).
+`probe completion zsh|bash|fish|powershell` prints the completion script. See [Completion](features/completion.md).

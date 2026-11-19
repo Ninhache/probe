@@ -2,7 +2,8 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 import { curlCommand } from "../src/checkers/http";
 import { serviceSchemaV1 } from "../src/config/schema";
-import { openerCommand, openUrl, type Spawn } from "../src/open-url";
+import { openUrl, type Spawn } from "../src/open-url";
+import { platformFor } from "../src/platform";
 
 const URL = "http://localhost:3000/health";
 
@@ -30,16 +31,25 @@ describe("openUrl", () => {
     async (platform, command) => {
       const { spawn, calls } = fakeSpawn("spawn");
 
-      expect(await openUrl(URL, platform, spawn)).toBe(true);
+      expect(await openUrl(URL, platformFor(platform), spawn)).toBe(true);
       expect(calls).toEqual([{ command, args: [URL], unrefs: 1 }]);
-      expect(openerCommand(platform)).toBe(command);
     },
   );
+
+  it("starts on win32 rundll32 with the URL as an argument, no shell reads it", async () => {
+    const { spawn, calls } = fakeSpawn("spawn");
+    const url = "http://localhost:3000/a?b=1&c=2";
+
+    expect(await openUrl(url, platformFor("win32"), spawn)).toBe(true);
+    expect(calls).toEqual([
+      { command: "rundll32", args: ["url.dll,FileProtocolHandler", url], unrefs: 1 },
+    ]);
+  });
 
   it("resolves to false when the command cannot be started", async () => {
     const { spawn } = fakeSpawn("error");
 
-    expect(await openUrl(URL, "linux", spawn)).toBe(false);
+    expect(await openUrl(URL, platformFor("linux"), spawn)).toBe(false);
   });
 });
 

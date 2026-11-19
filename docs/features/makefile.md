@@ -14,6 +14,10 @@ Optional. `probe sync` writes a block between two markers, in a new `Makefile` o
 
 Commit the `Makefile` and `.probe/lock.yml`.
 
+Needs `make` in your `PATH`. Where it is not installed (Windows without Git Bash or WSL, a minimal Linux),
+`probe sync` still writes the block for your teammates, then says to run `probe check`; `probe status` and
+`probe doctor` say `make not installed` and do not count the block as a problem.
+
 ## Targets
 
 | Target              | What it runs                                 |

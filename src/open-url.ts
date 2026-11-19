@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { currentPlatform, type Platform } from "./platform";
 
 export type Spawn = (
   command: string,
@@ -10,18 +11,14 @@ export type Spawn = (
   unref(): void;
 };
 
-export function openerCommand(platform: NodeJS.Platform): string {
-  return platform === "darwin" ? "open" : "xdg-open";
-}
-
-// Not waited for: some openers stay in the foreground for as long as the browser runs.
 export function openUrl(
   url: string,
-  platform: NodeJS.Platform = process.platform,
+  platform: Platform = currentPlatform,
   spawn: Spawn = nodeSpawn,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn(openerCommand(platform), [url], { detached: true, stdio: "ignore" });
+    const { command, args } = platform.openUrlCommand(url);
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
     child.once("error", () => resolve(false));
     child.once("spawn", () => {
       child.unref();

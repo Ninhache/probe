@@ -6,12 +6,15 @@ import { describe, expect, it } from "vitest";
 import add from "../src/commands/add";
 import check from "../src/commands/check";
 import { fishScript } from "../src/completion/fish";
+import { powershellScript } from "../src/completion/powershell";
 import { completionSpec, SERVICE_COMMANDS, SHELLS } from "../src/completion/spec";
 import { zshScript } from "../src/completion/zsh";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const BASH = "/bin/bash";
+// The bash tests drive a POSIX shell and a `probe` sh shim: the runner's bash.exe is WSL or Git Bash, not a stable target.
+const POSIX_ONLY = process.platform === "win32";
 const CONFIG = "schemaVersion: 1\nservices:\n  api: { port: 3000 }\n  front: { port: 5173 }\n";
 
 function onPath(binary: string): string | undefined {
@@ -23,6 +26,7 @@ function onPath(binary: string): string | undefined {
 
 const ZSH = onPath("zsh");
 const FISH = onPath("fish");
+const PWSH = onPath(process.platform === "win32" ? "pwsh.exe" : "pwsh");
 // zsh ships with macOS: there the tests must run. Elsewhere they run when zsh is installed.
 const withoutZsh = !ZSH && process.platform !== "darwin";
 
@@ -172,6 +176,32 @@ describe("fishScript", () => {
   });
 });
 
+describe("powershellScript", () => {
+  const script = powershellScript([
+    {
+      name: "x",
+      description: "it's \u2018odd\u2019",
+      options: ["--a"],
+      words: ["w"],
+      services: true,
+    },
+  ]);
+
+  it("registers a native completer for probe", () => {
+    expect(script).toContain("Register-ArgumentCompleter -Native -CommandName probe");
+  });
+
+  it("doubles every quote of a description", () => {
+    expect(script).toContain("'x' = 'it''s \u2018\u2018odd\u2019\u2019'");
+  });
+
+  it("lists the options, the words and the commands with services from the spec", () => {
+    expect(script).toContain("'x' = @('--a')");
+    expect(script).toContain("'x' = @('w')");
+    expect(script).toContain("$withServices = @('x')");
+  });
+});
+
 describe("probe __complete services", () => {
   it("prints one service name per line", async () => {
     expect(await probe(await project(), "__complete", "services")).toEqual({
@@ -210,7 +240,7 @@ describe("probe __complete services", () => {
     );
 
     expect((await probe(root, "__complete", "services")).stdout).toBe("api\n");
-    expect(await bashCompletions(root, "probe", "check", "")).toEqual(["api"]);
+    if (!POSIX_ONLY) expect(await bashCompletions(root, "probe", "check", "")).toEqual(["api"]);
     expect(existsSync(join(root, "pwned"))).toBe(false);
   });
 
@@ -238,7 +268,8 @@ describe("probe completion", () => {
     expect(await probe(await tempDir(), "completion", "tcsh")).toEqual({
       code: 2,
       stdout: "",
-      stderr: 'probe: no completion for the shell "tcsh". Supported: zsh, bash, fish.\n',
+      stderr:
+        'probe: no completion for the shell "tcsh". Supported: zsh, bash, fish, powershell.\n',
     });
   });
 
@@ -250,7 +281,7 @@ describe("probe completion", () => {
   });
 });
 
-describe("bash completion", () => {
+describe.skipIf(POSIX_ONLY)("bash completion", () => {
   it("is valid for the system bash", async () => {
     const root = await tempDir();
     await writeFile(join(root, "probe.bash"), (await probe(root, "completion", "bash")).stdout);
@@ -303,7 +334,12 @@ describe("bash completion", () => {
   it("completes the shells after completion, and nothing after a command without arguments", async () => {
     const root = await project();
 
-    expect(await bashCompletions(root, "probe", "completion", "")).toEqual(["zsh", "bash", "fish"]);
+    expect(await bashCompletions(root, "probe", "completion", "")).toEqual([
+      "zsh",
+      "bash",
+      "fish",
+      "powershell",
+    ]);
     expect(await bashCompletions(root, "probe", "ls", "")).toEqual([]);
   });
 
@@ -340,7 +376,9 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
     const offered = await zshCompletions(await project(), "probe", "");
 
     expect(offered).toContain("check:Check that services respond (all of them by default)");
-    expect(offered).toContain("completion:Print the shell completion script (zsh, bash, fish)");
+    expect(offered).toContain(
+      "completion:Print the shell completion script (zsh, bash, fish, powershell)",
+    );
   });
 
   it.each(SERVICE_COMMANDS)("offers the service names after %s", async (command) => {
@@ -371,7 +409,12 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
       "--timeout",
       "--help",
     ]);
-    expect(await zshCompletions(root, "probe", "completion", "")).toEqual(["zsh", "bash", "fish"]);
+    expect(await zshCompletions(root, "probe", "completion", "")).toEqual([
+      "zsh",
+      "bash",
+      "fish",
+      "powershell",
+    ]);
     expect(await zshCompletions(root, "probe", "ls", "")).toEqual([]);
   });
 });
@@ -457,6 +500,7 @@ describe.skipIf(!FISH)("fish completion", () => {
     expect((await fishCompletions(root, "probe completion ")).sort()).toEqual([
       "bash",
       "fish",
+      "powershell",
       "zsh",
     ]);
     expect(await fishCompletions(root, "probe ls ")).toEqual([]);
@@ -464,5 +508,114 @@ describe.skipIf(!FISH)("fish completion", () => {
 
   it("offers no service outside a project", async () => {
     expect(await fishCompletions(await tempDir(), "probe check ")).toEqual([]);
+  });
+});
+
+async function powershellEnv(): Promise<NodeJS.ProcessEnv> {
+  const bin = await tempDir();
+  const cache = await tempDir();
+  if (process.platform === "win32") {
+    await writeFile(join(bin, "probe.cmd"), `@"${process.execPath}" "${CLI}" %*\r\n`);
+  } else {
+    const shim = join(bin, "probe");
+    await writeFile(shim, `#!/bin/sh\nexec "${process.execPath}" "${CLI}" "$@"\n`);
+    await chmod(shim, 0o755);
+  }
+  const inherited = ["SystemRoot", "TEMP", "TMP", "PATHEXT"].flatMap((key) =>
+    process.env[key] === undefined ? [] : [[key, process.env[key]]],
+  );
+  return {
+    ...Object.fromEntries(inherited),
+    PATH: `${bin}${delimiter}${process.env.PATH}`,
+    HOME: cache,
+    XDG_CACHE_HOME: cache,
+    USERPROFILE: cache,
+    LOCALAPPDATA: cache,
+  };
+}
+
+async function powershellCompletions(cwd: string, line: string): Promise<string[]> {
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    "probe completion powershell | Out-String | Invoke-Expression",
+    `(TabExpansion2 -inputScript '${line}' -cursorColumn ${line.length}).CompletionMatches | ForEach-Object { $_.CompletionText }`,
+  ].join("; ");
+  const env = await powershellEnv();
+  const run = await new Promise<Run>((done) => {
+    execFile(
+      PWSH as string,
+      ["-NoProfile", "-NonInteractive", "-Command", command],
+      { cwd, env },
+      (error, stdout, stderr) => {
+        const code = error ? ((error as { code?: number }).code ?? 1) : 0;
+        done({ code: typeof code === "number" ? code : 1, stdout, stderr });
+      },
+    );
+  });
+  expect(run).toMatchObject({ code: 0, stderr: "" });
+  return run.stdout.split(/\r?\n/).filter(Boolean);
+}
+
+describe.skipIf(!PWSH)("powershell completion", () => {
+  it("completes a command", async () => {
+    expect(await powershellCompletions(await project(), "probe ch")).toEqual(["check"]);
+    expect(await powershellCompletions(await project(), "probe ")).toContain("completion");
+  });
+
+  it.each(SERVICE_COMMANDS)("offers the service names after %s", async (command) => {
+    const root = await project();
+
+    expect((await powershellCompletions(root, `probe ${command} `)).sort()).toEqual([
+      "api",
+      "front",
+    ]);
+    expect(await powershellCompletions(root, `probe ${command} f`)).toEqual(["front"]);
+  });
+
+  it("leaves out a key a shell would run or expand", async () => {
+    const root = await project(
+      'schemaVersion: 1\nservices:\n  api: { port: 1 }\n  "$(touch pwned)": { port: 2 }\n  "a b": { port: 3 }\n  "*": { port: 4 }\n',
+    );
+
+    expect(await powershellCompletions(root, "probe check ")).toEqual(["api"]);
+    expect(existsSync(join(root, "pwned"))).toBe(false);
+  });
+
+  it("completes the environments after --env", async () => {
+    const root = await projectWithEnvironments();
+
+    expect((await powershellCompletions(root, "probe check --env ")).sort()).toEqual(
+      [...ENVIRONMENTS].sort(),
+    );
+  });
+
+  it("completes the tags after --tag, not the services", async () => {
+    const root = await projectWithTags();
+
+    expect((await powershellCompletions(root, "probe check --tag ")).sort()).toEqual([
+      "back",
+      "infra",
+    ]);
+  });
+
+  it("offers the options of a command, and the shells after completion", async () => {
+    const root = await project();
+
+    expect((await powershellCompletions(root, "probe check --")).sort()).toEqual([
+      "--env",
+      "--help",
+      "--json",
+      "--set",
+      "--tag",
+      "--timeout",
+    ]);
+    expect((await powershellCompletions(root, "probe completion ")).sort()).toEqual([
+      "bash",
+      "fish",
+      "powershell",
+      "zsh",
+    ]);
+    // PowerShell falls back to file names when a completer offers nothing: only probe's own words are ruled out.
+    expect(await powershellCompletions(root, "probe ls ")).not.toContain("api");
   });
 });

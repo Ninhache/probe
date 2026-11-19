@@ -24,7 +24,7 @@ It changes nothing: a pending migration is reported, not applied.
 ## What it looks at
 
 - **The port**: which process listens on it, with its name and pid. It uses `lsof` (`ss` on Linux when `lsof` is
-  missing). A port held by another user or by a container has no visible owner: doctor says so.
+  missing; `netstat` and `tasklist` on Windows). A port held by another user or by a container has no visible owner: doctor says so.
 - **Docker**: a container that publishes the port on the host, running or stopped.
 - A missing tool, or a Docker daemon that does not answer, marks its check `skipped`: the others still run.
 - A service on another host gets no local check.

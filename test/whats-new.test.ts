@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { bashScript } from "../src/completion/bash";
 import { fishScript } from "../src/completion/fish";
 import { completionMarker, markerVersion } from "../src/completion/marker";
+import { powershellScript } from "../src/completion/powershell";
 import { zshScript } from "../src/completion/zsh";
 import { LAST_SEEN_FILE, RELEASES_URL, UPDATE_CACHE_FILE } from "../src/constants";
 import { isNewer } from "../src/update/notifier";
@@ -216,7 +217,12 @@ describe("currentNotes", () => {
 });
 
 describe("the completion marker", () => {
-  const SCRIPTS = { zsh: zshScript, bash: bashScript, fish: fishScript };
+  const SCRIPTS = {
+    zsh: zshScript,
+    bash: bashScript,
+    fish: fishScript,
+    powershell: powershellScript,
+  };
 
   it.each(Object.keys(SCRIPTS))("should be in the head of the %s script", (shell) => {
     const script = SCRIPTS[shell as keyof typeof SCRIPTS]([], "3.4.5");
@@ -280,8 +286,8 @@ describe("saved completion scripts", () => {
 
     expect(completionPlaces(where).map(({ path }) => path)).toEqual([
       join(home, ".zfunc", "_probe"),
-      "/xdg/config/fish/completions/probe.fish",
-      "/xdg/data/bash-completion/completions/probe",
+      join("/xdg/config", "fish", "completions", "probe.fish"),
+      join("/xdg/data", "bash-completion", "completions", "probe"),
     ]);
   });
 

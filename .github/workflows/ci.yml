@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         # macos-latest ships GNU Make 3.81: the oldest make the generated block must support.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24, 26]
     runs-on: ${{ matrix.os }}
     env:
@@ -40,6 +40,7 @@ jobs:
         with:
           node-version: 22
       - name: Demo through make, on Node 22
+        if: runner.os != 'Windows'
         working-directory: examples/demo
         run: |
           node --version

@@ -1,3 +1,5 @@
+import { currentPlatform, type Platform } from "../platform";
+
 export interface TerminalStream {
   isTTY?: boolean;
   columns?: number;
@@ -39,12 +41,15 @@ function supportsHyperlinks(env: NodeJS.ProcessEnv): boolean {
 
 /**
  * Whether glyphs beyond ASCII can be drawn. `PROBE_ASCII=1` forces ASCII for a UTF-8 locale whose font
- * lacks them (a font cannot be detected); any other value leaves the locale to decide.
+ * lacks them (a font cannot be detected); any other value leaves the rest to the platform.
  */
-export function supportsUnicode(env: NodeJS.ProcessEnv): boolean {
+export function supportsUnicode(
+  env: NodeJS.ProcessEnv,
+  platform: Platform = currentPlatform,
+): boolean {
   if (env.PROBE_ASCII === "1") return false;
   if (env.TERM === "linux") return false;
-  return /UTF-?8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || "");
+  return platform.drawsUnicode(env);
 }
 
 export function detectTerminal(stream: TerminalStream, env: NodeJS.ProcessEnv): Terminal {

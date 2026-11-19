@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { markerVersion } from "../completion/marker";
 import type { Shell } from "../completion/spec";
 import { isNewer } from "./notifier";
@@ -55,8 +55,14 @@ function head(path: string): string | undefined {
   }
 }
 
+// With slashes whatever the OS: the command is pasted into a POSIX shell, where `\` would be eaten.
 const shown = (path: string, home: string) =>
-  path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+  path.startsWith(`${home}${sep}`)
+    ? `~/${path
+        .slice(home.length + 1)
+        .split(sep)
+        .join("/")}`
+    : path;
 
 /**
  * One warning per saved script written by an older probe, or by one that did not mark its scripts.

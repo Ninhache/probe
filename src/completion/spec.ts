@@ -13,7 +13,7 @@ export interface CommandLike {
   args?: unknown;
 }
 
-export const SHELLS = ["zsh", "bash", "fish"] as const;
+export const SHELLS = ["zsh", "bash", "fish", "powershell"] as const;
 export type Shell = (typeof SHELLS)[number];
 
 export const COMPLETION_COMMAND = "completion";
