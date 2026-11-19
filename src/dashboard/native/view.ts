@@ -31,7 +31,7 @@ import {
 } from "../../tui/widgets";
 import { pad } from "../../tui/width";
 import { detailLines } from "../detail";
-import { type Command, keyCommand } from "../keymap";
+import { type Command, type Screen as KeymapScreen, keyCommand } from "../keymap";
 import { fromEngineKey } from "../keys";
 import { HTTP_ONLY, NO_RESPONSE, type ResponsePart } from "../response";
 import type { DashboardSettings } from "../settings";
@@ -344,16 +344,7 @@ export function renderDashboard(
       fg: t.fg,
     });
   }
-  const barScreen =
-    view.modals.depth > 0
-      ? ((view.modals.top as Partial<Panel> | undefined)?.bar ?? view.bar ?? "help")
-      : view.filtering
-        ? "filter"
-        : view.bottom === "response"
-          ? "peek"
-          : view.bottom === "log"
-            ? "log"
-            : "list";
+  const barScreen = currentScreen(view);
   if (view.status && now - view.status.at < STATUS_MS) {
     const text = view.status.text.replaceAll("\n", " · ");
     screen.text(1, footer.y, text, { fg: t.warn }, area.w - 2);
@@ -680,6 +671,15 @@ function clickRegion(
   return true;
 }
 
+/** The keymap screen the user is on: what the help bar shows, and what the help puts first. */
+function currentScreen(view: ViewState): KeymapScreen {
+  if (view.modals.depth > 0)
+    return (view.modals.top as Partial<Panel> | undefined)?.bar ?? view.bar ?? "help";
+  if (view.filtering) return "filter";
+  if (view.bottom === "response") return "peek";
+  return view.bottom === "log" ? "log" : "list";
+}
+
 function dispatch(
   event: InputEvent,
   tracker: Tracker,
@@ -821,7 +821,7 @@ export function runCommand(
       actions.quit();
       break;
     case "help":
-      view.modals.push(helpModal(view.area, tabNames(tracker).length > 2));
+      view.modals.push(helpModal(view.area, tabNames(tracker).length > 2, currentScreen(view)));
       break;
     case "filter":
       view.filtering = true;

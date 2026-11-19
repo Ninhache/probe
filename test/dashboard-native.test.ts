@@ -288,7 +288,7 @@ describe("help bar, help overlay and filter", () => {
     run(tracker, view, "?");
     const rows = draw(tracker, view);
     expect(rows.join("\n")).toContain("┤help├");
-    expect(rows.join("\n")).toContain("Filter by name");
+    expect(rows.join("\n")).toContain("Palette");
     expect(rows.at(-1)).toContain("? esc close");
     run(tracker, view, "down", "escape");
     expect(view.modals.depth).toBe(0);

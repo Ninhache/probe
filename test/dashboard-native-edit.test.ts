@@ -374,7 +374,7 @@ describe("command palette", () => {
     const { press, draw, view } = setup();
     press(`:help${ENTER}`);
     expect(view.modals.depth).toBe(1);
-    expect(draw()).toContain("List");
+    expect(draw()).toContain("Move");
     press("?");
     press(`:filter${ENTER}`);
     expect(view.filtering).toBe(true);
@@ -990,7 +990,7 @@ describe("removing an environment", () => {
     expect(draw()).toContain("Remove the environment");
     press(ESC);
     press("?");
-    expect(draw()).toContain("Remove the environment");
+    expect(draw()).toContain("Remove env");
   });
 
   it("is offered nowhere when no environment can be removed", () => {

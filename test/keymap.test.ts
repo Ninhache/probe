@@ -105,13 +105,16 @@ describe("helpLines", () => {
     const headings = helpLines(true).filter(({ heading }) => heading);
 
     expect(headings.map(({ text }) => text)).toEqual([
-      "List",
+      "Move",
+      "Service",
+      "View",
+      "Edit",
       "Parameters",
       "Panels",
       "Service detail",
       "Filter",
       "Add and edit",
-      "Outside a text field",
+      "General",
     ]);
   });
 
@@ -126,20 +129,17 @@ describe("helpLines", () => {
 describe("paletteEntries", () => {
   it("should offer every key of the list the help names, but moving and itself", () => {
     // `w` is in the palette with no line in the help, which is full: see the next test.
-    const offered = paletteEntries(true)
-      .filter(({ command }) => command !== "trace")
-      .map(({ keys, label }) => `  ${keys.padEnd(7)} ${label}`);
-    const lines = helpLines(true);
-    const list = lines.slice(
-      0,
-      lines.findIndex(({ text }, index) => index > 0 && text === "Parameters"),
-    );
-    const named = list
-      .filter(({ heading, text }) => !heading && !/Move|Find a command/.test(text))
-      .map(({ text }) => text);
+    const offered = paletteEntries(true).filter(({ command }) => command !== "trace");
+    const lines = helpLines(true).map(({ text }) => text);
 
-    expect(offered.slice(0, named.length)).toEqual(named);
-    expect(offered.slice(named.length)).toEqual(["  ?       This help", "  q       Quit"]);
+    for (const { keys, label } of offered) {
+      expect(
+        lines.some((line) => line.startsWith(`  ${keys}`) && line.endsWith(`  ${label}`)),
+      ).toBe(true);
+    }
+    expect(offered.map(({ label }) => label)).toEqual(
+      expect.arrayContaining(["Check now", "Open its URL", "This help", "Quit"]),
+    );
   });
 
   it("should offer saving the response, which only the response panel's help names", () => {
@@ -197,12 +197,12 @@ describe("the key of the parameters", () => {
 });
 
 describe("helpColumns", () => {
-  it("should put the keys of the list and the parameters on the left on 80 columns, in unicode and in ASCII", () => {
+  it("should put the sections side by side on 80 columns, in unicode and in ASCII", () => {
     for (const unicode of [true, false]) {
       const [left = [], right = []] = helpColumns(unicode, 80);
 
-      expect(left[0]?.text).toBe("List");
-      expect(right[0]?.text).toBe("Panels");
+      expect(left[0]?.text).toBe("Move");
+      expect(right.length).toBeGreaterThan(0);
       expect([...left, ...right]).toEqual(helpLines(unicode));
     }
   });
@@ -214,12 +214,8 @@ describe("helpColumns", () => {
     expect(widest(left) + HELP_GAP + widest(right)).toBeLessThanOrEqual(80);
   });
 
-  it("should stack the sections when two columns do not fit 60 columns", () => {
-    expect(helpColumns(true, 60)).toEqual([helpLines(true)]);
-    expect(helpColumns(false, 60)).toEqual([helpLines(false)]);
-  });
-
-  it("should fall back to one column when two do not fit", () => {
+  it("should stack the sections when two columns do not fit 40 columns", () => {
     expect(helpColumns(true, 40)).toEqual([helpLines(true)]);
+    expect(helpColumns(false, 40)).toEqual([helpLines(false)]);
   });
 });

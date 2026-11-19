@@ -41,13 +41,17 @@ export type Command =
   | "quit";
 
 type Section =
+  | "Move"
+  | "Service"
+  | "View"
+  | "Edit"
   | "List"
   | "Panels"
   | "Service detail"
   | "Parameters"
   | "Filter"
   | "Add and edit"
-  | "Outside a text field";
+  | "General";
 
 interface Binding {
   screens: readonly Screen[];
@@ -55,6 +59,8 @@ interface Binding {
   ascii?: string;
   action: string;
   help?: string;
+  /** `help` in a few words, for the compact help of the current screen. */
+  short?: string;
   /** What the palette calls it when the help has no line for it. */
   palette?: string;
   section?: Section;
@@ -68,7 +74,7 @@ interface Binding {
   parameters?: true;
 }
 
-const list = (binding: Omit<Binding, "screens" | "section">): Binding => ({
+const list = (binding: Omit<Binding, "screens">): Binding => ({
   screens: ["list", "peek", "log"],
   section: "List",
   ...binding,
@@ -105,6 +111,8 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     keys: "1",
     action: "log",
     help: "Log tab",
+    section: "View",
+    short: "Log",
     barless: true,
     command: "log",
   }),
@@ -112,6 +120,8 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     keys: "2",
     action: "response",
     help: "Response tab",
+    section: "View",
+    short: "Response",
     barless: true,
     command: "response",
   }),
@@ -119,6 +129,8 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     keys: "b",
     action: "copy body",
     help: "Copy the response body",
+    section: "Service",
+    short: "Copy body",
     barless: true,
     command: "body",
   }),
@@ -134,13 +146,17 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     keys: "f",
     action: "changes only",
     help: "Log changes only",
+    section: "View",
+    short: "Changes",
     barless: true,
     command: "changes",
   }),
   list({
     keys: "y",
     action: "copy lines",
-    help: "Copy the log lines on screen",
+    help: "Copy visible log lines",
+    section: "View",
+    short: "Copy log",
     barless: true,
     command: "copylog",
   }),
@@ -158,6 +174,8 @@ const NATIVE_LIST_BINDINGS: readonly Binding[] = [
     keys: "n",
     action: "new env",
     help: "New environment",
+    section: "Edit",
+    short: "New env",
     // First to go: at 80 columns the bar stays what it was.
     drop: 0,
     command: "environment",
@@ -192,43 +210,131 @@ const DETAIL_BINDINGS: readonly Binding[] = [
 ];
 
 const BINDINGS: readonly Binding[] = [
-  list({ keys: "↑↓ jk", ascii: "jk", action: "move", help: "Move", drop: 2 }),
+  list({
+    keys: "↑↓ jk",
+    ascii: "jk",
+    action: "move",
+    help: "Move",
+    section: "Move",
+    short: "Move",
+    drop: 2,
+  }),
   list({
     keys: "←→ hl",
     ascii: "hl",
     action: "environment",
     help: "Change environment",
+    section: "Move",
+    short: "Env",
     drop: 7,
     grid: true,
   }),
-  list({ keys: "r", action: "check", help: "Check now", barless: true, command: "check" }),
+  list({
+    keys: "r",
+    action: "check",
+    help: "Check now",
+    section: "Service",
+    short: "Check",
+    barless: true,
+    command: "check",
+  }),
   list({
     keys: "↵",
     ascii: "enter",
     action: "service",
     help: "Service detail",
+    section: "Move",
+    short: "Detail",
     drop: 6,
     command: "detail",
   }),
-  list({ keys: "u", action: "open", help: "Open its URL", barless: true, command: "open" }),
-  list({ keys: "c", action: "copy", help: "Copy curl command", barless: true, command: "copy" }),
-  list({ keys: "e", action: "edit", help: "Edit the service", barless: true, command: "edit" }),
-  list({ keys: "d", action: "remove", help: "Remove it", barless: true, command: "remove" }),
+  list({
+    keys: "u",
+    action: "open",
+    help: "Open its URL",
+    section: "Service",
+    short: "Open URL",
+    barless: true,
+    command: "open",
+  }),
+  list({
+    keys: "c",
+    action: "copy",
+    help: "Copy curl command",
+    section: "Service",
+    short: "Copy curl",
+    barless: true,
+    command: "copy",
+  }),
+  list({
+    keys: "e",
+    action: "edit",
+    help: "Edit the service",
+    section: "Service",
+    short: "Edit",
+    barless: true,
+    command: "edit",
+  }),
+  list({
+    keys: "d",
+    action: "remove",
+    help: "Remove it",
+    section: "Service",
+    short: "Remove",
+    barless: true,
+    command: "remove",
+  }),
   list({
     keys: "D",
     action: "remove env",
     help: "Remove the environment",
+    section: "Edit",
+    short: "Remove env",
     barless: true,
     command: "removeEnvironment",
   }),
-  list({ keys: "a", action: "add", help: "Add a service", drop: 3, command: "add" }),
-  list({ keys: "z", action: "undo", help: "Undo last change", barless: true, command: "undo" }),
-  list({ keys: "Z", action: "redo", help: "Redo what z undid", barless: true, command: "redo" }),
-  list({ keys: "/", action: "filter", help: "Filter by name", drop: 5, command: "filter" }),
+  list({
+    keys: "a",
+    action: "add",
+    help: "Add a service",
+    section: "Edit",
+    short: "Add",
+    drop: 3,
+    command: "add",
+  }),
+  list({
+    keys: "z",
+    action: "undo",
+    help: "Undo last change",
+    section: "Edit",
+    short: "Undo",
+    barless: true,
+    command: "undo",
+  }),
+  list({
+    keys: "Z",
+    action: "redo",
+    help: "Redo what z undid",
+    section: "Edit",
+    short: "Redo",
+    barless: true,
+    command: "redo",
+  }),
+  list({
+    keys: "/",
+    action: "filter",
+    help: "Filter by name",
+    section: "Move",
+    short: "Filter",
+    drop: 5,
+    command: "filter",
+  }),
   list({
     keys: "p",
     action: "parameters",
     help: "Parameter values",
+    section: "View",
+    short: "Params",
     drop: 4,
     command: "parameters",
     parameters: true,
@@ -237,11 +343,28 @@ const BINDINGS: readonly Binding[] = [
     keys: "v",
     action: "variables",
     help: "Header variables",
+    section: "View",
+    short: "Headers",
     drop: 0,
     command: "variables",
   }),
-  list({ keys: ":", action: "commands", help: "Find a command", drop: 1 }),
-  list({ keys: "o", action: "options", help: "Options", barless: true, command: "options" }),
+  list({
+    keys: ":",
+    action: "commands",
+    help: "Find a command",
+    section: "Move",
+    short: "Palette",
+    drop: 1,
+  }),
+  list({
+    keys: "o",
+    action: "options",
+    help: "Options",
+    section: "General",
+    short: "Options",
+    barless: true,
+    command: "options",
+  }),
   {
     screens: ["panel"],
     section: "Panels",
@@ -417,30 +540,35 @@ const BINDINGS: readonly Binding[] = [
   ...NATIVE_LIST_BINDINGS,
   {
     screens: ["list", "peek", "log", "panel", "readonly", "choose"],
-    section: "Outside a text field",
+    section: "General",
     keys: "?",
     action: "help",
     help: "This help",
+    short: "Help",
     command: "help",
   },
   {
     screens: ["list", "peek", "log", "panel", "readonly", "choose", "help"],
-    section: "Outside a text field",
+    section: "General",
     keys: "q",
     action: "quit",
     help: "Quit",
+    short: "Quit",
     command: "quit",
   },
 ];
 
 const SECTIONS: readonly Section[] = [
-  "List",
+  "Move",
+  "Service",
+  "View",
+  "Edit",
   "Parameters",
   "Panels",
   "Service detail",
   "Filter",
   "Add and edit",
-  "Outside a text field",
+  "General",
 ];
 
 const written = (binding: Binding, unicode: boolean) =>
@@ -508,40 +636,107 @@ export interface HelpLine {
   id: string;
   text: string;
   heading: boolean;
+  /** How many leading characters of `text` are the indent and the keys: the rest is the description. */
+  keysEnd?: number;
 }
 
-const HELP_GAP = 3;
-const LEFT_SECTIONS = 2;
+/** Which keys the help lists: those of a screen, the others, or all of them. */
+export type HelpPart = "current" | "rest" | "all";
 
-function sectionLines(sections: readonly Section[], unicode: boolean, grid: boolean): HelpLine[] {
-  const described = offered(grid).filter(({ help }) => help !== undefined);
-  const width = Math.max(...described.map((binding) => written(binding, unicode).length));
+const HELP_GAP = 3;
+const INDENT = "  ";
+/** Columns the current keys may use: they are short, and four sections of about six keys fit 80 columns. */
+const CURRENT_COLUMNS = 5;
+const REST_COLUMNS = 2;
+
+const inPart = (binding: Binding, screen: Screen | undefined, part: HelpPart) => {
+  if (part === "all" || screen === undefined) return true;
+  return binding.screens.includes(screen) === (part === "current");
+};
+
+/**
+ * The lines of the sections. `compact` writes the short descriptions and aligns the keys of each
+ * section on their own, so that narrow sections sit side by side.
+ */
+function sectionLines(
+  sections: readonly Section[],
+  unicode: boolean,
+  grid: boolean,
+  keep: (binding: Binding) => boolean = () => true,
+  compact = false,
+): HelpLine[] {
+  const described = offered(grid).filter((binding) => binding.help !== undefined && keep(binding));
+  const keyWidth = (kept: readonly Binding[]) =>
+    Math.max(0, ...kept.map((binding) => written(binding, unicode).length));
   const present = sections.filter((title) => described.some(({ section }) => section === title));
-  return present.flatMap((title) => [
-    { id: title, text: title, heading: true },
-    ...described
-      .filter(({ section }) => section === title)
-      .map((binding) => ({
+  return present.flatMap((title) => {
+    const own = described.filter(({ section }) => section === title);
+    const width = keyWidth(compact ? own : described);
+    return [
+      { id: title, text: title, heading: true },
+      ...own.map((binding) => ({
         id: `${title} ${binding.screens.join("+")} ${binding.keys}`,
-        text: `  ${written(binding, unicode).padEnd(width)}  ${binding.help}`,
+        text: `${INDENT}${written(binding, unicode).padEnd(width)}  ${(compact && binding.short) || binding.help}`,
         heading: false,
+        keysEnd: INDENT.length + width,
       })),
-  ]);
+    ];
+  });
 }
 
 export function helpLines(unicode: boolean, grid = false): HelpLine[] {
   return sectionLines(SECTIONS, unicode, grid);
 }
 
-export function helpColumns(unicode: boolean, columns: number, grid = false): HelpLine[][] {
-  // The list and the parameters it opens on the left: both columns then fit 24 lines.
-  const sides = [
-    sectionLines(SECTIONS.slice(0, LEFT_SECTIONS), unicode, grid),
-    sectionLines(SECTIONS.slice(LEFT_SECTIONS), unicode, grid),
-  ];
-  const widths = sides.map((side) => Math.max(...side.map(({ text }) => text.length)));
-  const fits = (widths[0] as number) + HELP_GAP + (widths[1] as number) <= columns;
-  return fits ? sides : [helpLines(unicode, grid)];
+/**
+ * The help in columns that fit `columns`, or in one when they do not.
+ * `part` narrows it to the keys of `screen` (in short) or to all the others.
+ */
+export function helpColumns(
+  unicode: boolean,
+  columns: number,
+  grid = false,
+  screen?: Screen,
+  part: HelpPart = "all",
+): HelpLine[][] {
+  const keep = (binding: Binding) => inPart(binding, screen, part);
+  const compact = part === "current";
+  const stacked = sectionLines(SECTIONS, unicode, grid, keep, compact);
+  return pack(stacked, columns, compact ? CURRENT_COLUMNS : REST_COLUMNS);
+}
+
+const widthOf = (lines: readonly HelpLine[]) =>
+  Math.max(0, ...lines.map(({ text }) => text.length));
+
+/**
+ * Whole sections, in order, in at most `most` columns: the shortest arrangement that fits `columns`,
+ * or one column when none does.
+ */
+function pack(lines: HelpLine[], columns: number, most: number): HelpLine[][] {
+  const sections: HelpLine[][] = [];
+  for (const line of lines) {
+    if (line.heading) sections.push([line]);
+    else sections.at(-1)?.push(line);
+  }
+  let best: HelpLine[][] | undefined;
+  let height = Number.POSITIVE_INFINITY;
+  // Each bit says whether a column starts at that section.
+  for (let cuts = 0; cuts < 2 ** Math.max(0, sections.length - 1); cuts++) {
+    const arranged: HelpLine[][] = [[]];
+    sections.forEach((section, i) => {
+      if (i > 0 && cuts & (1 << (i - 1))) arranged.push([]);
+      arranged.at(-1)?.push(...section);
+    });
+    if (arranged.length > most) continue;
+    const used = arranged.reduce((sum, column) => sum + widthOf(column), 0);
+    if (used + HELP_GAP * (arranged.length - 1) > columns) continue;
+    const tallest = Math.max(...arranged.map((column) => column.length));
+    if (tallest < height) {
+      best = arranged;
+      height = tallest;
+    }
+  }
+  return best ?? [lines];
 }
 
 export { HELP_GAP };
