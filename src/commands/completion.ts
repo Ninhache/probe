@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
 import { bashScript } from "../completion/bash";
 import { fishScript } from "../completion/fish";
+import { powershellScript } from "../completion/powershell";
 import {
   COMPLETION_COMMAND,
   type CommandLike,
@@ -15,6 +16,7 @@ const SCRIPTS: Record<Shell, typeof zshScript> = {
   zsh: zshScript,
   bash: bashScript,
   fish: fishScript,
+  powershell: powershellScript,
 };
 
 const meta = {
