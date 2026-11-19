@@ -17,9 +17,19 @@ type Tool = readonly [command: string, ...args: string[]];
 
 const WL_COPY: Tool = ["wl-copy"];
 const XCLIP: Tool = ["xclip", "-selection", "clipboard"];
+// Set-Clipboard reads the text as UTF-8; `clip` alone would mangle what is not in the OEM code page.
+const POWERSHELL: Tool = [
+  "powershell",
+  "-NoProfile",
+  "-NonInteractive",
+  "-Command",
+  "[Console]::InputEncoding = [Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+];
+const CLIP: Tool = ["clip"];
 
 export function clipboardTools(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Tool[] {
   if (platform === "darwin") return [["pbcopy"]];
+  if (platform === "win32") return [POWERSHELL, CLIP];
   return env.WAYLAND_DISPLAY ? [WL_COPY, XCLIP] : [XCLIP, WL_COPY];
 }
 

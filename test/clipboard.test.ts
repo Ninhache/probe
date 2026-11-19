@@ -33,6 +33,7 @@ describe("clipboardTools", () => {
     ["darwin", {}, ["pbcopy"]],
     ["linux", { WAYLAND_DISPLAY: "wayland-1" }, ["wl-copy", "xclip"]],
     ["linux", {}, ["xclip", "wl-copy"]],
+    ["win32", {}, ["powershell", "clip"]],
   ] as const)("should list on %s with %o the tools %o", (platform, env, tools) => {
     expect(clipboardTools(platform, env).map(([tool]) => tool)).toEqual(tools);
   });
