@@ -64,6 +64,9 @@ export const REGISTRY_LATEST_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/l
 export const REGISTRY_TIMEOUT_MS = 5_000;
 export const UPDATE_CHECK_TTL_MS = 24 * 60 * 60 * 1000;
 export const UPDATE_CACHE_FILE = "latest.json";
+/** Next to the update cache: the last version whose release notes were shown. */
+export const LAST_SEEN_FILE = "last-seen-version";
+export const RELEASES_URL = "https://github.com/Ninhache/probe/releases";
 export const REFRESH_COMMAND = "__refresh-update-cache";
 export const COMPLETE_COMMAND = "__complete";
 

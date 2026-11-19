@@ -1,3 +1,5 @@
+import { CLI_VERSION } from "../version";
+import { completionMarker } from "./marker";
 import {
   type CommandSpec,
   ENVIRONMENT_OPTION,
@@ -13,7 +15,7 @@ function described({ name, description }: CommandSpec): string {
   return `'${text.replaceAll("'", "'\\''")}'`;
 }
 
-export function zshScript(commands: CommandSpec[]): string {
+export function zshScript(commands: CommandSpec[], version: string = CLI_VERSION): string {
   const cases = (pick: (command: CommandSpec) => string[]) =>
     commands
       .filter((command) => pick(command).length > 0)
@@ -21,6 +23,7 @@ export function zshScript(commands: CommandSpec[]): string {
   const withServices = commands.filter((command) => command.services).map(({ name }) => name);
   return [
     "#compdef probe",
+    completionMarker(version),
     '# zsh completion for probe. Load it after compinit with: eval "$(probe completion zsh)"',
     "_probe() {",
     "  local -a commands services",

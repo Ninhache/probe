@@ -38,6 +38,7 @@ export type Command =
   | "undo"
   | "redo"
   | "help"
+  | "news"
   | "quit";
 
 type Section =
@@ -365,6 +366,15 @@ const BINDINGS: readonly Binding[] = [
     barless: true,
     command: "options",
   }),
+  list({
+    keys: "W",
+    action: "what's new",
+    help: "What's new",
+    section: "Move",
+    short: "News",
+    barless: true,
+    command: "news",
+  }),
   {
     screens: ["panel"],
     section: "Panels",
@@ -571,8 +581,17 @@ const SECTIONS: readonly Section[] = [
   "General",
 ];
 
-const written = (binding: Binding, unicode: boolean) =>
-  unicode ? binding.keys : (binding.ascii ?? binding.keys);
+/** Shift+letter is written ⇧w so that W is not read as a letter to type; ASCII keeps the capital. */
+const SHIFTED_LETTER = /^[A-Z]$/;
+
+const written = (binding: Binding, unicode: boolean) => {
+  if (!unicode) return binding.ascii ?? binding.keys;
+  return SHIFTED_LETTER.test(binding.keys) ? `⇧${binding.keys.toLowerCase()}` : binding.keys;
+};
+
+/** How a key is written in the notes footer, e.g. "⇧w". */
+export const keyLabel = (keys: string, unicode: boolean) =>
+  unicode && SHIFTED_LETTER.test(keys) ? `⇧${keys.toLowerCase()}` : keys;
 
 const offered = (grid: boolean) => BINDINGS.filter((binding) => grid || !binding.grid);
 

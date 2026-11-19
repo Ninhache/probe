@@ -33,6 +33,7 @@ import {
 import { dashboardWrites } from "./dashboard/writes";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
+import { glyphsFor } from "./ui/glyphs";
 import { type HelpCommand, renderCommandHelp, renderRootHelp } from "./ui/help";
 import { linkFileIn } from "./ui/links";
 import { confirm } from "./ui/prompt";
@@ -44,6 +45,14 @@ import {
   updateCheckDisabled,
   updateNotice,
 } from "./update/notifier";
+import { staleCompletions } from "./update/stale-completion";
+import {
+  currentNotes,
+  markFirstRun,
+  newsOf,
+  takeWhatsNew,
+  whatsNewNotice,
+} from "./update/whats-new";
 import { CLI_VERSION } from "./version";
 
 const subCommands = { ...commands, completion: completionCommand(commands) };
@@ -72,6 +81,7 @@ const main = defineCommand({
 // citty's own renderer lists every command on one line and cannot group or colour: ours is used.
 async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): Promise<void> {
   const { color } = stdoutTerminal();
+  const glyphs = glyphsFor(process.env);
   if (command === (main as unknown)) {
     const meta = await (typeof main.meta === "function" ? main.meta() : main.meta);
     console.log(
@@ -81,6 +91,7 @@ async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): 
         commands: subCommands as Record<string, HelpCommand>,
         args: (main.args ?? {}) as never,
         color,
+        glyphs,
         firstRun: findProbeDir(process.cwd()) === null,
       }),
     );
@@ -88,24 +99,43 @@ async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): 
   }
   const meta = await (typeof command.meta === "function" ? command.meta() : command.meta);
   console.log(
-    await renderCommandHelp({ name: meta?.name ?? "", command: command as HelpCommand, color }),
+    await renderCommandHelp({
+      name: meta?.name ?? "",
+      command: command as HelpCommand,
+      color,
+      glyphs,
+    }),
   );
 }
 
 function notifyUpdate(rawArgs: string[]): void {
   const cliPath = process.argv[1];
-  // The completion script is printed at every shell start: no registry lookup, no notice there.
   if (updateCheckDisabled() || !cliPath || rawArgs[0] === COMPLETION_COMMAND) return;
+  const stderr = detectTerminal(process.stderr, process.env);
+  const quiet = !stderr.isTTY || rawArgs.includes("--json");
+  // Before the refresh: that writes the cache file, which tells an upgrade from a first install.
+  if (quiet) markFirstRun(CLI_VERSION, cacheDir());
+  const news = quiet ? null : whatsNewNotice(CLI_VERSION, cacheDir(), stderr.color);
   scheduleRefresh(cacheDir(), cliPath);
-  if (
-    !detectTerminal(process.stderr, process.env).isTTY ||
-    rawArgs.includes("--json") ||
-    rawArgs[0] === "status" ||
-    rawArgs[0] === "doctor"
-  )
-    return;
-  const notice = updateNotice(CLI_VERSION, cacheDir());
+  if (quiet) return;
+  if (news) console.error(`\n${news}`);
+  if (rawArgs[0] === "status" || rawArgs[0] === "doctor") return;
+  const notice = updateNotice(CLI_VERSION, cacheDir(), glyphsFor(process.env));
   if (notice) console.error(`\n${notice}`);
+}
+
+/** The notes for the dashboard: shown when it opens after an update, and again on demand. */
+function dashboardNews() {
+  const opening = updateCheckDisabled() ? null : takeWhatsNew(CLI_VERSION, cacheDir());
+  const news = (upgrade: Parameters<typeof newsOf>[0]) =>
+    newsOf(upgrade, staleCompletions(CLI_VERSION));
+  return {
+    show: opening ? news(opening) : undefined,
+    again: () => {
+      const upgrade = currentNotes(CLI_VERSION);
+      return upgrade ? news(upgrade) : undefined;
+    },
+  };
 }
 
 const INTERVAL_OPTION = "--interval";
@@ -152,6 +182,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
       timeoutMs: settings.timeoutMs,
       environments: environments.map((name) => source(paths, name)),
       terminal: stdoutTerminal(),
+      glyphs: glyphsFor(process.env),
       empty: noServices(paths),
     });
     console.log(text);
@@ -172,6 +203,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
     settings,
     selection: await readDashboardSelection(paths),
     skipped: await readSkippedServices(paths),
+    whatsNew: dashboardNews(),
     onEnvironmentCreate: async (name, from) => {
       const { variables } = await createEnvironment(paths, name, from);
       const sends = variables.map(

@@ -1,4 +1,5 @@
 import type { Colors } from "../ui/colors";
+import { type Glyphs, UNICODE_GLYPHS } from "../ui/glyphs";
 import type { DockerCheck, ServiceChecks, ServiceReport } from "./diagnose";
 
 const INDENT = "    ";
@@ -18,12 +19,12 @@ function portLine({ port, process }: ServiceChecks): string {
   }
 }
 
-function dockerLine(docker: DockerCheck): string {
+function dockerLine(docker: DockerCheck, glyphs: Glyphs): string {
   if (docker.status === "skipped") return `skipped: ${docker.reason}`;
   if (docker.status === "none") return "no container publishes this port";
   return (docker.containers ?? [])
     .map(({ name, state }) => {
-      const start = STARTABLE.has(state) ? ` → docker start ${name}` : "";
+      const start = STARTABLE.has(state) ? ` ${glyphs.arrow} docker start ${name}` : "";
       return `container ${name} (${state}) publishes this port${start}`;
     })
     .join(`\n${INDENT}${" ".repeat(LABEL_WIDTH + 1)}`);
@@ -32,7 +33,11 @@ function dockerLine(docker: DockerCheck): string {
 const LABEL_WIDTH = 10;
 
 /** The lines shown under a down service, empty for a service that needs none. */
-export function formatDiagnosis(service: ServiceReport, colors: Colors): string[] {
+export function formatDiagnosis(
+  service: ServiceReport,
+  colors: Colors,
+  glyphs: Glyphs = UNICODE_GLYPHS,
+): string[] {
   const { checks } = service;
   if (!checks) return [];
   const line = (label: string, text: string, tone: (text: string) => string) =>
@@ -48,6 +53,6 @@ export function formatDiagnosis(service: ServiceReport, colors: Colors): string[
         : colors.dim;
   return [
     line(`port ${service.port}`, portLine(checks), (text) => text),
-    line("docker", dockerLine(checks.docker), dockerTone),
+    line("docker", dockerLine(checks.docker, glyphs), dockerTone),
   ];
 }

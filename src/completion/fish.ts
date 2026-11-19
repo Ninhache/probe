@@ -1,3 +1,5 @@
+import { CLI_VERSION } from "../version";
+import { completionMarker } from "./marker";
 import {
   type CommandSpec,
   ENVIRONMENT_OPTION,
@@ -16,11 +18,12 @@ const VALUES: Record<string, string> = {
 const longOption = (option: string) =>
   `-l ${option.replace(/^--/, "")}${Object.hasOwn(VALUES, option) ? ` -x -a '(${VALUES[option]})'` : ""}`;
 
-export function fishScript(commands: CommandSpec[]): string {
+export function fishScript(commands: CommandSpec[], version: string = CLI_VERSION): string {
   const inCommand = (names: string[]) => `-n '__fish_seen_subcommand_from ${names.join(" ")}'`;
   const withServices = commands.filter((command) => command.services).map(({ name }) => name);
   return [
     "# fish completion for probe. Load it with: probe completion fish | source",
+    completionMarker(version),
     "function __probe_services",
     `    ${SERVICES_QUERY}`,
     "end",

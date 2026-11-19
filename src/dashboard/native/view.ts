@@ -30,6 +30,7 @@ import {
   tabs,
 } from "../../tui/widgets";
 import { pad } from "../../tui/width";
+import type { News } from "../../update/whats-new";
 import { detailLines } from "../detail";
 import { type Command, type Screen as KeymapScreen, keyCommand } from "../keymap";
 import { fromEngineKey } from "../keys";
@@ -44,6 +45,7 @@ import {
   statsOf,
   type Tracker,
 } from "./history";
+import { whatsNewModal } from "./news";
 import { paletteModal } from "./palette";
 import {
   copyBody,
@@ -137,6 +139,8 @@ export interface ViewState {
   bar?: Panel["bar"];
   /** A command a modal chose and closed on: run once it is gone. */
   queued?: Command;
+  /** The notes of the running version, to read again; absent when the dashboard has none. */
+  news?: () => News | undefined;
 }
 
 export type ViewInit = Partial<
@@ -823,6 +827,12 @@ export function runCommand(
     case "help":
       view.modals.push(helpModal(view.area, tabNames(tracker).length > 2, currentScreen(view)));
       break;
+    case "news": {
+      const news = view.news?.();
+      if (news) view.modals.push(whatsNewModal(news));
+      else say(view, "No release notes for this version");
+      break;
+    }
     case "filter":
       view.filtering = true;
       break;

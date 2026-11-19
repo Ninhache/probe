@@ -92,6 +92,9 @@ export class Screen {
   text(x: number, y: number, str: string, style?: Style, maxWidth = this.width - x): number {
     const s = sgr(style, this.mode);
     let col = 0;
+    // ⇧w has no ASCII glyph: draw the capital W in its two cells, so the layout does not move.
+    if (this.ascii)
+      str = str.replace(/⇧(\p{Ll})/gu, (_, letter: string) => ` ${letter.toUpperCase()}`);
     for (const g of graphemes(str)) {
       const w = charWidth(g);
       if (w === 0) continue;

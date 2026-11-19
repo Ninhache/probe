@@ -1,5 +1,6 @@
 import { type Colors, createColors } from "./colors";
 import { formatExamples } from "./examples";
+import { type Glyphs, UNICODE_GLYPHS } from "./glyphs";
 
 type Resolvable<T> = T | Promise<T> | (() => T | Promise<T>);
 
@@ -46,7 +47,6 @@ const GAP = "  ";
 const WRAP_WIDTH = 80;
 // `-p, `: a one-letter alias, its comma and the space after it.
 const SHORT_FLAG_WIDTH = 4;
-const DOT = " · ";
 const USAGE_NOTE = "probe alone opens the dashboard";
 const USAGE_NOTE_GAP = "        ";
 const DEFAULT_TAIL = /^\(default\b/;
@@ -149,6 +149,7 @@ export interface RootHelpInput {
   commands: Record<string, HelpCommand>;
   args: Record<string, ArgLike>;
   color: boolean;
+  glyphs?: Glyphs;
   /** No `.probe/` was found from the working directory upward. */
   firstRun: boolean;
 }
@@ -156,6 +157,7 @@ export interface RootHelpInput {
 /** The help of `probe` alone: commands by purpose, then the dashboard options. */
 export async function renderRootHelp(input: RootHelpInput): Promise<string> {
   const colors = createColors(input.color);
+  const DOT = ` ${(input.glyphs ?? UNICODE_GLYPHS).dot} `;
   const names = Object.keys(input.commands);
   const listed = new Set(GROUPS.flatMap((group) => group.commands));
   const groups = [...GROUPS];
@@ -221,11 +223,13 @@ export interface CommandHelpInput {
   name: string;
   command: HelpCommand;
   color: boolean;
+  glyphs?: Glyphs;
 }
 
 /** The help of `probe <command>`: usage, arguments, every option, at most a few examples. */
 export async function renderCommandHelp(input: CommandHelpInput): Promise<string> {
   const colors = createColors(input.color);
+  const DOT = ` ${(input.glyphs ?? UNICODE_GLYPHS).dot} `;
   const { command, name } = input;
   const description = (await resolved(command.meta))?.description ?? "";
   const args = (await resolved(command.args)) ?? {};

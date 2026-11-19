@@ -21,6 +21,7 @@ import {
   SET_ARG,
   secondsToMs,
   selectionFrom,
+  stdoutGlyphs,
   stdoutTerminal,
   TAG_ARG,
   tagsFrom,
@@ -122,7 +123,7 @@ export default defineCommand({
     } else if (results.length === 0) {
       console.log(noServices(paths));
     } else {
-      console.log(formatCheckResults(results, stdoutTerminal()));
+      console.log(formatCheckResults(results, stdoutTerminal(), stdoutGlyphs()));
     }
     if (timedOut) {
       const down = results.filter((result) => !result.ok).map((result) => result.name);

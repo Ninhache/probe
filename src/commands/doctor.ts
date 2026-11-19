@@ -21,6 +21,7 @@ import {
   secondsToMs,
   selectionFrom,
   stdoutColors,
+  stdoutGlyphs,
   stdoutTerminal,
   TAG_ARG,
   tagsFrom,
@@ -94,31 +95,35 @@ export default defineCommand({
       console.log(JSON.stringify({ ok, project, services }, null, 2));
     } else {
       const colors = stdoutColors();
+      const glyphs = stdoutGlyphs();
       const line = (label: string, value: string) => console.log(`${label.padEnd(10)} ${value}`);
       if (pending) {
-        const change = `schema v${pending.from} → v${pending.to}`;
-        line("migration", colors.yellow(`pending (${change}) → run \`probe migrate\``));
+        const change = `schema v${pending.from} ${glyphs.arrow} v${pending.to}`;
+        line(
+          "migration",
+          colors.yellow(`pending (${change}) ${glyphs.arrow} run \`probe migrate\``),
+        );
         line("makefile", colors.dim("checked after the migration"));
         line("services", colors.dim("checked after the migration"));
       } else {
         line("migration", colors.green("none pending"));
         line(
           "makefile",
-          makefile ? describeBlock(makefile, colors) : colors.dim("not checked with --env"),
+          makefile ? describeBlock(makefile, colors, glyphs) : colors.dim("not checked with --env"),
         );
       }
-      line("update", describeUpdate(colors));
+      line("update", describeUpdate(colors, glyphs));
       if (services) {
         console.log("");
         if (services.length === 0) console.log(noServices(paths));
-        const rows = formatCheckResults(services, stdoutTerminal()).split("\n");
+        const rows = formatCheckResults(services, stdoutTerminal(), glyphs).split("\n");
         // A hint takes a second line: the diagnosis goes after the whole entry of its service.
         let cursor = 0;
         for (const service of services) {
           const height = service.hint ? 2 : 1;
           for (const row of rows.slice(cursor, cursor + height)) console.log(row);
           cursor += height;
-          for (const row of formatDiagnosis(service, colors)) console.log(row);
+          for (const row of formatDiagnosis(service, colors, glyphs)) console.log(row);
         }
       }
     }

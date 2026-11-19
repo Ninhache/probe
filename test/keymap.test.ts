@@ -175,8 +175,11 @@ describe("paletteEntries", () => {
 
   it("should run from its key what it runs from the palette", () => {
     for (const { command, keys } of paletteEntries(true)) {
-      expect(keyCommand(keys === "↵" ? "" : keys, keys === "↵")).toBe(command);
+      const typed = keys.startsWith("⇧") ? keys.slice(1).toUpperCase() : keys;
+      expect(keyCommand(typed === "↵" ? "" : typed, typed === "↵")).toBe(command);
     }
+    expect(paletteEntries(true).find(({ command }) => command === "news")?.keys).toBe("⇧w");
+    expect(paletteEntries(false).find(({ command }) => command === "news")?.keys).toBe("W");
     expect(keyCommand("j", false)).toBeUndefined();
     expect(keyCommand(":", false)).toBeUndefined();
     expect(keyCommand("", false)).toBeUndefined();
