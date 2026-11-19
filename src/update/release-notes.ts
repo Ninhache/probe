@@ -25,7 +25,10 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         kind: "info",
         text: "probe tells you once what changed after an update (Shift+w in the dashboard).",
       },
-      { kind: "info", text: "PROBE_ASCII=1 draws the dashboard with ASCII only." },
+      {
+        kind: "info",
+        text: "PROBE_ASCII=1 draws the dashboard and the command output with ASCII only.",
+      },
     ],
   },
   {

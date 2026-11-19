@@ -3,6 +3,7 @@ import { answer, type CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
 import { CONTAINS_SHOWN_CHARACTERS } from "../constants";
 import { createColors } from "./colors";
+import { type Glyphs, UNICODE_GLYPHS } from "./glyphs";
 import { link } from "./links";
 import { type Terminal, truncate } from "./terminal";
 
@@ -17,7 +18,11 @@ function nameBudget(nameWidth: number, columns: number, reserved: number): numbe
   return Math.max(1, Math.min(nameWidth, Math.floor((columns - reserved) / 2)));
 }
 
-export function formatCheckResults(results: CheckResult[], terminal: Terminal): string {
+export function formatCheckResults(
+  results: CheckResult[],
+  terminal: Terminal,
+  glyphs: Glyphs = UNICODE_GLYPHS,
+): string {
   const colors = createColors(terminal.color);
   const nameWidth = width(results.map((result) => result.name));
   const targetWidth = width(results.map((result) => result.target));
@@ -25,19 +30,21 @@ export function formatCheckResults(results: CheckResult[], terminal: Terminal): 
     if (result.skipped) return SKIPPED;
     return result.ok ? `${answer(result)}${GAP}${result.latencyMs}ms` : (result.error ?? "down");
   });
-  const fullWidth = 2 + nameWidth + GAP.length + targetWidth + GAP.length + width(outcomes);
+  // The mark and the space after it.
+  const lead = glyphs.ok.length + 1;
+  const fullWidth = lead + nameWidth + GAP.length + targetWidth + GAP.length + width(outcomes);
   const { columns } = terminal;
   const compact = columns !== undefined && fullWidth > columns;
-  const nameMax = compact ? nameBudget(nameWidth, columns, 2 + GAP.length) : nameWidth;
-  const outcomeMax = compact ? Math.max(1, columns - 2 - nameMax - GAP.length) : undefined;
+  const nameMax = compact ? nameBudget(nameWidth, columns, lead + GAP.length) : nameWidth;
+  const outcomeMax = compact ? Math.max(1, columns - lead - nameMax - GAP.length) : undefined;
 
   return results
     .map((result, index) => {
       const mark = result.skipped
-        ? colors.dim("-")
+        ? colors.dim(glyphs.skipped)
         : result.ok
-          ? colors.green("✓")
-          : colors.red("✗");
+          ? colors.green(glyphs.ok)
+          : colors.red(glyphs.fail);
       const name = colors.bold(truncate(result.name, nameMax).padEnd(nameMax));
       const padding = " ".repeat(targetWidth - result.target.length);
       const linked = link(result.target, result.target, terminal.hyperlinks);

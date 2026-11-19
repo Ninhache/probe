@@ -12,6 +12,7 @@ import { CONFIG_FILE, ENVIRONMENTS_DIR, MAX_TIMEOUT_SECONDS, PROBE_DIR } from ".
 import { ProbeError } from "../errors";
 import { blockState, syncMakefile } from "../makefile/sync";
 import { type Colors, createColors } from "../ui/colors";
+import { type Glyphs, glyphsFor } from "../ui/glyphs";
 import { detectTerminal, type Terminal } from "../ui/terminal";
 
 export const ENVIRONMENT_ARG = {
@@ -79,6 +80,11 @@ export async function openProject(environment?: string): Promise<LoadedConfig> {
 
 export function stdoutTerminal(): Terminal {
   return detectTerminal(process.stdout, process.env);
+}
+
+/** The glyphs of the command output: ASCII when the environment asks or cannot show more. */
+export function stdoutGlyphs(): Glyphs {
+  return glyphsFor(process.env);
 }
 
 export function stdoutColors(): Colors {

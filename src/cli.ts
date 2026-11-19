@@ -33,6 +33,7 @@ import {
 import { dashboardWrites } from "./dashboard/writes";
 import { ProbeError } from "./errors";
 import { closest } from "./suggest";
+import { glyphsFor } from "./ui/glyphs";
 import { type HelpCommand, renderCommandHelp, renderRootHelp } from "./ui/help";
 import { linkFileIn } from "./ui/links";
 import { confirm } from "./ui/prompt";
@@ -80,6 +81,7 @@ const main = defineCommand({
 // citty's own renderer lists every command on one line and cannot group or colour: ours is used.
 async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): Promise<void> {
   const { color } = stdoutTerminal();
+  const glyphs = glyphsFor(process.env);
   if (command === (main as unknown)) {
     const meta = await (typeof main.meta === "function" ? main.meta() : main.meta);
     console.log(
@@ -89,6 +91,7 @@ async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): 
         commands: subCommands as Record<string, HelpCommand>,
         args: (main.args ?? {}) as never,
         color,
+        glyphs,
         firstRun: findProbeDir(process.cwd()) === null,
       }),
     );
@@ -96,7 +99,12 @@ async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): 
   }
   const meta = await (typeof command.meta === "function" ? command.meta() : command.meta);
   console.log(
-    await renderCommandHelp({ name: meta?.name ?? "", command: command as HelpCommand, color }),
+    await renderCommandHelp({
+      name: meta?.name ?? "",
+      command: command as HelpCommand,
+      color,
+      glyphs,
+    }),
   );
 }
 
@@ -112,7 +120,7 @@ function notifyUpdate(rawArgs: string[]): void {
   if (quiet) return;
   if (news) console.error(`\n${news}`);
   if (rawArgs[0] === "status" || rawArgs[0] === "doctor") return;
-  const notice = updateNotice(CLI_VERSION, cacheDir());
+  const notice = updateNotice(CLI_VERSION, cacheDir(), glyphsFor(process.env));
   if (notice) console.error(`\n${notice}`);
 }
 
@@ -174,6 +182,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
       timeoutMs: settings.timeoutMs,
       environments: environments.map((name) => source(paths, name)),
       terminal: stdoutTerminal(),
+      glyphs: glyphsFor(process.env),
       empty: noServices(paths),
     });
     console.log(text);

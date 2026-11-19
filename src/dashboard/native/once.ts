@@ -4,6 +4,7 @@ import type { Variables } from "../../config/local";
 import type { Selection } from "../../config/parameters";
 import type { Config } from "../../config/schema";
 import { createColors } from "../../ui/colors";
+import type { Glyphs } from "../../ui/glyphs";
 import { formatCheckResults } from "../../ui/report";
 import type { Terminal } from "../../ui/terminal";
 import type { EnvironmentSource } from "../sources";
@@ -17,6 +18,7 @@ export interface OncePass {
   timeoutMs: number;
   environments: readonly EnvironmentSource[];
   terminal: Terminal;
+  glyphs?: Glyphs;
   /** Said when there is nothing to check. */
   empty: string;
   run?: typeof runChecks;
@@ -51,7 +53,7 @@ export async function oncePass(pass: OncePass): Promise<{ text: string; down: bo
   const several = pass.environments.length > 0;
   const text = shown
     .map(({ name, results }) => {
-      const table = formatCheckResults(results, pass.terminal);
+      const table = formatCheckResults(results, pass.terminal, pass.glyphs);
       return several ? `${colors.bold(name)}\n${table}` : table;
     })
     .join("\n\n");

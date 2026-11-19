@@ -10,6 +10,7 @@ import {
   UPDATE_CACHE_FILE,
   UPDATE_CHECK_TTL_MS,
 } from "../constants";
+import { type Glyphs, UNICODE_GLYPHS } from "../ui/glyphs";
 
 export interface UpdateCache {
   latest: string | null;
@@ -48,10 +49,14 @@ export function isNewer(latest: string, current: string): boolean {
   return false;
 }
 
-export function updateNotice(current: string, dir: string): string | null {
+export function updateNotice(
+  current: string,
+  dir: string,
+  glyphs: Glyphs = UNICODE_GLYPHS,
+): string | null {
   const latest = readCache(dir)?.latest;
   if (!latest || !isNewer(latest, current)) return null;
-  return `probe ${latest} available (you have ${current}) → \`brew upgrade probe\` or \`npm i -g ${PACKAGE_NAME}\``;
+  return `probe ${latest} available (you have ${current}) ${glyphs.arrow} \`brew upgrade probe\` or \`npm i -g ${PACKAGE_NAME}\``;
 }
 
 // Never throws and never waits: the notice shows up on a later run.
