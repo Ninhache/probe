@@ -615,6 +615,7 @@ describe.skipIf(!PWSH)("powershell completion", () => {
       "powershell",
       "zsh",
     ]);
-    expect(await powershellCompletions(root, "probe ls ")).toEqual([]);
+    // PowerShell falls back to file names when a completer offers nothing: only probe's own words are ruled out.
+    expect(await powershellCompletions(root, "probe ls ")).not.toContain("api");
   });
 });
