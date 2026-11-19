@@ -17,6 +17,8 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
   With [several environments](#several-environments) there is one column per environment.
 - On the right, for the selected service: its latency, its uptime against a 99% objective, and a panel with two
   tabs, `1` log and `2` response.
+  The latency box is 6 rows high, borders included; the log and response panel takes the rest. On a short
+  terminal the latency box shrinks first so the panel keeps a few rows.
 - The log tab has one line per check, for every service of the selected environment: time, service, the
   environment on the all tab, the status code or the error, and the start of the body on one line (256 characters
   at most). A line where a service went up or down has a `▶` in front (`>` in ASCII) and is bold. `f` shows only
@@ -34,7 +36,7 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
   does nothing where the key would do nothing. A hint with several keys, like `PgUp PgDn`, has one target per
   key. Also:
   - click a service to select it, double-click it to open its detail;
-  - click an environment tab to switch to it;
+  - click an environment tab to switch to it (the tabs are shown from two environments);
   - click a log line to select its service and show its response;
   - click the request URL in the detail of a service to open it, like `u`;
   - click `‹` or `›` next to a value in a form or a panel to step it, like the arrow keys;
@@ -254,7 +256,9 @@ The dashboard shows `not saved: …`, and says it again when it closes.
 ## Several environments
 
 With [environments](environments.md) in `.probe/envs/`, the services table gets one column per environment,
-`local` first, and the header lists them as tabs next to `all`.
+`local` first, and the header lists them as tabs next to `all`. With a single environment (`local`, no file in
+`.probe/envs/`), `all` and `local` would be the same list: the tabs are hidden, and `←` `→` `h` `l` and `Tab`
+do nothing. They appear as soon as there are two environments, right after `n` creates one.
 
 ```
  probe   all   local   prod

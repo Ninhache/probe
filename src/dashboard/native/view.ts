@@ -3,6 +3,8 @@ import { effectiveSelection, type ParameterChoices } from "../../config/paramete
 import {
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
+  DASHBOARD_LATENCY_ROWS,
+  DASHBOARD_LOG_MIN_ROWS,
   DEFAULT_TIMEOUT_SECONDS,
   DOUBLE_CLICK_MS,
   PROBE_DIR,
@@ -176,6 +178,8 @@ export const initialView = (init: ViewInit = {}): ViewState => ({
 });
 
 const tabNames = (tracker: Tracker) => [ALL, ...tracker.environments];
+/** With a single environment, `all` and `local` are the same list: the tabs are hidden and do nothing. */
+const hasEnvTabs = (tracker: Tracker) => tracker.environments.length > 1;
 const activeEnv = (tracker: Tracker, view: ViewState) =>
   view.tab === 0 ? undefined : tracker.environments[view.tab - 1];
 
@@ -220,27 +224,35 @@ export function renderDashboard(
     1,
   ]);
   const [left = body, right = body] = columns(body, ["55%", fill()]);
+  const gaugeRows = 4;
+  const latencyRows = Math.max(
+    0,
+    Math.min(DASHBOARD_LATENCY_ROWS, right.h - gaugeRows - DASHBOARD_LOG_MIN_ROWS),
+  );
   const [graphArea = right, gaugeArea = right, logArea = right] = rows(right, [
-    fill(2),
-    4,
-    fill(2),
+    latencyRows,
+    gaugeRows,
+    fill(),
   ]);
+  // Hidden tabs cannot keep a selection: a project that lost its other environments goes back to `all`.
+  if (!hasEnvTabs(tracker)) view.tab = 0;
   const env = activeEnv(tracker, view);
   const list = visibleServices(tracker, view);
   const index = selectedIndex(tracker, view);
   const service = list[index];
 
   let x = screen.text(1, header.y, "probe", { fg: t.accent, bold: true }) + 3;
-  x += tabs(
-    screen,
-    x,
-    header.y,
-    tabNames(tracker),
-    view.tab,
-    { fg: t.title, bg: t.selectedBg, bold: true },
-    { fg: t.muted },
-    (index, at, width) => screen.hits.add(at, header.y, width, "env", "", index),
-  );
+  if (hasEnvTabs(tracker))
+    x += tabs(
+      screen,
+      x,
+      header.y,
+      tabNames(tracker),
+      view.tab,
+      { fg: t.title, bg: t.selectedBg, bold: true },
+      { fg: t.muted },
+      (index, at, width) => screen.hits.add(at, header.y, width, "env", "", index),
+    );
   const picked = effectiveSelection(view.choices, view.selection);
   for (const [name, value] of Object.entries(picked)) {
     x += screen.text(x, header.y, `${name}:`, { fg: t.muted }) + 1;
@@ -641,7 +653,7 @@ function clickRegion(
   } else if (view.filtering) {
     return true;
   } else if (hit.action === "env") {
-    if (hit.ref < tabNames(tracker).length) {
+    if (hasEnvTabs(tracker) && hit.ref < tabNames(tracker).length) {
       view.tab = hit.ref;
       view.offset = 0;
     }
@@ -694,6 +706,7 @@ function dispatch(
   if (event.ctrl || event.alt) return;
   const environments = tabNames(tracker).length;
   const cycle = (by: number) => {
+    if (!hasEnvTabs(tracker)) return;
     view.tab = (view.tab + by + environments) % environments;
     view.offset = 0;
   };
