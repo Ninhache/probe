@@ -17,9 +17,10 @@ export function link(text: string, url: string, enabled: boolean): string {
 }
 
 // With the host name: a terminal reached over ssh does not open a file of the wrong machine.
+// Not on Windows, where `file://host/C:/x` is read as a share and `file:///C:/x` as the local drive.
 export function fileUrl(path: string): string {
   const url = pathToFileURL(path);
-  url.hostname = hostname();
+  if (process.platform !== "win32") url.hostname = hostname();
   return url.href;
 }
 

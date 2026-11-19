@@ -1,4 +1,5 @@
 import { hostname } from "node:os";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
 import { configSchemaV1 } from "../src/config/schema";
@@ -59,9 +60,12 @@ describe("link", () => {
   });
 
   it("points a file at this machine", () => {
-    expect(fileUrl("/tmp/a b/config.yml")).toBe(
-      `file://${hostname().toLowerCase()}/tmp/a%20b/config.yml`,
-    );
+    const expected =
+      process.platform === "win32"
+        ? pathToFileURL("/tmp/a b/config.yml").href
+        : `file://${hostname().toLowerCase()}/tmp/a%20b/config.yml`;
+
+    expect(fileUrl("/tmp/a b/config.yml")).toBe(expected);
     expect(linkFile(".probe/config.yml", "/p/.probe/config.yml", false)).toBe(".probe/config.yml");
   });
 });
