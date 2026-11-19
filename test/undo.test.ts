@@ -166,4 +166,18 @@ describe("createUndoJournal", () => {
     expect(kept).toContain(paths.config);
     expect(kept).not.toContain(paths.local);
   });
+
+  it("should keep only the environment file for a write to an environment", async () => {
+    const paths = await tempProject("schemaVersion: 1\nservices: {}\n");
+
+    const files = journalFiles({
+      ...paths,
+      environment: "prod",
+      config: join(paths.dir, "envs", "prod.yml"),
+    });
+
+    expect(files).toEqual([
+      { path: join(paths.dir, "envs", "prod.yml"), label: ".probe/envs/prod.yml" },
+    ]);
+  });
 });

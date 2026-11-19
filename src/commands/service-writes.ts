@@ -12,10 +12,11 @@ export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */
 export type ServiceUrls = Readonly<Record<string, string>>;
 
+/** `env` names the environment whose file is written; absent, the write goes to config.yml. */
 export type ServiceWrite =
-  | { kind: "add"; name: string; fields: ServiceFields; urls?: ServiceUrls }
-  | { kind: "edit"; name: string; fields: ServiceFields; urls?: ServiceUrls }
-  | { kind: "remove"; name: string };
+  | { kind: "add"; name: string; fields: ServiceFields; urls?: ServiceUrls; env?: string }
+  | { kind: "edit"; name: string; fields: ServiceFields; urls?: ServiceUrls; env?: string }
+  | { kind: "remove"; name: string; env?: string };
 
 export interface ServiceWritten {
   config: Config;

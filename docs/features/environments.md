@@ -36,11 +36,14 @@ probe env staging --from prod    # or from envs/prod.yml
 | `check`, `wait`, `ls`, `curl`, `var`, `doctor` | `add`, `rm`, `open` |
 
 Without `--env`, every command reads `config.yml`, and so does `make check`. To change the services of an
-environment, edit its file.
+environment, edit its file, or use `a`, `e` and `d` on its tab in the dashboard.
 
 ## In the dashboard
 
 With files in `.probe/envs/`, the [dashboard](dashboard.md) shows every environment at once, one column each.
+On an environment's tab, `a`, `e` and `d` add, edit and remove its services in its own file; undo and redo
+cover those writes. The Makefile block and `lock.yml` only follow `config.yml`, so they never change.
+A secret typed there goes to that environment's values in `.probe/local.yml`, never to its file.
 
 ## Values per environment
 

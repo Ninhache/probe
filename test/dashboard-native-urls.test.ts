@@ -55,7 +55,6 @@ function open(config: Config) {
     editing,
     changed: () => {},
     redraw: () => {},
-    fileOf: () => undefined,
     declaredIn: () => [],
   });
   const actions: ViewActions = { quit() {}, refresh() {}, edit };
