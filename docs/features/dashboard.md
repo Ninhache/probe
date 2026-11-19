@@ -17,6 +17,8 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
   With [several environments](#several-environments) there is one column per environment.
 - On the right, for the selected service: its latency, its uptime against a 99% objective, and a panel with two
   tabs, `1` log and `2` response.
+  The latency box is 6 rows high, borders included; the log and response panel takes the rest. On a short
+  terminal the latency box shrinks first so the panel keeps a few rows.
 - The log tab has one line per check, for every service of the selected environment: time, service, the
   environment on the all tab, the status code or the error, and the start of the body on one line (256 characters
   at most). A line where a service went up or down has a `▶` in front (`>` in ASCII) and is bold. `f` shows only

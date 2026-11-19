@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "../src/checkers/types";
+import { DASHBOARD_LATENCY_ROWS, DASHBOARD_LOG_MIN_ROWS } from "../src/constants";
 import { percentile, Ring, statsOf, Tracker } from "../src/dashboard/native/history";
 import { Monitor } from "../src/dashboard/native/monitor";
 import {
@@ -330,5 +331,40 @@ describe("help bar, help overlay and filter", () => {
     for (const name of ["/", "q", "r"]) handleInput(key(name), tracker, view, a);
     expect(a.calls).toEqual({ quit: 0, refresh: 0 });
     expect(visibleServices(tracker, view)).toEqual([]);
+  });
+});
+
+describe("dashboard right column", () => {
+  const boxRows = (w: number, h: number) => {
+    const screen = new Screen(w, h, "none");
+    renderDashboard(screen, { x: 0, y: 0, w, h }, sample(), initialView(), 0);
+    const lines = screen.toPlainText().split("\n");
+    const find = (needle: string) => lines.findIndex((l) => l.includes(needle));
+    return { lines, latency: find("┤latency"), uptime: find("┤uptime"), log: find("┤1 log") };
+  };
+
+  it.each([
+    [80, 24],
+    [110, 30],
+  ])("gives the latency box %ix%i a fixed height of 6 rows", (w, h) => {
+    const { latency, uptime, log } = boxRows(w, h);
+    expect(uptime - latency).toBe(DASHBOARD_LATENCY_ROWS);
+    expect(log - uptime).toBe(4);
+  });
+
+  it("gives the log everything else", () => {
+    const small = boxRows(80, 24);
+    const tall = boxRows(80, 40);
+    expect(tall.lines.length - tall.log).toBeGreaterThan(small.lines.length - small.log);
+  });
+
+  it("shrinks the latency box first on a short terminal", () => {
+    const { latency, uptime, log, lines } = boxRows(80, 16);
+    expect(uptime - latency).toBeLessThan(DASHBOARD_LATENCY_ROWS);
+    expect(lines.length - 1 - log).toBeGreaterThanOrEqual(DASHBOARD_LOG_MIN_ROWS - 1);
+  });
+
+  it("does not crash when nothing fits", () => {
+    expect(() => boxRows(80, 8)).not.toThrow();
   });
 });
