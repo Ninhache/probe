@@ -83,6 +83,7 @@ down, as `probe --once` does anywhere. `--interval` needs a terminal.
 | `Z`             | Redo what `z` undid                               |
 | `:`             | Find a command by what it does; `Enter` runs      |
 | `o`             | Options: interval, timeout and notifications      |
+| `W`             | What's new in this version                        |
 | `?`             | This screen's keys, `Tab` for all, type to search |
 | `q`             | Quit                                              |
 

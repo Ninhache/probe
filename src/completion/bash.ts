@@ -1,3 +1,5 @@
+import { CLI_VERSION } from "../version";
+import { completionMarker } from "./marker";
 import {
   type CommandSpec,
   ENVIRONMENT_OPTION,
@@ -9,7 +11,7 @@ import {
 } from "./spec";
 
 // Must run on bash 3.2 (stock macOS): no `mapfile`, no associative array, loaded with `eval`.
-export function bashScript(commands: CommandSpec[]): string {
+export function bashScript(commands: CommandSpec[], version: string = CLI_VERSION): string {
   const cases = (pick: (command: CommandSpec) => string[]) =>
     commands
       .filter((command) => pick(command).length > 0)
@@ -17,6 +19,7 @@ export function bashScript(commands: CommandSpec[]): string {
   const withServices = commands.filter((command) => command.services).map(({ name }) => name);
   return [
     '# bash completion for probe. Load it with: eval "$(probe completion bash)"',
+    completionMarker(version),
     "_probe() {",
     `  local cur="\${COMP_WORDS[COMP_CWORD]}" cmd="" words="" i`,
     "  for ((i = 1; i < COMP_CWORD; i++)); do",

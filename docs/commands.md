@@ -171,6 +171,12 @@ Prints the version, a pending migration, the state of the Makefile block and an 
 `probe` looks for a newer version at most once a day, in the background, and prints one line when there is one.
 It never updates itself. Turn it off with `PROBE_NO_UPDATE_CHECK=1`. It is off when `CI` is set.
 
+After an update, the first run in a terminal shows what is new, once, on stderr: the versions you skipped,
+the items that need an action (`!`: a schema change, a stale saved completion) first, then the others (`+`),
+about 8 lines at most. A first install shows nothing. It stays silent with `--json`, when stderr is not a
+terminal, for `probe completion`, `--help` and `--version`, and under the same switches as the update
+check. In the dashboard the same notes open as a "What's new" window, and `W` opens them again.
+
 ## probe sync
 
 Adds or regenerates the block of the Makefile. See [Makefile](features/makefile.md).

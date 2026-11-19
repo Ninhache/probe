@@ -11,6 +11,7 @@ import type { Config } from "../../config/schema";
 import { NOTIFY_GRACE_SECONDS, RESPONSE_FULL_BODY_BYTES } from "../../constants";
 import { App } from "../../tui/app";
 import { supportsUnicode } from "../../ui/terminal";
+import type { News } from "../../update/whats-new";
 import { type ActionDeps, serviceActions } from "../actions";
 import { changeMessage, type KnownStates, stateChanges } from "../changes";
 import { type EditCallbacks, liveEditing } from "../editing";
@@ -21,6 +22,7 @@ import type { EnvironmentSource } from "../sources";
 import { createEditor } from "./editor";
 import { LOCAL_ENVIRONMENT, Tracker } from "./history";
 import { type EnvironmentCheck, Monitor } from "./monitor";
+import { whatsNewModal } from "./news";
 import { handleInput, initialView, renderDashboard, say, type ViewState } from "./view";
 
 export { LOCAL_ENVIRONMENT };
@@ -54,6 +56,8 @@ export interface NativeDashboardOptions extends EditCallbacks {
   ) => Promise<{ source: EnvironmentSource; message: string }>;
   /** Deletes the file of an environment, undoably; resolves to why it could not. */
   onEnvironmentRemove?: (name: string) => Promise<string | undefined>;
+  /** The release notes: `show` opens with the dashboard, `again` is read on demand (W). */
+  whatsNew?: { show?: News; again: () => News | undefined };
   /** The environments declared now: an undo or a redo can bring a tab back or take it away. */
   onEnvironmentsList?: () => Promise<EnvironmentSource[]>;
 }
@@ -203,6 +207,8 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       Object.entries(options.config.services).map(([name, { timeout }]) => [name, timeout]),
     ),
   });
+  view.news = options.whatsNew?.again;
+  if (options.whatsNew?.show) view.modals.push(whatsNewModal(options.whatsNew.show));
   const editing = liveEditing(options.config, options);
   view.canAdd = editing.writeService !== undefined;
   view.canCreateEnvironment = options.onEnvironmentCreate !== undefined;

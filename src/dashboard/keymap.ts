@@ -38,6 +38,7 @@ export type Command =
   | "undo"
   | "redo"
   | "help"
+  | "news"
   | "quit";
 
 type Section =
@@ -364,6 +365,15 @@ const BINDINGS: readonly Binding[] = [
     short: "Options",
     barless: true,
     command: "options",
+  }),
+  list({
+    keys: "W",
+    action: "what's new",
+    help: "What's new",
+    section: "Move",
+    short: "News",
+    barless: true,
+    command: "news",
   }),
   {
     screens: ["panel"],

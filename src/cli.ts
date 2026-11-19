@@ -44,6 +44,14 @@ import {
   updateCheckDisabled,
   updateNotice,
 } from "./update/notifier";
+import { staleCompletions } from "./update/stale-completion";
+import {
+  currentNotes,
+  markFirstRun,
+  newsOf,
+  takeWhatsNew,
+  whatsNewNotice,
+} from "./update/whats-new";
 import { CLI_VERSION } from "./version";
 
 const subCommands = { ...commands, completion: completionCommand(commands) };
@@ -94,18 +102,32 @@ async function printUsage<T extends ArgsDef = ArgsDef>(command: CommandDef<T>): 
 
 function notifyUpdate(rawArgs: string[]): void {
   const cliPath = process.argv[1];
-  // The completion script is printed at every shell start: no registry lookup, no notice there.
   if (updateCheckDisabled() || !cliPath || rawArgs[0] === COMPLETION_COMMAND) return;
+  const stderr = detectTerminal(process.stderr, process.env);
+  const quiet = !stderr.isTTY || rawArgs.includes("--json");
+  // Before the refresh: that writes the cache file, which tells an upgrade from a first install.
+  if (quiet) markFirstRun(CLI_VERSION, cacheDir());
+  const news = quiet ? null : whatsNewNotice(CLI_VERSION, cacheDir(), stderr.color);
   scheduleRefresh(cacheDir(), cliPath);
-  if (
-    !detectTerminal(process.stderr, process.env).isTTY ||
-    rawArgs.includes("--json") ||
-    rawArgs[0] === "status" ||
-    rawArgs[0] === "doctor"
-  )
-    return;
+  if (quiet) return;
+  if (news) console.error(`\n${news}`);
+  if (rawArgs[0] === "status" || rawArgs[0] === "doctor") return;
   const notice = updateNotice(CLI_VERSION, cacheDir());
   if (notice) console.error(`\n${notice}`);
+}
+
+/** The notes for the dashboard: shown when it opens after an update, and again on demand. */
+function dashboardNews() {
+  const opening = updateCheckDisabled() ? null : takeWhatsNew(CLI_VERSION, cacheDir());
+  const news = (upgrade: Parameters<typeof newsOf>[0]) =>
+    newsOf(upgrade, staleCompletions(CLI_VERSION));
+  return {
+    show: opening ? news(opening) : undefined,
+    again: () => {
+      const upgrade = currentNotes(CLI_VERSION);
+      return upgrade ? news(upgrade) : undefined;
+    },
+  };
 }
 
 const INTERVAL_OPTION = "--interval";
@@ -172,6 +194,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
     settings,
     selection: await readDashboardSelection(paths),
     skipped: await readSkippedServices(paths),
+    whatsNew: dashboardNews(),
     onEnvironmentCreate: async (name, from) => {
       const { variables } = await createEnvironment(paths, name, from);
       const sends = variables.map(
