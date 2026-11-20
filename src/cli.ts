@@ -209,7 +209,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
     onEnvironmentCreate: async (name, from) => {
       const { variables } = await createEnvironment(paths, name, from);
       const sends = variables.map(
-        (variable) => `It sends ${variable}: probe var ${variable} --env ${name} (or export it).`,
+        (variable) => `It uses ${variable}: probe var ${variable} --env ${name} (or export it).`,
       );
       const told =
         from === EMPTY_ENVIRONMENT

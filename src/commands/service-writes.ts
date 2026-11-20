@@ -6,7 +6,7 @@ import { type Config, DEFAULT_METHOD, declaresAddress, type Service } from "../c
 import { rawServices, writeServices } from "./shared";
 
 /** No address at all: the service takes it from `urls:`, one per value of the `url` parameter. */
-export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers"> &
+export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers" | "env"> &
   Partial<Pick<Service, "host" | "port" | "path" | "type" | "command">>;
 
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */

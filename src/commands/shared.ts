@@ -118,14 +118,13 @@ export function requireVariables(
 ): void {
   for (const { name, skipped: skip } of selectServices(config, names, tags, skipped)) {
     if (skip) continue;
-    const [unset] = serviceVariables(config.services[name]?.headers).filter(
-      (v) => !variables.lookup(v),
-    );
+    const service = config.services[name] ?? {};
+    const [unset] = serviceVariables(service).filter((v) => !variables.lookup(v));
     if (unset === undefined) continue;
     const scope = variables.environment === undefined ? "" : ` --env ${variables.environment}`;
     throw new ProbeError(
       "VARIABLE_UNSET",
-      `${name} sends ${unset}, which is not set. Set it for this machine: probe var ${unset}${scope} (or export it).`,
+      `${name} ${service.type === "command" ? "needs" : "sends"} ${unset}, which is not set. Set it for this machine: probe var ${unset}${scope} (or export it).`,
     );
   }
 }

@@ -128,7 +128,7 @@ export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing
   const variables = edits.variableSources && variableTools(() => config, edits.variableSources);
   const { onServiceWrite, onParameterWrite, onUndo, onRedo } = edits;
   const unsetNote = async (current: Config, name: string, env?: string) => {
-    const sent = serviceVariables(current.services[name]?.headers);
+    const sent = serviceVariables(current.services[name] ?? {});
     const found = (await edits.variableSources?.(sent, env)) ?? {};
     const unset = sent.filter((variable) => !found[variable]);
     if (!edits.variableSources || unset.length === 0) return undefined;

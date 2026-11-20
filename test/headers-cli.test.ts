@@ -238,9 +238,9 @@ describe("probe var", () => {
     const after = await probe(root, ["var"]);
     const exported = await probe(root, ["var"], { env: { API_KEY: SECRET } });
 
-    expect(before.stdout).toBe("API_KEY  not set: probe var API_KEY  (sent by api)\n");
-    expect(after.stdout).toBe("API_KEY  set in .probe/local.yml  (sent by api)\n");
-    expect(exported.stdout).toBe("API_KEY  set in the environment  (sent by api)\n");
+    expect(before.stdout).toBe("API_KEY  not set: probe var API_KEY  (used by api)\n");
+    expect(after.stdout).toBe("API_KEY  set in .probe/local.yml  (used by api)\n");
+    expect(exported.stdout).toBe("API_KEY  set in the environment  (used by api)\n");
     expect(after.stdout + exported.stdout).not.toContain(SECRET);
   });
 

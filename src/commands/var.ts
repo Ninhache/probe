@@ -19,8 +19,8 @@ const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
 export function usedVariables(config: Config): Map<string, string[]> {
   const used = new Map<string, string[]>();
-  for (const [service, { headers }] of Object.entries(config.services)) {
-    for (const name of serviceVariables(headers))
+  for (const [service, definition] of Object.entries(config.services)) {
+    for (const name of serviceVariables(definition))
       used.set(name, [...(used.get(name) ?? []), service]);
   }
   return used;
@@ -51,7 +51,7 @@ function listing(
       const source = variableSource(name, local, env);
       const state = source ? where[source] : `not set: probe var ${name}${flag(environment)}`;
       const services = used.get(name);
-      const users = services ? `sent by ${services.join(", ")}` : "used by no service";
+      const users = services ? `used by ${services.join(", ")}` : "used by no service";
       return `${name.padEnd(width)}  ${state}  (${users})`;
     })
     .join("\n");

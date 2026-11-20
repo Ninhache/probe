@@ -207,6 +207,19 @@
                   ]
                 }
               },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
               "hint": {
                 "type": "string"
               },

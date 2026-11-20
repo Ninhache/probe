@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { MAX_TIMEOUT_SECONDS } from "../constants";
-import { headerNameProblem, headerValueProblem, isSensitiveHeader } from "./headers";
+import {
+  envNameProblem,
+  envValueProblem,
+  headerNameProblem,
+  headerValueProblem,
+  isSensitiveHeader,
+} from "./headers";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -49,6 +55,8 @@ export interface Service {
   timeout?: number;
   method?: Method;
   headers?: Record<string, string>;
+  /** Only for a command: the variables its process is given. */
+  env?: Record<string, string>;
   hint?: string;
   tags?: string[];
   contains?: string;
@@ -70,6 +78,26 @@ const headersSchema = z
         ctx.issues.push({
           code: "custom",
           message: twin ? problem : `expected ${problem}`,
+          input: name,
+          path: [name],
+        });
+      }
+      texts[name] = String(value);
+    }
+    return texts;
+  });
+
+// Said without the value, like the headers: it may be a secret pasted where a reference is expected.
+const envSchema = z
+  .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+  .transform((env, ctx) => {
+    const texts: Record<string, string> = {};
+    for (const [name, value] of Object.entries(env)) {
+      const problem = envNameProblem(name) ?? envValueProblem(name, String(value));
+      if (problem) {
+        ctx.issues.push({
+          code: "custom",
+          message: `expected ${problem}`,
           input: name,
           path: [name],
         });
@@ -130,6 +158,7 @@ export const serviceObjectV1 = z.strictObject({
     .pipe(z.enum(METHODS))
     .optional(),
   headers: headersSchema.optional(),
+  env: envSchema.optional(),
   hint: oneLine(HINT_EXPECTED).optional(),
   tags: z.array(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED)).optional(),
   contains: oneLine(CONTAINS_EXPECTED).optional(),
@@ -187,16 +216,20 @@ export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service
     if (extra.length > 0 || command === undefined) return z.NEVER;
     return { ...others, command } as Service;
   }
-  if (service.command !== undefined) {
+  const needsCommand = (["command", "env"] as const).filter((key) => service[key] !== undefined);
+  for (const key of needsCommand) {
     ctx.issues.push({
       code: "custom",
-      message: "needs `type: command`: an http service sends a request",
-      input: service.command,
-      path: ["command"],
+      message:
+        key === "env"
+          ? "needs `type: command`: only a command has an environment, a request has headers"
+          : "needs `type: command`: an http service sends a request",
+      input: service[key],
+      path: [key],
     });
-    return z.NEVER;
   }
-  const { url, host, port, path, command: _, ...rest } = service;
+  if (needsCommand.length > 0) return z.NEVER;
+  const { url, host, port, path, command: _, env: __, ...rest } = service;
   if (service.method === "HEAD" && service.contains !== undefined) {
     ctx.issues.push({
       code: "custom",

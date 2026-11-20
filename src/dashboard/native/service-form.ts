@@ -187,7 +187,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
       return keepSecret(form, values, secret, service, id);
     }
     const written = formFields(known, spec);
-    const sent = serviceVariables(written.headers);
+    const sent = serviceVariables(written);
     const kept = Object.entries(secrets ?? {}).filter(([name]) => sent.includes(name));
     const keptSecrets = kept.length > 0 ? Object.fromEntries(kept) : undefined;
     const sentUrls = url ? { urls } : {};

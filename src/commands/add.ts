@@ -1,8 +1,12 @@
 import { defineCommand } from "citty";
 import {
+  envNameProblem,
+  envValueProblem,
   headerNameProblem,
   headerValueProblem,
+  isSensitiveEnv,
   isSensitiveHeader,
+  parseEnvLine,
   parseHeaderLine,
   reference,
   serviceVariables,
@@ -128,6 +132,41 @@ function headerLines(rawArgs: string[]): string[] {
   return lines;
 }
 
+const LONG_ENV = "--setenv";
+const ENV_EXAMPLE = "--setenv MYSQL_HOST=127.0.0.1";
+
+/** Every `--setenv` of the command line: the argument parser keeps the last one only. */
+function envLines(rawArgs: string[]): string[] {
+  const lines: string[] = [];
+  for (const [index, arg] of rawArgs.entries()) {
+    if (arg === "--") break;
+    if (arg === LONG_ENV) lines.push(rawArgs[index + 1] ?? "");
+    else if (arg.startsWith(`${LONG_ENV}=`)) lines.push(arg.slice(LONG_ENV.length + 1));
+  }
+  return lines;
+}
+
+// Said without the value, like the headers: a secret typed there must not come back on screen.
+function envFrom(lines: string[]): Record<string, string> | undefined {
+  const env: Record<string, string> = {};
+  for (const line of lines) {
+    const parsed = parseEnvLine(line);
+    if (!parsed) throw new ProbeError("USAGE", `--setenv expects NAME=value, e.g. ${ENV_EXAMPLE}.`);
+    const [name, value] = parsed;
+    const nameProblem = envNameProblem(name);
+    if (nameProblem) throw new ProbeError("USAGE", `--setenv expects ${nameProblem}.`);
+    if (Object.hasOwn(env, name)) throw new ProbeError("USAGE", `--setenv gives ${name} twice.`);
+    const problem = envValueProblem(name, value);
+    if (problem) {
+      // Between double quotes the shell fills the variable in before probe sees it.
+      const quotes = isSensitiveEnv(name) ? " Keep the single quotes around the value." : "";
+      throw new ProbeError("USAGE", `--setenv ${name} expects ${problem}.${quotes}`);
+    }
+    env[name] = value;
+  }
+  return lines.length > 0 ? env : undefined;
+}
+
 // What is refused is said without the value: a secret typed there must not come back on screen.
 function headersFrom(lines: string[]): Record<string, string> | undefined {
   const headers: Record<string, string> = {};
@@ -234,6 +273,11 @@ export default defineCommand({
       alias: "X",
       description: "Method of the request, sent without a body, e.g. POST (default: GET)",
     },
+    setenv: {
+      type: "string",
+      valueHint: "NAME=value",
+      description: `Variable for the command, repeatable; a secret as a reference: 'DB_PWD=${reference("DB_PASSWORD")}'`,
+    },
     header: {
       type: "string",
       alias: "H",
@@ -291,6 +335,11 @@ export default defineCommand({
       throw new ProbeError("USAGE", `--header expects "Name: value", e.g. ${HEADER_EXAMPLE}.`);
     }
     if (headers) service.headers = headers;
+    const env = envFrom(envLines(rawArgs));
+    if (env && service.type !== "command") {
+      throw new ProbeError("USAGE", "--setenv sets the environment of a command: add --command.");
+    }
+    if (env) service.env = env;
     if (args.hint !== undefined) {
       const hint = String(args.hint);
       if (hintProblem(hint)) throw new ProbeError("USAGE", `--hint expects ${hintProblem(hint)}.`);
@@ -301,11 +350,11 @@ export default defineCommand({
 
     await saveServices(loaded, { ...services, [args.name]: service });
     const { lookup } = await loadVariables(loaded.paths);
-    const [unset] = serviceVariables(headers).filter((name) => !lookup(name));
+    const [unset] = serviceVariables({ headers, env }).filter((name) => !lookup(name));
     console.log(
       unset === undefined
         ? `Added ${args.name}. Try: probe check ${args.name}`
-        : `Added ${args.name}. It sends ${unset}, not set yet: probe var ${unset}`,
+        : `Added ${args.name}. It ${service.type === "command" ? "needs" : "sends"} ${unset}, not set yet: probe var ${unset}`,
     );
   },
 });

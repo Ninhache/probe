@@ -1,11 +1,18 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { stripVTControlCharacters } from "node:util";
+import {
+  referenced,
+  resolveEnv,
+  serviceVariables,
+  templateParts,
+  VARIABLE_NAME,
+} from "../config/headers";
 import type { Service } from "../config/schema";
 import { COMMAND_STDERR_BYTES, COMMAND_STDERR_CHARACTERS, EXIT_DRAIN_MS } from "../constants";
 import { currentPlatform, type Platform } from "../platform";
 import { truncate } from "../ui/terminal";
 import { commandForm } from "./command-form";
-import { CONFIG } from "./diagnosis";
+import { CONFIG, type Diagnosis, diagnoseUnsendable, diagnoseUnset } from "./diagnosis";
 import type { CheckContext, CheckResult, ServiceType } from "./types";
 
 type Command = NonNullable<Service["command"]>;
@@ -32,11 +39,44 @@ export const commandTarget = (command: Command): string =>
 export const shellCommand = (command: Command): string =>
   typeof command === "string" ? command : command.map(shellQuoted).join(" ");
 
+// The reference stays one, written for the shell that runs it: the value is never in the copy.
+function shellTemplate(value: string): string {
+  return templateParts(value)
+    .map(({ text, variable }) =>
+      variable !== undefined && VARIABLE_NAME.test(variable)
+        ? `"\${${variable}}"`
+        : shellQuoted(text ?? ""),
+    )
+    .join("");
+}
+
+/** The command a shell runs, with the env of the service written as references. */
+function copiedCommand(service: Service): string {
+  const command = service.command as Command;
+  const assignments = Object.entries(service.env ?? {}).map(
+    ([name, value]) => `${name}=${shellTemplate(value)}`,
+  );
+  if (assignments.length === 0) return shellCommand(command);
+  // `env` reaches the whole string, where a prefix would stop at its first command.
+  const run = typeof command === "string" ? `sh -c ${shellQuoted(command)}` : shellCommand(command);
+  return `env ${assignments.join(" ")} ${run}`;
+}
+
+// probe may get them from `local.yml`, a shell does not.
+function copiedNote(service: Service, env: NodeJS.ProcessEnv): string {
+  const root = "it runs from the project root";
+  const absent = serviceVariables(service).filter((name) => !env[name]);
+  if (absent.length === 0) return root;
+  const them = absent.length > 1 ? "them" : "it";
+  return `${root}; it reads ${absent.join(", ")} from the shell that runs it: export ${them} there first`;
+}
+
 const programOf = (command: Command): string =>
   typeof command === "string" ? command : (command[0] as string);
 
-function lastLine(stderr: string): string | undefined {
-  const lines = stripVTControlCharacters(stderr)
+// Masked before it is cut: a secret cut in two would no longer be found.
+function lastLine(stderr: string, references: [string, string][]): string | undefined {
+  const lines = referenced(stripVTControlCharacters(stderr), references)
     .split(/\r?\n|\r/)
     .map((line) => line.trim())
     .filter((line) => line !== "");
@@ -47,12 +87,15 @@ function lastLine(stderr: string): string | undefined {
 function run(
   command: Command,
   { timeoutMs, signal, cwd }: Pick<CheckContext, "timeoutMs" | "signal" | "cwd">,
+  env: Record<string, string> = {},
   platform: Platform = currentPlatform,
 ): Promise<Outcome> {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve({ kind: "aborted" });
     const options = {
       cwd,
+      // The variables are given to the process, never to its arguments: `ps` would show them.
+      env: { ...process.env, ...env },
       stdio: ["ignore", "ignore", "pipe"] as ["ignore", "ignore", "pipe"],
       windowsHide: true,
       // Its own process group on POSIX, so the whole tree can be killed at once.
@@ -112,6 +155,7 @@ function failure(
   command: Command,
   outcome: Outcome,
   timeoutMs: number,
+  references: [string, string][] = [],
   platform: Platform = currentPlatform,
 ) {
   if (outcome.kind === "timeout") {
@@ -138,22 +182,40 @@ function failure(
     return { error: code ?? "cannot start" };
   }
   if (outcome.signal) return { error: `killed by ${outcome.signal}` };
-  return { error: lastLine(outcome.stderr) ?? `exit ${outcome.code}` };
+  return { error: lastLine(outcome.stderr, references) ?? `exit ${outcome.code}` };
 }
 
 export const commandChecker: ServiceType = {
   type: "command",
   target: (service) => commandTarget(service.command as Command),
-  copy: (service) => ({
-    command: shellCommand(service.command as Command),
-    note: "it runs from the project root",
-  }),
+  copy: (service, env) => ({ command: copiedCommand(service), note: copiedNote(service, env) }),
   form: commandForm,
   async check(name, service, context): Promise<CheckResult> {
     const command = service.command as Command;
     const base = { name, type: "command", target: commandTarget(command) };
     const started = performance.now();
-    const outcome = await run(command, context);
+    let env: Record<string, string> = {};
+    let references: [string, string][] = [];
+    if (service.env) {
+      const { variables } = context;
+      const resolved = resolveEnv(service.env, variables?.lookup ?? (() => undefined));
+      // Nothing runs: a command without its credentials would only say it was refused.
+      const failed = (diagnosis: Diagnosis): CheckResult => ({
+        ...base,
+        ok: false,
+        latencyMs: 0,
+        ...diagnosis,
+      });
+      if ("unset" in resolved) return failed(diagnoseUnset(resolved.unset, variables ?? {}));
+      if ("unsendable" in resolved) {
+        return failed(
+          diagnoseUnsendable(resolved.unsendable, variables?.environment, "an env value"),
+        );
+      }
+      env = Object.fromEntries(resolved.entries);
+      references = resolved.references;
+    }
+    const outcome = await run(command, context, env);
     const latencyMs = Math.round(performance.now() - started);
     if (outcome.kind === "exit" && outcome.code === 0) {
       return { ...base, ok: true, exitCode: 0, latencyMs };
@@ -163,7 +225,7 @@ export const commandChecker: ServiceType = {
       ok: false,
       ...(outcome.kind === "exit" && outcome.code !== null ? { exitCode: outcome.code } : {}),
       latencyMs,
-      ...failure(command, outcome, context.timeoutMs),
+      ...failure(command, outcome, context.timeoutMs, references),
     };
   },
 };

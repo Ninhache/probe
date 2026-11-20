@@ -87,6 +87,7 @@ export function formatServices(
       (service.timeout === undefined ? "" : `${GAP}timeout ${service.timeout}s`) +
       // Names only: a value may come from a secret.
       (service.headers ? `${GAP}sends ${Object.keys(service.headers).join(", ")}` : "") +
+      (service.env ? `${GAP}sets ${Object.keys(service.env).join(", ")}` : "") +
       (service.tags?.length ? `${GAP}tags ${service.tags.join(", ")}` : "") +
       (skipped.has(name) ? `${GAP}${SKIPPED}` : ""),
   }));

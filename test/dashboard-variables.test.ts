@@ -49,7 +49,7 @@ describe("variableTools", () => {
   });
 
   it("should refuse a name another service sends: the secret would go there too", async () => {
-    expect(await tools().variableProblem("DB_COOKIE", "web")).toContain("already sent by db");
+    expect(await tools().variableProblem("DB_COOKIE", "web")).toContain("already used by db");
   });
 
   it("should refuse a name already set, here or in the environment", async () => {
