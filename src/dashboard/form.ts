@@ -155,7 +155,8 @@ export function formSecret(
 ): FormSecret | undefined {
   const field = form?.secretField;
   const typed = field === undefined ? "" : fieldText(values, field).trim();
-  if (field !== undefined && typed !== "" && referencedVariables(typed).length === 0) {
+  // Whatever holds `${` is a reference or is refused by the field: never kept as a secret.
+  if (field !== undefined && typed !== "" && !typed.includes("${")) {
     const label = form?.fields.find(({ key }) => key === field)?.label ?? field;
     return { kind: "field", index: 0, field, header: label, scheme: "", secret: typed };
   }

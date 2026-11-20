@@ -1,9 +1,17 @@
 import { reference } from "../config/headers";
-import { type DatabaseKind, databaseProblem, type Service, userProblem } from "../config/schema";
+import {
+  type DatabaseKind,
+  databaseProblem,
+  passwordProblem,
+  type Service,
+  userProblem,
+} from "../config/schema";
 import { portProblem } from "../config/service-input";
 import { COMMAND_PING_QUERY } from "../constants";
 import { copiedCommand, copiedNote, runCommand } from "./command";
 import type { FieldValues, ServiceForm, ServiceType } from "./types";
+
+const OPEN_REFERENCE = "$" + "{";
 
 const DEFAULT_HOST = "localhost";
 
@@ -142,6 +150,11 @@ function databaseForm(spec: DatabaseSpec): ServiceForm {
     password: reference(`${spec.type.toUpperCase()}_PASSWORD`),
   };
   const problems: Record<string, (value: string) => string | undefined> = {
+    // A plain value is kept in local.yml by the dashboard; one that holds `${` must be a reference alone.
+    password: (value) =>
+      value.includes(OPEN_REFERENCE) && passwordProblem(value)
+        ? `Expects a reference alone, e.g. ${reference("PG_PASSWORD")}: a password that holds ${OPEN_REFERENCE} goes through probe var`
+        : undefined,
     port: portProblem,
     user: userProblem,
     database: (value) => databaseProblem(spec.type, value),

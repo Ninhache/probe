@@ -1,12 +1,7 @@
 import type { ServiceForm } from "../../checkers/types";
 import type { ServiceWrite } from "../../commands/service-writes";
-import {
-  hiddenEnvLine,
-  hiddenHeaderLine,
-  referencedVariables,
-  serviceVariables,
-} from "../../config/headers";
-import { urlProblem } from "../../config/schema";
+import { hiddenEnvLine, hiddenHeaderLine, reference, serviceVariables } from "../../config/headers";
+import { passwordProblem, urlProblem } from "../../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, LOCAL_FILE, PROBE_DIR } from "../../constants";
 import type { InputEvent } from "../../tui/input";
 import type { ModalStack } from "../../tui/modal";
@@ -119,7 +114,7 @@ function modalValues(values: InkValues, urls: Readonly<Record<string, string>>):
 
 /** A reference shows as typed; anything else is a secret on its way to local.yml, and shows as dots. */
 const hiddenSecret = (text: string, bullet: string) =>
-  referencedVariables(text).length > 0 ? text : bullet.repeat(text.length);
+  text === "" || passwordProblem(text.trim()) === undefined ? text : bullet.repeat(text.length);
 
 const formTitle = (editing: string | undefined, target: string | undefined) => {
   if (editing === undefined) return target === undefined ? "add a service" : `add to ${target}`;
@@ -239,7 +234,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
       if (!edits.variables)
         return form.problem(
           id,
-          `${secret.header} expects a reference, e.g. \${API_TOKEN}: ${fileOf(context.target)} is shared`,
+          `${secret.header} expects a reference, e.g. ${reference(secret.kind === "field" ? "PG_PASSWORD" : "API_TOKEN")}: ${fileOf(context.target)} is shared`,
         );
       return keepSecret(form, values, secret, service, id, spec);
     }

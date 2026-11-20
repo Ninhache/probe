@@ -154,6 +154,17 @@ describe("adding a service of any type", () => {
     expect(screens.join("\n")).not.toContain(SECRET);
   });
 
+  it("refuses a password that mixes text and a reference, and does not show it", async () => {
+    const { press, draw, writes, screens } = open(empty);
+    const mixed = `pw-${reference("X")}`;
+
+    await press(`adb${DOWN}${RIGHT}${RIGHT}${DOWN}${DOWN}${DOWN}${DOWN}${DOWN}${mixed}${ENTER}`);
+
+    expect(draw()).toContain("Expects a reference alone");
+    expect(writes).toEqual([]);
+    expect(screens.join("\n")).not.toContain("pw-");
+  });
+
   it("refuses a redis database that is not a number", async () => {
     const { press, draw } = open(empty);
 
