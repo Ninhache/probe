@@ -18,7 +18,14 @@ import type { CheckContext, CheckResult, ServiceType } from "./types";
 type Command = NonNullable<Service["command"]>;
 
 type Outcome =
-  | { kind: "exit"; code: number | null; signal: NodeJS.Signals | null; stderr: string }
+  | {
+      kind: "exit";
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      stderr: string;
+      /** Bytes fell off the front: the first line may start in the middle of a secret. */
+      cut: boolean;
+    }
   | { kind: "error"; error: NodeJS.ErrnoException }
   | { kind: "timeout" }
   | { kind: "aborted" };
@@ -75,11 +82,17 @@ const programOf = (command: Command): string =>
   typeof command === "string" ? command : (command[0] as string);
 
 // Masked before it is cut: a secret cut in two would no longer be found.
-function lastLine(stderr: string, references: [string, string][]): string | undefined {
+function lastLine(
+  stderr: string,
+  references: [string, string][],
+  cut: boolean,
+): string | undefined {
   const lines = referenced(stripVTControlCharacters(stderr), references)
     .split(/\r?\n|\r/)
     .map((line) => line.trim())
     .filter((line) => line !== "");
+  // A first line that lost its start cannot be masked: without a reference there is nothing to match.
+  if (cut && references.length > 0 && lines.length === 1) return undefined;
   const last = lines.at(-1);
   return last === undefined ? undefined : truncate(last, COMMAND_STDERR_CHARACTERS);
 }
@@ -112,6 +125,7 @@ function run(
     }
 
     let tail = Buffer.alloc(0);
+    let cut = false;
     let settled = false;
     let drain: NodeJS.Timeout | undefined;
     const finish = (outcome: Outcome) => {
@@ -134,11 +148,13 @@ function run(
 
     // Drained to the end even past the cap: a full pipe would block the command.
     child.stderr?.on("data", (chunk: Buffer) => {
-      tail = Buffer.concat([tail, chunk]).subarray(-COMMAND_STDERR_BYTES);
+      const all = Buffer.concat([tail, chunk]);
+      cut ||= all.length > COMMAND_STDERR_BYTES;
+      tail = all.subarray(-COMMAND_STDERR_BYTES);
     });
     child.on("error", (error) => finish({ kind: "error", error }));
     const done = (code: number | null, signal: NodeJS.Signals | null) =>
-      finish({ kind: "exit", code, signal, stderr: tail.toString("utf8") });
+      finish({ kind: "exit", code, signal, stderr: tail.toString("utf8"), cut });
     child.on("close", done);
     // A command that left a process behind keeps the pipe open: its own exit is what counts.
     child.on("exit", (code, signal) => {
@@ -182,7 +198,7 @@ function failure(
     return { error: code ?? "cannot start" };
   }
   if (outcome.signal) return { error: `killed by ${outcome.signal}` };
-  return { error: lastLine(outcome.stderr, references) ?? `exit ${outcome.code}` };
+  return { error: lastLine(outcome.stderr, references, outcome.cut) ?? `exit ${outcome.code}` };
 }
 
 export const commandChecker: ServiceType = {

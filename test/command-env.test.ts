@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { commandChecker } from "../src/checkers/command";
 import { isSensitiveEnv, serviceVariables } from "../src/config/headers";
 import { configSchemaV1, type Service } from "../src/config/schema";
-import { COMMAND_STDERR_CHARACTERS } from "../src/constants";
+import { COMMAND_STDERR_BYTES, COMMAND_STDERR_CHARACTERS } from "../src/constants";
 import { tempDir } from "./helpers";
 
 const NODE = process.execPath;
@@ -33,12 +33,12 @@ const variables = (values: Record<string, string>, environment?: string) => ({
 
 describe("env in the config", () => {
   it("is accepted on a command, numbers and booleans read as text", () => {
-    const env = { MYSQL_HOST: "127.0.0.1", MYSQL_PWD: "${DB_PASSWORD}", PORT: 3306, FLAG: true };
+    const env = { MYSQL_HOST: "127.0.0.1", MYSQL_PWD: `\${DB_PASSWORD}`, PORT: 3306, FLAG: true };
 
     expect(parse({ type: "command", command: "mysqladmin ping", env }).data?.services.db).toEqual({
       type: "command",
       command: "mysqladmin ping",
-      env: { MYSQL_HOST: "127.0.0.1", MYSQL_PWD: "${DB_PASSWORD}", PORT: "3306", FLAG: "true" },
+      env: { MYSQL_HOST: "127.0.0.1", MYSQL_PWD: `\${DB_PASSWORD}`, PORT: "3306", FLAG: "true" },
     });
   });
 
@@ -75,13 +75,13 @@ describe("env in the config", () => {
 
   it("refuses a malformed reference", () => {
     expect(
-      issues({ type: "command", command: "x", env: { A: "${not valid}" } })?.[0]?.message,
-    ).toBe("expected a variable name between braces, e.g. ${DB_PASSWORD}");
+      issues({ type: "command", command: "x", env: { A: `\${not valid}` } })?.[0]?.message,
+    ).toBe(`expected a variable name between braces, e.g. \${DB_PASSWORD}`);
   });
 
   it("counts toward the variables a service needs", () => {
     expect(
-      serviceVariables({ headers: { "X-A": "${ONE}" }, env: { A: "${TWO}", B: "${ONE}-x" } }),
+      serviceVariables({ headers: { "X-A": `\${ONE}` }, env: { A: `\${TWO}`, B: `\${ONE}-x` } }),
     ).toEqual(["ONE", "TWO"]);
   });
 });
@@ -91,7 +91,7 @@ describe("env of a command", () => {
 
   it("gives the resolved value to the child", async () => {
     const service = command(expected, {
-      [SECRET_NAME]: "${PROBE_ENVTEST_SECRET}",
+      [SECRET_NAME]: `\${PROBE_ENVTEST_SECRET}`,
       PROBE_ENVTEST_EXPECTED: SECRET,
     });
 
@@ -109,7 +109,7 @@ process.exit(process.env.${SECRET_NAME} && !seen.includes(process.env.${SECRET_N
 
     const result = await commandChecker.check(
       "db",
-      command(script, { [SECRET_NAME]: "${PROBE_ENVTEST_SECRET}" }),
+      command(script, { [SECRET_NAME]: `\${PROBE_ENVTEST_SECRET}` }),
       { timeoutMs: 10_000, variables: variables({ PROBE_ENVTEST_SECRET: SECRET }) },
     );
 
@@ -123,7 +123,7 @@ process.exit(process.env.${SECRET_NAME} && !seen.includes(process.env.${SECRET_N
     const service: Service = {
       type: "command",
       command: [NODE, "-e", script, marker],
-      env: { [SECRET_NAME]: "${PROBE_ENVTEST_SECRET}" },
+      env: { [SECRET_NAME]: `\${PROBE_ENVTEST_SECRET}` },
     };
 
     const result = await commandChecker.check("db", service, {
@@ -144,11 +144,11 @@ process.exit(process.env.${SECRET_NAME} && !seen.includes(process.env.${SECRET_N
 
     const result = await commandChecker.check(
       "db",
-      command(script, { [SECRET_NAME]: "${PROBE_ENVTEST_SECRET}" }),
+      command(script, { [SECRET_NAME]: `\${PROBE_ENVTEST_SECRET}` }),
       { timeoutMs: 10_000, variables: variables({ PROBE_ENVTEST_SECRET: SECRET }) },
     );
 
-    expect(result.error).toBe("login failed for ${PROBE_ENVTEST_SECRET}");
+    expect(result.error).toBe(`login failed for \${PROBE_ENVTEST_SECRET}`);
     expect(JSON.stringify(result)).not.toContain(SECRET);
   });
 
@@ -158,24 +158,38 @@ process.exit(process.env.${SECRET_NAME} && !seen.includes(process.env.${SECRET_N
 
     const result = await commandChecker.check(
       "db",
-      command(script, { [SECRET_NAME]: "${PROBE_ENVTEST_SECRET}" }),
+      command(script, { [SECRET_NAME]: `\${PROBE_ENVTEST_SECRET}` }),
       { timeoutMs: 10_000, variables: variables({ PROBE_ENVTEST_SECRET: SECRET }) },
     );
 
     expect(result.error).not.toMatch(/Zq9|mk4p/);
   });
 
+  it("shows no line at all when the cut of stderr may have split the value", async () => {
+    const filler = "x".repeat(COMMAND_STDERR_BYTES - 3);
+    const script = `process.stderr.write(${JSON.stringify(filler)} + process.env.${SECRET_NAME}); process.exit(1)`;
+
+    const result = await commandChecker.check(
+      "db",
+      command(script, { [SECRET_NAME]: `\${PROBE_ENVTEST_SECRET}` }),
+      { timeoutMs: 10_000, variables: variables({ PROBE_ENVTEST_SECRET: SECRET }) },
+    );
+
+    expect(result.error).toBe("exit 1");
+    expect(JSON.stringify(result)).not.toMatch(/Zq9|mk4p/);
+  });
+
   it("copies the command with references, never the values", () => {
     const service: Service = {
       type: "command",
       command: ["mysqladmin", "ping"],
-      env: { MYSQL_HOST: "127.0.0.1", MYSQL_PWD: "${DB_PASSWORD}" },
+      env: { MYSQL_HOST: "127.0.0.1", MYSQL_PWD: `\${DB_PASSWORD}` },
     };
 
     const copied = commandChecker.copy?.(service, {});
 
     expect(copied?.command).toBe(
-      'env MYSQL_HOST=127.0.0.1 MYSQL_PWD="${DB_PASSWORD}" mysqladmin ping',
+      `env MYSQL_HOST=127.0.0.1 MYSQL_PWD="\${DB_PASSWORD}" mysqladmin ping`,
     );
     expect(copied?.note).toBe(
       "it runs from the project root; it reads DB_PASSWORD from the shell that runs it: export it there first",
@@ -186,7 +200,7 @@ process.exit(process.env.${SECRET_NAME} && !seen.includes(process.env.${SECRET_N
     const service: Service = {
       type: "command",
       command: "redis-cli ping | grep PONG",
-      env: { REDISCLI_AUTH: "${REDIS_PASSWORD}" },
+      env: { REDISCLI_AUTH: `\${REDIS_PASSWORD}` },
     };
 
     expect(commandChecker.copy?.(service, { REDIS_PASSWORD: "x" }).command).toBe(
