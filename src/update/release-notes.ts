@@ -15,6 +15,19 @@ export const IMPORTANT_KINDS: readonly NoteKind[] = ["schema", "completion", "br
  */
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: "1.5.0",
+    items: [
+      {
+        kind: "info",
+        text: "Command services take env: values like ${PG_PASSWORD} come from local.yml and reach the command's environment only, never its arguments.",
+      },
+      {
+        kind: "info",
+        text: "The dashboard adds a service of any type, and edits a command as shell words.",
+      },
+    ],
+  },
+  {
     version: "1.4.0",
     items: [
       {
