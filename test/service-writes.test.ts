@@ -25,6 +25,18 @@ const fields = (over: Partial<ServiceFields> = {}): ServiceFields => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe("writeService", () => {
+  it("should write the env of a command, and take it out when the form empties it", async () => {
+    const paths = await tempProject(CONFIG);
+    const command = { type: "command", command: "mysqladmin ping" } as const;
+    const env = { MYSQL_HOST: "db", MYSQL_PWD: "$" + "{DB_PASSWORD}" };
+
+    await writeService(paths, { kind: "add", name: "db", fields: { ...command, env } });
+    expect((await loadConfig(paths)).config.services.db?.env).toEqual(env);
+
+    await writeService(paths, { kind: "edit", name: "db", fields: { ...command } });
+    expect((await loadConfig(paths)).config.services.db?.env).toBeUndefined();
+  });
+
   it("should add a service with only the keys that are not at their default", async () => {
     const paths = await tempProject(CONFIG);
 

@@ -188,7 +188,7 @@ describe("the secret of a header", () => {
     expect(draw()).toContain("Cookie holds a secret");
     expect(draw()).toMatch(/Variable\s+\S+/);
     await press(`${CTRL_U}API_TOKEN${ENTER}`);
-    expect(draw()).toContain("API_TOKEN already keeps another header");
+    expect(draw()).toContain("API_TOKEN already keeps another secret");
     expect(writes).toEqual([]);
     await press(`${CTRL_U}SID${ENTER}`);
 
@@ -221,7 +221,7 @@ describe("the secret of a header", () => {
     expect(draw()).toMatch(/Variable\s+API_TOKEN_2/);
     await press(`${CTRL_U}API_TOKEN${ENTER}`);
 
-    expect(draw()).toContain("API_TOKEN already keeps another header");
+    expect(draw()).toContain("API_TOKEN already keeps another secret");
     expect(writes).toEqual([]);
   });
 

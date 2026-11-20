@@ -29,8 +29,9 @@ const DEFAULTS: Partial<ServiceFields> = {
   expect: undefined,
   method: DEFAULT_METHOD,
   headers: undefined,
+  env: undefined,
 };
-const FIELD_KEYS = ["host", "port", "path", "expect", "method", "headers"] as const;
+const FIELD_KEYS = ["host", "port", "path", "expect", "method", "headers", "env"] as const;
 
 /** `expect: [200]` and `expect: 200` say the same: a form cannot tell which one was written. */
 const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].flat());

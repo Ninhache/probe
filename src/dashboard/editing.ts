@@ -51,10 +51,10 @@ export interface EditCallbacks {
 }
 
 const pickFields = (service: Service): ServiceFields => {
-  const { url, host, port, path, expect, method, headers, command } = service;
+  const { url, host, port, path, expect, method, headers, command, env } = service;
   // Read from `urls:`, the address is not the service's: the form shows none, and writes none back.
   const address = declaresAddress(service) ? { url, host, port, path } : {};
-  return { ...address, expect, method, headers, command };
+  return { ...address, expect, method, headers, command, env };
 };
 
 export const timeoutsOf = ({ services }: Config): Record<string, number> =>
