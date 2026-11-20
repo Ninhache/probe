@@ -88,7 +88,9 @@ export interface Editing {
 const reads = (config: () => Config) => ({
   serviceForm(name?: string): ServiceForm {
     const service = name === undefined ? undefined : config().services[name];
-    return (service ? serviceType(service) : defaultType()).form;
+    if (!service) return defaultType().form;
+    const { form } = serviceType(service);
+    return form.forService?.(service) ?? form;
   },
   serviceFields(name: string): ServiceFields | undefined {
     const service = config().services[name];

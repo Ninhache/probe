@@ -8,6 +8,7 @@ import {
   VARIABLE_NAME,
 } from "../config/headers";
 import type { Service } from "../config/schema";
+import { shellQuoted, wordsText } from "../config/shell-words";
 import { COMMAND_STDERR_BYTES, COMMAND_STDERR_CHARACTERS, EXIT_DRAIN_MS } from "../constants";
 import { currentPlatform, type Platform } from "../platform";
 import { truncate } from "../ui/terminal";
@@ -31,12 +32,8 @@ type Outcome =
   | { kind: "aborted" };
 
 const WORD_NEEDING_QUOTES = /[\s"'\\]/;
-const SAFE_SHELL_WORD = /^[\w@%+=:,./-]+$/;
 
 const quoted = (word: string) => (WORD_NEEDING_QUOTES.test(word) ? JSON.stringify(word) : word);
-
-const shellQuoted = (word: string) =>
-  SAFE_SHELL_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
 
 /** What lists and reports show: the command as a person would type it, without running anything. */
 export const commandTarget = (command: Command): string =>
@@ -44,7 +41,7 @@ export const commandTarget = (command: Command): string =>
 
 /** The command as a POSIX shell runs it: a list is quoted word by word. */
 export const shellCommand = (command: Command): string =>
-  typeof command === "string" ? command : command.map(shellQuoted).join(" ");
+  typeof command === "string" ? command : wordsText(command);
 
 // The reference stays one, written for the shell that runs it: the value is never in the copy.
 function shellTemplate(value: string): string {

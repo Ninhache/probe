@@ -10,6 +10,7 @@ import {
   serviceShapeV1,
   urlProblem,
 } from "./schema";
+import { splitWords, wordsText } from "./shell-words";
 
 const INTEGER = /^\d+$/;
 
@@ -62,12 +63,21 @@ export function expectProblem(expect: string): string | undefined {
   );
 }
 
-/**
- * One line of text for a command: a string as is, a list as a JSON array. A string that is not a
- * JSON array of strings stays a string, so `[ -f ready ]` is still the shell's test.
- */
+/** One line of text for a command: a string as is, a list as the words a shell would take. */
 export function commandText(command: NonNullable<Service["command"]>): string {
-  return typeof command === "string" ? command : JSON.stringify(command);
+  return typeof command === "string" ? command : wordsText(command);
+}
+
+/** A command typed over a list: its words, as `commandText` shows them. */
+export const commandFromWords = (text: string): string[] => splitWords(text) ?? [];
+
+export function commandWordsProblem(text: string): string | undefined {
+  const words = splitWords(text);
+  if (words === undefined) return 'A quote is not closed, e.g. docker exec db psql -c "select 1"';
+  return (
+    commandValueProblem(words) &&
+    "A command as words, e.g. docker ps; quote a word that holds spaces"
+  );
 }
 
 export function commandFromText(text: string): NonNullable<Service["command"]> {

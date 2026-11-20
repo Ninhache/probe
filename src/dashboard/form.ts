@@ -63,7 +63,7 @@ export const urlLabel = (value: string) => `URL ${value}`;
 export const HEADER_LABEL = "Header";
 export const HEADER_PLACEHOLDER = "Accept: application/json";
 export const ENV_LABEL = "Env";
-export const ENV_PLACEHOLDER = "MYSQL_HOST=127.0.0.1";
+export const ENV_PLACEHOLDER = "NAME=value";
 
 const defaultForm = (): ServiceForm => defaultType().form;
 

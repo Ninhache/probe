@@ -90,6 +90,8 @@ export interface ServiceForm {
   /** What the config would refuse in a field, said without the value. */
   problem(key: string, value: string): string | undefined;
   written(values: FieldValues): Omit<ServiceFields, "headers" | "env">;
+  /** The form to edit this service with, when its shape changes how a field reads or is written. */
+  forService?(service: Service): ServiceForm;
 }
 
 /** The type of each service: the registry by default, another one in tests. */

@@ -134,7 +134,7 @@ describe("the text of a command", () => {
   });
 
   it("should write back what it read", () => {
-    for (const command of [["a", "b c"], "x y", '["not", "a", "list"] | cat']) {
+    for (const command of ["x y", '["not", "a", "list"] | cat']) {
       const roundTrip = commandFromText(commandText(command));
       expect(roundTrip).toEqual(command);
     }
@@ -180,12 +180,13 @@ describe("writing a command service", () => {
     );
     const service = loaded.services.db;
     if (!service) throw new Error("db is missing");
-    const values = formValues({ command: service.command }, commandForm);
+    const form = commandForm.forService?.(service) ?? commandForm;
+    const values = formValues({ command: service.command }, form);
 
     await writeService(paths, {
       kind: "edit",
       name: "db",
-      fields: formFields(values, commandForm),
+      fields: formFields(values, form),
     });
 
     expect(await readFile(paths.config, "utf8")).toBe(config);
