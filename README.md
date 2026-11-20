@@ -71,19 +71,20 @@ Exit codes: `0` all up, `1` a service is down, `2` usage or config error.
 
 ## Features
 
-| Feature                                             | In one line                                                        |
-| --------------------------------------------------- | ------------------------------------------------------------------ |
-| [Dashboard](docs/features/dashboard.md)             | A live screen of your services: add, edit, inspect, save a trace   |
-| [Discover](docs/features/discover.md)               | `probe init` proposes the services of your compose file, `.env`... |
-| [Wait](docs/features/wait.md)                       | `probe wait && pnpm test`: go on once everything is up             |
-| [Doctor](docs/features/doctor.md)                   | Who holds the port, which container is stopped                     |
-| [Environments](docs/features/environments.md)       | `--env prod`: the same checks elsewhere, editable in the dashboard |
-| [Command services](docs/config.md#command-services) | `type: command`: up when a command exits 0, e.g. `pg_isready`      |
-| [Tags](docs/features/tags.md)                       | `probe check --tag back`: check a group of services                |
-| [Parameters](docs/features/parameters.md)           | One tenant or API version for every service: `--set tenant=acme`   |
-| [Headers and secrets](docs/features/headers.md)     | Check a service behind an API key without writing the key in git   |
-| [Makefile](docs/features/makefile.md)               | `make check`, kept up to date for you                              |
-| [Completion](docs/features/completion.md)           | Tab completes commands, options and service names                  |
+| Feature                                               | In one line                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------------ |
+| [Dashboard](docs/features/dashboard.md)               | A live screen of your services: add, edit, inspect, save a trace   |
+| [Discover](docs/features/discover.md)                 | `probe init` proposes the services of your compose file, `.env`... |
+| [Wait](docs/features/wait.md)                         | `probe wait && pnpm test`: go on once everything is up             |
+| [Doctor](docs/features/doctor.md)                     | Who holds the port, which container is stopped                     |
+| [Environments](docs/features/environments.md)         | `--env prod`: the same checks elsewhere, editable in the dashboard |
+| [Command services](docs/config.md#command-services)   | `type: command`: up when a command exits 0, e.g. `pg_isready`      |
+| [Database services](docs/config.md#database-services) | `type: postgres`, `mysql`, `redis`: up when the client logs in     |
+| [Tags](docs/features/tags.md)                         | `probe check --tag back`: check a group of services                |
+| [Parameters](docs/features/parameters.md)             | One tenant or API version for every service: `--set tenant=acme`   |
+| [Headers and secrets](docs/features/headers.md)       | Check a service behind an API key without writing the key in git   |
+| [Makefile](docs/features/makefile.md)                 | `make check`, kept up to date for you                              |
+| [Completion](docs/features/completion.md)             | Tab completes commands, options and service names                  |
 
 ## Config
 
