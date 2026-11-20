@@ -464,6 +464,32 @@ describe("variables of a service", () => {
     expect(test.draw()).toMatch(/KEY\s+set in local\.yml · ↵ changes it/);
   });
 
+  it("sets the variable of a command service from its detail view", async () => {
+    const commanded = {
+      ...initial,
+      services: {
+        db: { type: "command", command: ["pg_isready"], env: { PGPASSWORD: reference("DB_PWD") } },
+      },
+    } as unknown as Config;
+    const onVariableWrite = vi.fn(async () => undefined);
+    const test = setup({
+      config: commanded,
+      edits: {
+        variableSources: async (names) =>
+          Object.fromEntries(names.map((n) => [n, undefined as never])),
+        onVariableWrite,
+      },
+    });
+    test.press(ENTER);
+    await tick();
+    expect(test.draw()).toMatch(/DB_PWD\s+not set/);
+    test.press(`${DOWN}${DOWN}${ENTER}${SECRET}${ENTER}`);
+    await tick();
+
+    expect(onVariableWrite).toHaveBeenCalledWith("DB_PWD", SECRET);
+    expect(test.draw()).not.toContain(SECRET);
+  });
+
   it("takes the value of a variable on enter, never drawn", async () => {
     const onVariableWrite = vi.fn(async () => undefined);
     const test = open({ onVariableWrite });

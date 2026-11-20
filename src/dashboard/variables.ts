@@ -15,7 +15,7 @@ export type VariableSources = (
 
 export interface VariableTools {
   serviceVariables: (service: string) => Promise<VariableRow[]>;
-  /** Every variable the headers of any service send, once each, in the order they appear. */
+  /** Every variable the headers or env of any service use, once each, in the order they appear. */
   allVariables: () => Promise<VariableRow[]>;
   variableProblem: (name: string, service: string) => Promise<string | undefined>;
   variableName: (service: string, header: string, taken: readonly string[]) => Promise<string>;
@@ -38,15 +38,15 @@ export function variableTools(
   config: () => Config,
   sources: (names: readonly string[]) => ReturnType<VariableSources>,
 ): VariableTools {
-  const sentBy = (service: string) => serviceVariables(config().services[service]?.headers);
+  const sentBy = (service: string) => serviceVariables(config().services[service] ?? {});
   const variableProblem: VariableTools["variableProblem"] = async (name, service) => {
     if (!VARIABLE_NAME.test(name)) return "Letters, digits and _ only, e.g. API_TOKEN";
-    const instead = `another name, or ${reference(name)} in the header`;
+    const instead = `another name, or ${reference(name)} in its place`;
     // Under a name another service sends, the secret would go to that service too.
     const others = Object.keys(config().services).filter(
       (other) => other !== service && sentBy(other).includes(name),
     );
-    if (others.length > 0) return `${name} is already sent by ${others.join(", ")}: ${instead}`;
+    if (others.length > 0) return `${name} is already used by ${others.join(", ")}: ${instead}`;
     const source = (await sources([name]))[name];
     if (source === "environment") return `${name} is set in the environment: ${instead}`;
     if (source === "local" && !sentBy(service).includes(name))

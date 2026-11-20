@@ -38,24 +38,25 @@ probe add cache --command "redis-cli ping"
 probe add db -- pg_isready -q
 ```
 
-| Option                    | Default     | Meaning                                                                        |
-| ------------------------- | ----------- | ------------------------------------------------------------------------------ |
-| `--command <string>`      | none        | Check by [running a command](config.md#command-services), by the shell         |
-| `-p`, `--port <port>`     | required    | Port, unless a command is given                                                |
-| `--host <host>`           | `localhost` | Host name or IP                                                                |
-| `--path <path>`           | `/`         | Path to request                                                                |
-| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above                        |
-| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                                           |
-| `--contains <text>`       | none        | Text the body must [contain](config.md#contains): `--contains '"status":"ok"'` |
-| `--timeout <seconds>`     | 3           | Seconds given to this service                                                  |
-| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                                     |
-| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`                       |
-| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`                           |
-| `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra`                 |
+| Option                    | Default     | Meaning                                                                                     |
+| ------------------------- | ----------- | ------------------------------------------------------------------------------------------- |
+| `--command <string>`      | none        | Check by [running a command](config.md#command-services), by the shell                      |
+| `-p`, `--port <port>`     | required    | Port, unless a command is given                                                             |
+| `--host <host>`           | `localhost` | Host name or IP                                                                             |
+| `--path <path>`           | `/`         | Path to request                                                                             |
+| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above                                     |
+| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                                                        |
+| `--contains <text>`       | none        | Text the body must [contain](config.md#contains): `--contains '"status":"ok"'`              |
+| `--timeout <seconds>`     | 3           | Seconds given to this service                                                               |
+| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                                                  |
+| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`                                    |
+| `--setenv <NAME=value>`   | none        | Variable for a [command](config.md#env), repeatable: `--setenv 'PGPASSWORD=${PG_PASSWORD}'` |
+| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`                                        |
+| `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra`                              |
 
 - After `--`, everything is the command, as a list run without a shell: `probe add db -- pg_isready -q`.
   `--command` and `--` cannot be given together, nor with `--port`, `--url`, `--host`, `--path`, `--expect`,
-  `--contains`, `--method` or `--header`.
+  `--contains`, `--method` or `--header`. `--setenv` needs a command.
 - `probe add` alone, on a terminal, asks for each value: see [Discover](features/discover.md).
 - What each value means: [Config](config.md). Headers and their secrets: [Headers](features/headers.md).
 
@@ -148,7 +149,7 @@ Without it, the URL is printed and the exit code is `1`.
 
 ## probe var
 
-Lists the variables the headers use, or sets one for this machine. See [Headers](features/headers.md).
+Lists the variables the headers and the [`env` of commands](config.md#env) use, or sets one for this machine. See [Headers](features/headers.md).
 
 ```sh
 probe var                # list them, and where each is set

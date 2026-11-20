@@ -63,7 +63,7 @@ export default defineCommand({
     console.log(`Created ${environmentFile(name)} from ${environmentFile(from)}.`);
     console.log(`Change the addresses there, then: probe check --env ${name}`);
     for (const variable of variables) {
-      console.log(`It sends ${variable}: probe var ${variable} --env ${name} (or export it).`);
+      console.log(`It uses ${variable}: probe var ${variable} --env ${name} (or export it).`);
     }
   },
 });

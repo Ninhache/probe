@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { commandForm } from "../src/checkers/command-form";
 import {
   emptyForm,
   formFields,
@@ -93,6 +94,7 @@ describe("service form", () => {
     expect(formProblem(formRows(false), values, [])).toEqual({
       row: formRows(false).length + 2,
       message: "accept is given twice",
+      line: { kind: "headers", index: 2 },
     });
   });
 
@@ -112,7 +114,13 @@ describe("service form", () => {
 
     expect(formProblem(formRows(false), values, [])).toBeUndefined();
     const found = formSecret(values);
-    expect(found).toEqual({ index: 1, header: "Authorization", scheme: "Bearer ", secret: SECRET });
+    expect(found).toEqual({
+      kind: "headers",
+      index: 1,
+      header: "Authorization",
+      scheme: "Bearer ",
+      secret: SECRET,
+    });
 
     const next = withVariable(values, found as NonNullable<typeof found>, "API_TOKEN");
     expect(next.headers[1]).toBe("Authorization: Bearer $" + "{API_TOKEN}");
@@ -148,5 +156,57 @@ describe("service form", () => {
     expect(
       formProblem(formRows(false), { ...emptyForm(), address: "3000" }, ["api"]),
     ).toBeUndefined();
+  });
+});
+
+describe("service form of a command", () => {
+  const rows = formRows(false, commandForm);
+  const typed = (env: string[]) => ({ ...emptyForm(commandForm), command: "mysqladmin ping", env });
+
+  it("should read the env as NAME=value lines and write it back", () => {
+    const env = { MYSQL_HOST: "db", DATABASE_URL: "postgres://db/app?mode=ro" };
+
+    const values = formValues({ command: "mysqladmin ping", env }, commandForm);
+
+    expect(values.env).toEqual(["MYSQL_HOST=db", "DATABASE_URL=postgres://db/app?mode=ro"]);
+    expect(formFields(values, commandForm).env).toEqual(env);
+  });
+
+  it("should write no env when no line is typed", () => {
+    expect(formFields(typed(["  "]), commandForm).env).toBeUndefined();
+  });
+
+  it("should keep an http form free of env", () => {
+    expect(formValues({ port: 3000, env: { A: "b" } }).env).toBeUndefined();
+    expect(formFields({ ...emptyForm(), address: "3000", env: ["A=b"] }).env).toBeUndefined();
+  });
+
+  it.each([
+    [["no equal sign"], "A variable as NAME=value"],
+    [["1BAD=x"], "Expects a name of letters, digits and _"],
+    [["A=1", "A=2"], "A is given twice"],
+    [[`MYSQL_PWD=\${not valid}`], "MYSQL_PWD expects a variable name between braces"],
+  ])("should refuse the lines %j", (env, message) => {
+    const problem = formProblem(rows, typed(env), [], commandForm);
+
+    expect(problem?.message).toContain(message);
+    expect(problem?.line).toEqual({ kind: "env", index: env.length - 1 });
+  });
+
+  it("should find the secret typed in an env line, and give it a reference", () => {
+    const values = typed(["MYSQL_HOST=db", `MYSQL_PWD=${SECRET}`]);
+
+    expect(formProblem(rows, values, [], commandForm)).toBeUndefined();
+    const found = formSecret(values);
+    expect(found).toEqual({
+      kind: "env",
+      index: 1,
+      header: "MYSQL_PWD",
+      scheme: "",
+      secret: SECRET,
+    });
+    const next = withVariable(values, found as NonNullable<typeof found>, "DB_PASSWORD");
+    expect(next.env?.[1]).toBe("MYSQL_PWD=$" + "{DB_PASSWORD}");
+    expect(formSecret(next)).toBeUndefined();
   });
 });

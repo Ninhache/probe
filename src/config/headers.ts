@@ -1,5 +1,11 @@
 export type HeaderTemplates = Readonly<Record<string, string>>;
 
+/** What a service holds that can name a variable: the headers of a request, the env of a command. */
+export interface VariableUsers {
+  headers?: HeaderTemplates;
+  env?: HeaderTemplates;
+}
+
 export type VariableLookup = (name: string) => string | undefined;
 
 // RFC 9110 `token`: what a header name is made of.
@@ -14,6 +20,10 @@ const UNSENDABLE = new Set(["content-length", "transfer-encoding"]);
 
 // By name, so a header nobody listed (`X-Api-Key`, `X-Auth-Token`) is covered too.
 const SENSITIVE_NAME = /auth|cookie|token|secret|key|session|password|credential/i;
+// `MYSQL_PWD` and `PGPASSWORD` are what an environment calls them; a header is never named so.
+const SENSITIVE_ENV_NAME = new RegExp(`${SENSITIVE_NAME.source}|pwd|pass`, "i");
+// Any text on one line: a program reads it, no server does.
+const ENV_VALUE = /^[^\p{Cc}\p{Zl}\p{Zp}]*$/u;
 
 /** A value shorter than this is not masked on screen: it would hide ordinary text. */
 const MASKED_MIN_LENGTH = 4;
@@ -33,12 +43,22 @@ export function holdsSecret(name: string, value: string): boolean {
   return isSensitiveHeader(name) && !value.includes("${");
 }
 
+export function holdsEnvSecret(name: string, value: string): boolean {
+  return isSensitiveEnv(name) && !value.includes("${");
+}
+
 // Only a closed reference is drawn: a secret followed by `${` stays hidden while the name is typed.
-export function hiddenHeaderLine(line: string, bullet: string): string {
-  const colon = line.indexOf(":");
-  if (colon < 1 || !isSensitiveHeader(line.slice(0, colon).trim())) return line;
-  const value = line.slice(colon + 1).trimStart();
-  const { scheme, secret } = splitSecret(value);
+function hiddenLine(
+  line: string,
+  bullet: string,
+  separator: string,
+  sensitive: (name: string) => boolean,
+  keepsScheme: boolean,
+): string {
+  const at = line.indexOf(separator);
+  if (at < 1 || !sensitive(line.slice(0, at).trim())) return line;
+  const value = line.slice(at + 1).trimStart();
+  const { scheme, secret } = keepsScheme ? splitSecret(value) : { scheme: "", secret: value };
   const hidden = templateParts(secret).map(({ text, variable }) =>
     variable !== undefined && VARIABLE_NAME.test(variable)
       ? reference(variable)
@@ -47,16 +67,31 @@ export function hiddenHeaderLine(line: string, bullet: string): string {
   return `${line.slice(0, line.length - value.length)}${scheme}${hidden.join("")}`;
 }
 
+export const hiddenHeaderLine = (line: string, bullet: string) =>
+  hiddenLine(line, bullet, ":", isSensitiveHeader, true);
+
+export const hiddenEnvLine = (line: string, bullet: string) =>
+  hiddenLine(line, bullet, "=", isSensitiveEnv, false);
+
 export function isSensitiveHeader(name: string): boolean {
   return SENSITIVE_NAME.test(name);
+}
+
+export function isSensitiveEnv(name: string): boolean {
+  return SENSITIVE_ENV_NAME.test(name);
 }
 
 export function referencedVariables(value: string): string[] {
   return [...new Set(Array.from(value.matchAll(REFERENCE), (match) => match[1] as string))];
 }
 
-export function serviceVariables(headers: HeaderTemplates | undefined): string[] {
-  return [...new Set(Object.values(headers ?? {}).flatMap(referencedVariables))];
+function templateVariables(templates: HeaderTemplates | undefined): string[] {
+  return [...new Set(Object.values(templates ?? {}).flatMap(referencedVariables))];
+}
+
+/** Every variable a service needs, once each: those of its headers, then those of its env. */
+export function serviceVariables({ headers, env }: VariableUsers): string[] {
+  return [...new Set([...templateVariables(headers), ...templateVariables(env)])];
 }
 
 export function headerNameProblem(name: string): string | undefined {
@@ -78,6 +113,23 @@ export function headerValueProblem(name: string, value: string): string | undefi
   return undefined;
 }
 
+export function envNameProblem(name: string): string | undefined {
+  return VARIABLE_NAME.test(name) ? undefined : "a name of letters, digits and _, e.g. MYSQL_PWD";
+}
+
+// The value is never repeated: it may be the secret.
+export function envValueProblem(name: string, value: string): string | undefined {
+  if (!ENV_VALUE.test(value)) return "a value on one line, without unusual characters";
+  if (value.includes("${") && !referencedVariables(value).every((v) => VARIABLE_NAME.test(v))) {
+    return `a variable name between braces, e.g. ${reference("DB_PASSWORD")}`;
+  }
+  // config.yml is shared: nothing secret goes in it.
+  if (isSensitiveEnv(name) && referencedVariables(value).length === 0) {
+    return `a reference instead of the secret, e.g. ${reference("DB_PASSWORD")}: config.yml is shared`;
+  }
+  return undefined;
+}
+
 export function variableValueProblem(value: string): string | undefined {
   if (value === "") return "a value: an empty one sets nothing";
   if (!HEADER_VALUE.test(value)) return "a value on one line, without unusual characters";
@@ -90,28 +142,41 @@ export function parseHeaderLine(line: string): [name: string, value: string] | u
   return [line.slice(0, colon).trim(), line.slice(colon + 1).trim()];
 }
 
-export type ResolvedHeaders =
-  | {
-      headers: [name: string, value: string][];
-      secrets: string[];
-      /** Each secret value with the variable it came from. */
-      references: [secret: string, variable: string][];
-    }
+export function parseEnvLine(line: string): [name: string, value: string] | undefined {
+  const equals = line.indexOf("=");
+  if (equals < 1) return undefined;
+  return [line.slice(0, equals).trim(), line.slice(equals + 1).trim()];
+}
+
+interface Resolved {
+  secrets: string[];
+  /** Each secret value with the variable it came from. */
+  references: [secret: string, variable: string][];
+}
+
+export type ResolvedTemplates =
+  | (Resolved & { entries: [name: string, value: string][] })
   | { unset: string[] }
   | { unsendable: string[] };
 
-export function resolveHeaders(
+export type ResolvedHeaders =
+  | (Resolved & { headers: [name: string, value: string][] })
+  | { unset: string[] }
+  | { unsendable: string[] };
+
+function resolveTemplates(
   templates: HeaderTemplates,
   lookup: VariableLookup,
-): ResolvedHeaders {
-  const names = serviceVariables(templates);
+  allowed: RegExp,
+): ResolvedTemplates {
+  const names = templateVariables(templates);
   const values = new Map(names.map((name) => [name, lookup(name)]));
   const unset = names.filter((name) => !values.get(name));
   if (unset.length > 0) return { unset };
-  const unsendable = names.filter((name) => !HEADER_VALUE.test(values.get(name) as string));
+  const unsendable = names.filter((name) => !allowed.test(values.get(name) as string));
   if (unsendable.length > 0) return { unsendable };
   return {
-    headers: Object.entries(templates).map(([name, template]) => [
+    entries: Object.entries(templates).map(([name, template]) => [
       name,
       template.replace(REFERENCE, (_, variable: string) => values.get(variable) as string),
     ]),
@@ -123,6 +188,20 @@ export function resolveHeaders(
       .map(([variable, value]) => [value, variable]),
   };
 }
+
+export function resolveHeaders(
+  templates: HeaderTemplates,
+  lookup: VariableLookup,
+): ResolvedHeaders {
+  const resolved = resolveTemplates(templates, lookup, HEADER_VALUE);
+  if (!("entries" in resolved)) return resolved;
+  const { entries, ...rest } = resolved;
+  return { ...rest, headers: entries };
+}
+
+/** The environment of a command: the same variables as a header, and no limit on the characters. */
+export const resolveEnv = (templates: HeaderTemplates, lookup: VariableLookup): ResolvedTemplates =>
+  resolveTemplates(templates, lookup, ENV_VALUE);
 
 /** Replaces every secret found in a text, longest first so one inside another leaves nothing. */
 export function masked(text: string, secrets: readonly string[]): string {

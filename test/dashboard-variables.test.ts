@@ -16,6 +16,7 @@ const config = {
     },
     db: { host: "localhost", port: 5432, path: "/", headers: { Cookie: reference("DB_COOKIE") } },
     web: { host: "localhost", port: 8080, path: "/" },
+    job: { type: "command", command: "mysqladmin ping", env: { MYSQL_PWD: reference("JOB_PWD") } },
   },
 } as Config;
 
@@ -32,12 +33,25 @@ describe("proposedVariable", () => {
     ["my-api", "X-Api-Key", "MY_API_API_KEY"],
     ["web", "Cookie", "WEB_COOKIE"],
     ["2fa", "X-Auth-Token", "_2FA_AUTH_TOKEN"],
+    ["db", "MYSQL_PWD", "DB_MYSQL_PWD"],
   ])("should name the secret of %s sent as %s %s", (service, header, name) => {
     expect(proposedVariable(service, header)).toBe(name);
   });
 });
 
 describe("variableTools", () => {
+  it("should list the variables the env of a command uses, with the headers' ones", async () => {
+    expect(await tools({ JOB_PWD: "environment" }).serviceVariables("job")).toEqual([
+      { name: "JOB_PWD", source: "environment" },
+    ]);
+    expect((await tools().allVariables()).map(({ name }) => name)).toEqual([
+      "API_KEY",
+      "DB_COOKIE",
+      "JOB_PWD",
+    ]);
+    expect(await tools().variableProblem("JOB_PWD", "web")).toContain("already used by job");
+  });
+
   it("should list the variables a service sends, with where each one is set", async () => {
     expect(await tools({ API_KEY: "local" }).serviceVariables("api")).toEqual([
       { name: "API_KEY", source: "local" },
@@ -49,7 +63,7 @@ describe("variableTools", () => {
   });
 
   it("should refuse a name another service sends: the secret would go there too", async () => {
-    expect(await tools().variableProblem("DB_COOKIE", "web")).toContain("already sent by db");
+    expect(await tools().variableProblem("DB_COOKIE", "web")).toContain("already used by db");
   });
 
   it("should refuse a name already set, here or in the environment", async () => {

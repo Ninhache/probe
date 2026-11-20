@@ -82,12 +82,16 @@ export interface ServiceForm {
   fields: readonly FormField[];
   /** One line per header, `Name: value`, a secret kept in local.yml. */
   headers?: boolean;
+  /** One line per variable of the process, `NAME=value`, a secret kept in local.yml. */
+  env?: boolean;
   /** What an address of the `url` parameter replaces: its lines come before the first of them. */
   replacedByUrl?: ReadonlySet<string>;
   read(fields: ServiceFields): FieldValues;
   /** What the config would refuse in a field, said without the value. */
   problem(key: string, value: string): string | undefined;
-  written(values: FieldValues): Omit<ServiceFields, "headers">;
+  written(values: FieldValues): Omit<ServiceFields, "headers" | "env">;
+  /** The form to edit this service with, when its shape changes how a field reads or is written. */
+  forService?(service: Service): ServiceForm;
 }
 
 /** The type of each service: the registry by default, another one in tests. */

@@ -141,6 +141,7 @@ describe("completionSpec", () => {
       "--contains",
       "--timeout",
       "--method",
+      "--setenv",
       "--header",
       "--hint",
       "--tag",

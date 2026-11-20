@@ -1,6 +1,6 @@
 import type { ServiceForm } from "../../checkers/types";
 import type { ServiceWrite } from "../../commands/service-writes";
-import { hiddenHeaderLine, serviceVariables } from "../../config/headers";
+import { hiddenEnvLine, hiddenHeaderLine, serviceVariables } from "../../config/headers";
 import { urlProblem } from "../../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, LOCAL_FILE, PROBE_DIR } from "../../constants";
 import type { InputEvent } from "../../tui/input";
@@ -9,6 +9,8 @@ import { drawField, fieldKey, fieldValue, textField } from "../../tui/textfield"
 import { defaultTheme as t } from "../../tui/theme";
 import type { Editing, Secrets } from "../editing";
 import {
+  ENV_LABEL,
+  ENV_PLACEHOLDER,
   emptyForm,
   type FormSecret,
   formFields,
@@ -20,6 +22,7 @@ import {
   HEADER_LABEL,
   HEADER_PLACEHOLDER,
   type FormValues as InkValues,
+  type LineKind,
   urlLabel,
   withVariable,
 } from "../form";
@@ -36,7 +39,7 @@ import type { Panel } from "./panels";
 const FORM_WIDTH = 56;
 const SECRET_WIDTH = 60;
 const BULLET = "•";
-const HEADER_ID = "header:";
+const LINE_IDS: Readonly<Record<LineKind, string>> = { headers: "header:", env: "env:" };
 const URL_ID = "url:";
 const NAME_ID = "name";
 const URL_PLACEHOLDER = "https://staging.example.com";
@@ -56,37 +59,44 @@ export interface ServiceFormContext {
   write(change: ServiceWrite, done: string, secrets?: Secrets): Promise<void>;
 }
 
-const headerIndexes = (values: FormValues) =>
+const lineIndexes = (values: FormValues, kind: LineKind) =>
   Object.keys(values)
-    .filter((id) => id.startsWith(HEADER_ID))
-    .map((id) => Number(id.slice(HEADER_ID.length)));
+    .filter((id) => id.startsWith(LINE_IDS[kind]))
+    .map((id) => Number(id.slice(LINE_IDS[kind].length)));
 
-/** One header line per typed one, then the empty line that adds another. */
-const headerCount = (values: FormValues, enabled: boolean) => {
+/** One line per typed one, then the empty line that adds another. */
+const lineCount = (values: FormValues, kind: LineKind, enabled: boolean) => {
   if (!enabled) return 0;
-  const typed = headerIndexes(values).filter((i) => (values[`${HEADER_ID}${i}`] ?? "").trim());
+  const typed = lineIndexes(values, kind).filter((i) =>
+    (values[`${LINE_IDS[kind]}${i}`] ?? "").trim(),
+  );
   return (typed.length === 0 ? 0 : Math.max(...typed) + 1) + 1;
 };
 
-const headersOf = (values: FormValues): string[] => {
-  const last = Math.max(-1, ...headerIndexes(values));
-  return Array.from({ length: last + 1 }, (_, i) => values[`${HEADER_ID}${i}`] ?? "");
+const linesOf = (values: FormValues, kind: LineKind): string[] => {
+  const last = Math.max(-1, ...lineIndexes(values, kind));
+  return Array.from({ length: last + 1 }, (_, i) => values[`${LINE_IDS[kind]}${i}`] ?? "");
 };
 
-/** The values the shared form module reads: the lines typed in the modal, headers as a list. */
+/** The values the shared form module reads: the lines typed in the modal, headers and env as lists. */
 function inkValues(values: FormValues, spec: ServiceForm): InkValues {
   const fields = Object.fromEntries(
     [NAME_ID, ...spec.fields.map(({ key }) => key)].map((key) => [key, values[key] ?? ""]),
   );
-  return { ...fields, headers: spec.headers ? headersOf(values) : [] };
+  return {
+    ...fields,
+    headers: spec.headers ? linesOf(values, "headers") : [],
+    env: spec.env ? linesOf(values, "env") : [],
+  };
 }
 
 /** The values of the modal for a service as it is written: the reverse of `inkValues`. */
 function modalValues(values: InkValues, urls: Readonly<Record<string, string>>): FormValues {
-  const { headers, ...fields } = values;
+  const { headers, env = [], ...fields } = values;
   return {
     ...Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, String(value)])),
-    ...Object.fromEntries(headers.map((line, i) => [`${HEADER_ID}${i}`, line])),
+    ...Object.fromEntries(headers.map((line, i) => [`${LINE_IDS.headers}${i}`, line])),
+    ...Object.fromEntries(env.map((line, i) => [`${LINE_IDS.env}${i}`, line])),
     ...Object.fromEntries(Object.entries(urls).map(([value, url]) => [`${URL_ID}${value}`, url])),
   };
 }
@@ -133,13 +143,21 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
           url !== undefined && spec.replacedByUrl?.has(field.key) && overridden(values).length > 0,
       });
     }
-    const count = headerCount(values, spec.headers === true);
-    for (let i = 0; i < count; i += 1)
+    const headerLines = lineCount(values, "headers", spec.headers === true);
+    for (let i = 0; i < headerLines; i += 1)
       lines.push({
-        id: `${HEADER_ID}${i}`,
+        id: `${LINE_IDS.headers}${i}`,
         label: HEADER_LABEL,
         placeholder: HEADER_PLACEHOLDER,
         shown: (line) => hiddenHeaderLine(line, BULLET),
+      });
+    const envLines = lineCount(values, "env", spec.env === true);
+    for (let i = 0; i < envLines; i += 1)
+      lines.push({
+        id: `${LINE_IDS.env}${i}`,
+        label: ENV_LABEL,
+        placeholder: ENV_PLACEHOLDER,
+        shown: (line) => hiddenEnvLine(line, BULLET),
       });
     const notes =
       url && overridden(values).length > 0
@@ -148,8 +166,10 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
     return { lines, notes };
   };
 
-  const rowId = (rows: readonly { key: string }[], row: number) =>
-    rows[row]?.key ?? `${HEADER_ID}${row - rows.length}`;
+  const rowId = (
+    rows: readonly { key: string }[],
+    { row, line }: NonNullable<ReturnType<typeof formProblem>>,
+  ) => rows[row]?.key ?? (line ? `${LINE_IDS[line.kind]}${line.index}` : NAME_ID);
 
   const submit = (values: FormValues, form: FormHandle) => {
     const rows = formRows(editing === undefined, spec);
@@ -167,7 +187,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
         }
       : spec;
     const problem = formProblem(rows, known, taken, relaxed);
-    if (problem) return form.problem(rowId(rows, problem.row), problem.message);
+    if (problem) return form.problem(rowId(rows, problem), problem.message);
     const urls = Object.fromEntries(
       (url?.values ?? []).map((value) => [value, withScheme(values[`${URL_ID}${value}`] ?? "")]),
     );
@@ -178,7 +198,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
     const service = editing ?? known.name?.toString() ?? "";
     const secret = formSecret(known);
     if (secret) {
-      const id = `${HEADER_ID}${secret.index}`;
+      const id = `${LINE_IDS[secret.kind]}${secret.index}`;
       if (!edits.variables)
         return form.problem(
           id,
@@ -187,7 +207,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
       return keepSecret(form, values, secret, service, id);
     }
     const written = formFields(known, spec);
-    const sent = serviceVariables(written.headers);
+    const sent = serviceVariables(written);
     const kept = Object.entries(secrets ?? {}).filter(([name]) => sent.includes(name));
     const keptSecrets = kept.length > 0 ? Object.fromEntries(kept) : undefined;
     const sentUrls = url ? { urls } : {};
@@ -221,9 +241,10 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
         secretModal(secret, variable, used, service, edits, context, (chosen) => {
           secrets = { ...secrets, [chosen]: secret.secret };
           const next = withVariable(inkValues(values, spec), secret, chosen);
-          form.set({ [id]: next.headers[secret.index] ?? "" });
+          const line = (next[secret.kind] ?? [])[secret.index] ?? "";
+          form.set({ [id]: line });
           stack.pop();
-          submit({ ...values, [id]: next.headers[secret.index] ?? "" }, form);
+          submit({ ...values, [id]: line }, form);
         }),
       );
       context.redraw();
@@ -281,7 +302,7 @@ function secretModal(
         const variable = fieldValue(name);
         // Under a name another header of the form sends, that header would send this secret.
         if (taken.includes(variable)) {
-          problem = `${variable} already keeps another header`;
+          problem = `${variable} already keeps another secret`;
           return true;
         }
         waiting = true;

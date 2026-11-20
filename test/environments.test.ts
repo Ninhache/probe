@@ -514,10 +514,10 @@ describe("probe var --env", () => {
     await writeFile(local, KEPT_FOR_PROD);
 
     expect((await probe(root, ["var", "--env", "prod"])).stdout).toBe(
-      "API_KEY  set in .probe/local.yml for prod  (sent by api)\n",
+      "API_KEY  set in .probe/local.yml for prod  (used by api)\n",
     );
     expect((await probe(root, ["var", "--env", "staging"])).stdout).toBe(
-      "API_KEY  not set: probe var API_KEY --env staging  (sent by api)\n",
+      "API_KEY  not set: probe var API_KEY --env staging  (used by api)\n",
     );
   });
 
@@ -628,7 +628,7 @@ describe("probe env", () => {
       stdout: [
         "Created .probe/envs/staging.yml from .probe/envs/prod.yml.",
         "Change the addresses there, then: probe check --env staging",
-        "It sends API_KEY: probe var API_KEY --env staging (or export it).",
+        "It uses API_KEY: probe var API_KEY --env staging (or export it).",
         "",
       ].join("\n"),
     });

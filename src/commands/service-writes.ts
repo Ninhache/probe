@@ -6,7 +6,7 @@ import { type Config, DEFAULT_METHOD, declaresAddress, type Service } from "../c
 import { rawServices, writeServices } from "./shared";
 
 /** No address at all: the service takes it from `urls:`, one per value of the `url` parameter. */
-export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers"> &
+export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers" | "env"> &
   Partial<Pick<Service, "host" | "port" | "path" | "type" | "command">>;
 
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */
@@ -29,8 +29,9 @@ const DEFAULTS: Partial<ServiceFields> = {
   expect: undefined,
   method: DEFAULT_METHOD,
   headers: undefined,
+  env: undefined,
 };
-const FIELD_KEYS = ["host", "port", "path", "expect", "method", "headers"] as const;
+const FIELD_KEYS = ["host", "port", "path", "expect", "method", "headers", "env"] as const;
 
 /** `expect: [200]` and `expect: 200` say the same: a form cannot tell which one was written. */
 const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].flat());

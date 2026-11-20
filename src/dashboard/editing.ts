@@ -51,10 +51,10 @@ export interface EditCallbacks {
 }
 
 const pickFields = (service: Service): ServiceFields => {
-  const { url, host, port, path, expect, method, headers, command } = service;
+  const { url, host, port, path, expect, method, headers, command, env } = service;
   // Read from `urls:`, the address is not the service's: the form shows none, and writes none back.
   const address = declaresAddress(service) ? { url, host, port, path } : {};
-  return { ...address, expect, method, headers, command };
+  return { ...address, expect, method, headers, command, env };
 };
 
 export const timeoutsOf = ({ services }: Config): Record<string, number> =>
@@ -88,7 +88,9 @@ export interface Editing {
 const reads = (config: () => Config) => ({
   serviceForm(name?: string): ServiceForm {
     const service = name === undefined ? undefined : config().services[name];
-    return (service ? serviceType(service) : defaultType()).form;
+    if (!service) return defaultType().form;
+    const { form } = serviceType(service);
+    return form.forService?.(service) ?? form;
   },
   serviceFields(name: string): ServiceFields | undefined {
     const service = config().services[name];
@@ -128,7 +130,7 @@ export function liveEditing(initial: Config, edits: EditCallbacks = {}): Editing
   const variables = edits.variableSources && variableTools(() => config, edits.variableSources);
   const { onServiceWrite, onParameterWrite, onUndo, onRedo } = edits;
   const unsetNote = async (current: Config, name: string, env?: string) => {
-    const sent = serviceVariables(current.services[name]?.headers);
+    const sent = serviceVariables(current.services[name] ?? {});
     const found = (await edits.variableSources?.(sent, env)) ?? {};
     const unset = sent.filter((variable) => !found[variable]);
     if (!edits.variableSources || unset.length === 0) return undefined;

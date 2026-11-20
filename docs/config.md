@@ -147,11 +147,36 @@ services:
   `exitCode` to a command service.
 - Past its `timeout` (3 s by default) the command is killed, with everything it started. Give a slow one a
   larger `timeout`.
-- It takes `timeout`, `hint` and `tags` like any service, and none of the keys that describe a request: `url`,
+- It takes `timeout`, `hint` and `tags` like any service, plus `env`, and none of the keys that describe a request: `url`,
   `urls`, `host`, `port`, `path`, `method`, `headers`, `expect`, `contains`. `probe open` has nothing to open, and
   [parameters](features/parameters.md) leave it as it is.
 - Add one with `probe add db --command "redis-cli ping"`, or `probe add db -- pg_isready -q` for the list form.
   In the dashboard, edit its command with `e`: a list is shown as JSON, `["pg_isready", "-q"]`.
+
+#### env
+
+A command that needs a login gets its variables in `env`: a map of name to value. Since 1.5.0.
+
+```yaml
+services:
+  db:
+    type: command
+    command: [mysqladmin, ping, -u, app]
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PWD: ${DB_PASSWORD}
+```
+
+- The values go to the environment of the process, never to its arguments: `ps` does not show them.
+- A value may hold `${NAME}` references, filled in like the [headers](features/headers.md#variables): from the
+  environment, else from `.probe/local.yml`. `probe var DB_PASSWORD` keeps it on this machine.
+- A variable that is not set means the command is not run: the service is down, with the `probe var` that sets it.
+- A name that says secret (`PASSWORD`, `PWD`, `PASS`, `TOKEN`, `SECRET`, `KEY`...) must use a reference: a value
+  written as is makes the config invalid. Other values are plain text, shared with the repository.
+- What the command writes to stderr shows `${DB_PASSWORD}` where it repeats the value.
+- Names are letters, digits and `_`. Only a `type: command` service has `env`; an http service has `headers`.
+- Add it with `probe add db --command "mysqladmin ping" --setenv MYSQL_PWD='${DB_PASSWORD}'` (repeatable), or in
+  the dashboard: `e` on the service, one `NAME=value` per line. A secret typed there is moved to `.probe/local.yml`.
 
 Trust: `config.yml` is committed, and every `probe check`, `probe wait` and dashboard refresh runs each command in
 it. Read the commands of a config you pull as you read its Makefile. Never put a secret in one: it is shared

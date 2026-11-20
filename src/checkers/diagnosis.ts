@@ -181,7 +181,7 @@ export function diagnoseBody(text: string, status: number, gap: BodyGap): Diagno
 }
 
 function sentBy(service: Service): string {
-  const variables = serviceVariables(service.headers);
+  const variables = serviceVariables(service);
   return variables.length > 0 ? variables.join(", ") : `\`headers\` in ${CONFIG}`;
 }
 
@@ -203,10 +203,14 @@ export function diagnoseUnset(
   };
 }
 
-export function diagnoseUnsendable(names: string[], environment?: string): Diagnosis {
+export function diagnoseUnsendable(
+  names: string[],
+  environment?: string,
+  where = "a header",
+): Diagnosis {
   const [first = ""] = names;
   return {
-    error: `${names.join(", ")} cannot go in a header`,
+    error: `${names.join(", ")} cannot go in ${where}`,
     hint: `a line break or an unusual character in its value: set it again with ${setCommand(first, environment)}`,
   };
 }

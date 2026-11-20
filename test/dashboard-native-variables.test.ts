@@ -157,7 +157,7 @@ describe("the variables panel", () => {
     });
     await tick();
 
-    expect(made.draw()).toContain("No header of local sends a variable");
+    expect(made.draw()).toContain("No header or env of local uses a variable");
   });
 
   it("should close on v and on esc, and offer the keys in the bar", async () => {

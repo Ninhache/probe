@@ -116,8 +116,8 @@ describe("resolveHeaders", () => {
   });
 
   it("lists the variables of a service once each", () => {
-    expect(serviceVariables(templates)).toEqual(["API_TOKEN", "TENANT"]);
-    expect(serviceVariables(undefined)).toEqual([]);
+    expect(serviceVariables({ headers: templates })).toEqual(["API_TOKEN", "TENANT"]);
+    expect(serviceVariables({})).toEqual([]);
   });
 });
 

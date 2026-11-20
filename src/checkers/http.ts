@@ -96,7 +96,7 @@ function expectsRedirect(expect: Service["expect"]): boolean {
 
 // probe may get them from `local.yml`, a shell does not.
 export function curlNote(service: Service, env: NodeJS.ProcessEnv): string | undefined {
-  const absent = serviceVariables(service.headers).filter((name) => !env[name]);
+  const absent = serviceVariables(service).filter((name) => !env[name]);
   if (absent.length === 0) return undefined;
   return `it reads ${absent.join(", ")} from the shell that runs it: export ${absent.length > 1 ? "them" : "it"} there first`;
 }

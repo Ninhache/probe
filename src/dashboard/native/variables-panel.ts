@@ -8,7 +8,7 @@ const WIDTH = 72;
 const MAX_ROWS = 14;
 
 /**
- * Every variable the headers of the services of `env` send, and where each is set there.
+ * Every variable the headers or env of the services of `env` send, and where each is set there.
  * Only the place is shown, never a value: enter and d go through the editor, which writes `env`'s own scope.
  */
 export function variablesPanel(env: string, actions: ViewActions): Panel {
@@ -33,7 +33,7 @@ export function variablesPanel(env: string, actions: ViewActions): Panel {
     },
     draw(screen, inner) {
       if (found.length === 0) {
-        const text = loaded ? `No header of ${env} sends a variable` : "reading...";
+        const text = loaded ? `No header or env of ${env} uses a variable` : "reading...";
         screen.text(inner.x + PAD, inner.y, text, { fg: t.muted }, inner.w - PAD);
         return;
       }
