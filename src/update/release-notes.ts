@@ -15,6 +15,15 @@ export const IMPORTANT_KINDS: readonly NoteKind[] = ["schema", "completion", "br
  */
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: "1.6.0",
+    items: [
+      {
+        kind: "info",
+        text: "New service types postgres, mysql and redis: give host, port, user, database and a ${VAR} password, probe runs the client for you.",
+      },
+    ],
+  },
+  {
     version: "1.5.0",
     items: [
       {
