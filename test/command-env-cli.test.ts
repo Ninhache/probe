@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { tempDir } from "./helpers";
+import { inheritedEnv, tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const SECRET = "Zq9-mk4p-sample";
@@ -16,7 +16,7 @@ interface Run {
 
 function probe(cwd: string, args: string[], { stdin = "" } = {}): Promise<Run> {
   return new Promise((done) => {
-    const env: NodeJS.ProcessEnv = { ...process.env, PROBE_NO_UPDATE_CHECK: "1" };
+    const env: NodeJS.ProcessEnv = { ...inheritedEnv(), PROBE_NO_UPDATE_CHECK: "1" };
     delete env[VARIABLE];
     const child = spawn(process.execPath, [CLI, ...args], { cwd, env });
     let stdout = "";
@@ -116,6 +116,18 @@ describe("a command with an env", () => {
     expect(text.stdout).toContain(`denied for \${${VARIABLE}}`);
     expect(json.stdout).toContain(`denied for \${${VARIABLE}}`);
     for (const output of [text, json]) expect(output.stdout + output.stderr).not.toContain(SECRET);
+  });
+
+  it("lists the names it sets, never a value", async () => {
+    const root = await project();
+    await withService(root);
+    await probe(root, ["var", VARIABLE], { stdin: `${SECRET}\n` });
+
+    const listing = await probe(root, ["ls"]);
+
+    expect(listing.stdout).toContain("sets DB_PWD");
+    expect(listing.stdout + listing.stderr).not.toContain(SECRET);
+    expect(listing.stdout).not.toContain(VARIABLE);
   });
 
   it("does not run while the variable is not set, and lists it under probe var", async () => {

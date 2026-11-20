@@ -19,10 +19,8 @@ const ESC = "\x1b";
 const ENTER = "\r";
 const TAB = "\t";
 const DOWN = `${ESC}[B`;
-const UP = `${ESC}[A`;
 const CTRL_U = "\x15";
 const SECRET = "s3cr3t-token-0123456789";
-const ACCEPT = "Accept: text/plain";
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const withEnv = (env?: Record<string, string>): Config =>

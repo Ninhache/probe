@@ -147,7 +147,7 @@ services:
   `exitCode` to a command service.
 - Past its `timeout` (3 s by default) the command is killed, with everything it started. Give a slow one a
   larger `timeout`.
-- It takes `timeout`, `hint`, `tags` and `env` like any service, and none of the keys that describe a request: `url`,
+- It takes `timeout`, `hint` and `tags` like any service, plus `env`, and none of the keys that describe a request: `url`,
   `urls`, `host`, `port`, `path`, `method`, `headers`, `expect`, `contains`. `probe open` has nothing to open, and
   [parameters](features/parameters.md) leave it as it is.
 - Add one with `probe add db --command "redis-cli ping"`, or `probe add db -- pg_isready -q` for the list form.

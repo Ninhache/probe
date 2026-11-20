@@ -100,9 +100,6 @@ const typedLines = (values: FormValues, kind: LineKind) =>
 
 const typedHeaders = (values: FormValues) => typedLines(values, "headers");
 
-const parseLine = (kind: LineKind, line: string) =>
-  kind === "env" ? parseEnvLine(line) : parseHeaderLine(line);
-
 const KINDS: readonly LineKind[] = ["headers", "env"];
 
 function formHeaders(values: FormValues): HeaderTemplates | undefined {

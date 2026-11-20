@@ -185,7 +185,7 @@ describe("service form of a command", () => {
     [["no equal sign"], "A variable as NAME=value"],
     [["1BAD=x"], "Expects a name of letters, digits and _"],
     [["A=1", "A=2"], "A is given twice"],
-    [["MYSQL_PWD=${not valid}"], "MYSQL_PWD expects a variable name between braces"],
+    [[`MYSQL_PWD=\${not valid}`], "MYSQL_PWD expects a variable name between braces"],
   ])("should refuse the lines %j", (env, message) => {
     const problem = formProblem(rows, typed(env), [], commandForm);
 
