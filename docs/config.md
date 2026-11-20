@@ -182,6 +182,56 @@ Trust: `config.yml` is committed, and every `probe check`, `probe wait` and dash
 it. Read the commands of a config you pull as you read its Makefile. Never put a secret in one: it is shared
 with the repository, and it shows in the process list.
 
+### Database services
+
+`type: postgres`, `type: mysql` and `type: redis` check that a database accepts a login. Since 1.6.0.
+
+```yaml
+services:
+  db:
+    type: postgres
+    port: 5432 # host defaults to localhost
+    user: root # default: postgres for postgres, root for mysql, none for redis
+    database: wakfuli
+    password: ${PG_PASSWORD}
+  mysql:
+    type: mysql
+    user: app
+    database: shop
+    password: ${MYSQL_PASSWORD}
+  cache:
+    type: redis
+    database: 1
+    password: ${REDIS_PASSWORD}
+```
+
+Each one runs the client of the database, which must be installed and on the `PATH`, as a [command service](#command-services) does:
+
+| Type       | Runs                                                                           | Port | Up when                                         |
+| ---------- | ------------------------------------------------------------------------------ | ---- | ----------------------------------------------- |
+| `postgres` | `psql -X -w -h host -p port -U user [-d database] -c "select 1"`               | 5432 | it exits `0`                                    |
+| `mysql`    | `mysql --protocol=TCP -h host -P port -u user [--database=name] -e "select 1"` | 3306 | it exits `0`                                    |
+| `redis`    | `redis-cli -h host -p port [--user user] [-n database] ping`                   | 6379 | it exits `0`, says `PONG` and nothing on stderr |
+
+- `host`, `port`, `user`, `database` and `password` are optional. They are accepted on these three types only, and
+  these types refuse the keys that describe a request or a command (`url`, `path`, `command`, `env`...).
+- `password` is a `${NAME}` reference, nothing else: the value is refused, and never repeated in the message.
+  The reference is filled in like an [env](#env) value: from the environment, else from `.probe/local.yml`. Keep the
+  value on this machine with `probe var PG_PASSWORD`, or in the dashboard: type it in the Password field and it is
+  moved to `.probe/local.yml`, with only the reference left in `config.yml`.
+- The password reaches the client through its environment (`PGPASSWORD`, `MYSQL_PWD`, `REDISCLI_AUTH`), never its
+  arguments: `ps` does not show it. It is not in `config.yml`, `check --json`, the copied command or any message.
+- A variable that is not set means the client is not run: the service is down, with the `probe var` that sets it.
+- A client that is not installed makes the service down: `psql is not installed`.
+- `user` and a `database` name are letters, digits and `_ . $ -` (a `@` too for the user), and do not start with `-`.
+  For `redis`, `database` is the number of the database, e.g. `0`.
+- `psql` never asks for a password: a wrong or a missing one is a down service, not a hang. `redis-cli` exits `0` on
+  an error reply, so `probe` looks for `PONG` itself.
+- `c` in the dashboard and `probe curl` give the client command with `PGPASSWORD="${PG_PASSWORD}"` as a reference
+  for your shell to fill in.
+- `timeout`, `hint` and `tags` work as for any service. Docker without a local client is not covered: use a
+  [command service](#command-services) with `docker compose exec` for that.
+
 ### https
 
 The certificate is checked. A local CA installed on the machine (`mkcert -install`) works as it does in a

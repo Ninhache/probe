@@ -42,8 +42,11 @@ const fieldTexts = ({ headers: _, env: __, ...fields }: FormValues) =>
 export type FormRow = FormField;
 
 export interface FormSecret {
-  kind: LineKind;
+  /** A line of the headers or of the env, or `field`: a field of the form, named by `field`. */
+  kind: LineKind | "field";
   index: number;
+  /** The key of the field that holds the secret, for `kind: "field"`. */
+  field?: string;
   /** The name of the header or of the variable the secret is for. */
   header: string;
   scheme: string;
@@ -146,7 +149,17 @@ export function withLine(
 export const withHeaderLine = (values: FormValues, index: number, line: string): FormValues =>
   withLine(values, "headers", index, line);
 
-export function formSecret(values: FormValues): FormSecret | undefined {
+export function formSecret(
+  values: FormValues,
+  form?: Pick<ServiceForm, "secretField" | "fields">,
+): FormSecret | undefined {
+  const field = form?.secretField;
+  const typed = field === undefined ? "" : fieldText(values, field).trim();
+  // Whatever holds `${` is a reference or is refused by the field: never kept as a secret.
+  if (field !== undefined && typed !== "" && !typed.includes("${")) {
+    const label = form?.fields.find(({ key }) => key === field)?.label ?? field;
+    return { kind: "field", index: 0, field, header: label, scheme: "", secret: typed };
+  }
   for (const { line, index } of typedLines(values, "headers")) {
     const [header, value] = parseHeaderLine(line) ?? [];
     if (header === undefined || value === undefined || !holdsSecret(header, value)) continue;
@@ -161,6 +174,7 @@ export function formSecret(values: FormValues): FormSecret | undefined {
 }
 
 export function withVariable(values: FormValues, found: FormSecret, variable: string): FormValues {
+  if (found.kind === "field") return { ...values, [found.field as string]: reference(variable) };
   const line =
     found.kind === "env"
       ? `${found.header}=${reference(variable)}`

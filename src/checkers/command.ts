@@ -24,6 +24,8 @@ type Outcome =
       code: number | null;
       signal: NodeJS.Signals | null;
       stderr: string;
+      /** Only when asked for: what the command printed, its last bytes. */
+      stdout: string;
       /** Bytes fell off the front: the first line may start in the middle of a secret. */
       cut: boolean;
     }
@@ -55,7 +57,7 @@ function shellTemplate(value: string): string {
 }
 
 /** The command a shell runs, with the env of the service written as references. */
-function copiedCommand(service: Service): string {
+export function copiedCommand(service: Pick<Service, "command" | "env">): string {
   const command = service.command as Command;
   const assignments = Object.entries(service.env ?? {}).map(
     ([name, value]) => `${name}=${shellTemplate(value)}`,
@@ -67,7 +69,10 @@ function copiedCommand(service: Service): string {
 }
 
 // probe may get them from `local.yml`, a shell does not.
-function copiedNote(service: Service, env: NodeJS.ProcessEnv): string {
+export function copiedNote(
+  service: Pick<Service, "env" | "password">,
+  env: NodeJS.ProcessEnv,
+): string {
   const root = "it runs from the project root";
   const absent = serviceVariables(service).filter((name) => !env[name]);
   if (absent.length === 0) return root;
@@ -94,10 +99,34 @@ function lastLine(
   return last === undefined ? undefined : truncate(last, COMMAND_STDERR_CHARACTERS);
 }
 
+/** The last bytes of a stream, drained to the end even past the cap: a full pipe would block the command. */
+function tailOf(stream: NodeJS.ReadableStream | null) {
+  let tail = Buffer.alloc(0);
+  let cut = false;
+  stream?.on("data", (chunk: Buffer) => {
+    const all = Buffer.concat([tail, chunk]);
+    cut ||= all.length > COMMAND_STDERR_BYTES;
+    tail = all.subarray(-COMMAND_STDERR_BYTES);
+  });
+  return { text: () => tail.toString("utf8"), cut: () => cut };
+}
+
+function firstLine(stdout: string, references: [string, string][], cut: boolean) {
+  const line = referenced(stripVTControlCharacters(stdout), references)
+    .split(/\r?\n|\r/)
+    .map((text) => text.trim())
+    .find((text) => text !== "");
+  // Its start may have fallen off, in the middle of a secret that cannot be matched.
+  return cut && references.length > 0
+    ? undefined
+    : line && truncate(line, COMMAND_STDERR_CHARACTERS);
+}
+
 function run(
   command: Command,
   { timeoutMs, signal, cwd }: Pick<CheckContext, "timeoutMs" | "signal" | "cwd">,
   env: Record<string, string> = {},
+  readStdout = false,
   platform: Platform = currentPlatform,
 ): Promise<Outcome> {
   return new Promise((resolve) => {
@@ -106,7 +135,11 @@ function run(
       cwd,
       // The variables are given to the process, never to its arguments: `ps` would show them.
       env: { ...process.env, ...env },
-      stdio: ["ignore", "ignore", "pipe"] as ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", readStdout ? "pipe" : "ignore", "pipe"] as [
+        "ignore",
+        "ignore" | "pipe",
+        "pipe",
+      ],
       windowsHide: true,
       // Its own process group on POSIX, so the whole tree can be killed at once.
       detached: platform.ownProcessGroup,
@@ -121,8 +154,6 @@ function run(
       return resolve({ kind: "error", error: error as NodeJS.ErrnoException });
     }
 
-    let tail = Buffer.alloc(0);
-    let cut = false;
     let settled = false;
     let drain: NodeJS.Timeout | undefined;
     const finish = (outcome: Outcome) => {
@@ -132,6 +163,7 @@ function run(
       clearTimeout(drain);
       signal?.removeEventListener("abort", onAbort);
       child.stderr?.destroy();
+      child.stdout?.destroy();
       resolve(outcome);
     };
     const stop = (kind: "timeout" | "aborted") => {
@@ -143,15 +175,18 @@ function run(
     const timer = setTimeout(() => stop("timeout"), timeoutMs);
     signal?.addEventListener("abort", onAbort, { once: true });
 
-    // Drained to the end even past the cap: a full pipe would block the command.
-    child.stderr?.on("data", (chunk: Buffer) => {
-      const all = Buffer.concat([tail, chunk]);
-      cut ||= all.length > COMMAND_STDERR_BYTES;
-      tail = all.subarray(-COMMAND_STDERR_BYTES);
-    });
+    const stderr = tailOf(child.stderr);
+    const stdout = tailOf(child.stdout);
     child.on("error", (error) => finish({ kind: "error", error }));
     const done = (code: number | null, signal: NodeJS.Signals | null) =>
-      finish({ kind: "exit", code, signal, stderr: tail.toString("utf8"), cut });
+      finish({
+        kind: "exit",
+        code,
+        signal,
+        stderr: stderr.text(),
+        stdout: stdout.text(),
+        cut: stderr.cut() || stdout.cut(),
+      });
     child.on("close", done);
     // A command that left a process behind keeps the pipe open: its own exit is what counts.
     child.on("exit", (code, signal) => {
@@ -169,6 +204,7 @@ function failure(
   outcome: Outcome,
   timeoutMs: number,
   references: [string, string][] = [],
+  notFound?: Diagnosis,
   platform: Platform = currentPlatform,
 ) {
   if (outcome.kind === "timeout") {
@@ -182,6 +218,7 @@ function failure(
     const { code } = outcome.error;
     const program = programOf(command);
     const windows = platform.hasCmdShims && typeof command !== "string";
+    if (code === "ENOENT" && notFound) return notFound;
     if (code === "ENOENT" && typeof command !== "string") {
       return {
         error: `command not found: ${program}`,
@@ -198,47 +235,104 @@ function failure(
   return { error: lastLine(outcome.stderr, references, outcome.cut) ?? `exit ${outcome.code}` };
 }
 
+/** Why a command that exited 0 is still down: what it said instead of the text expected. */
+function missingAnswer(
+  outcome: Extract<Outcome, { kind: "exit" }>,
+  expected: string,
+  references: [string, string][],
+) {
+  const said =
+    lastLine(outcome.stderr, references, outcome.cut) ??
+    firstLine(outcome.stdout, references, outcome.cut);
+  return { error: said ?? `no ${expected} in its answer` };
+}
+
+/** What a service that runs a command through this checker says about itself and how it is run. */
+export interface CommandRun {
+  base: Pick<CheckResult, "name" | "type" | "target">;
+  command: Command;
+  /** The variables of the process, values written as `${NAME}` references. */
+  env?: Record<string, string>;
+  /** What the unsendable variables cannot go in, in the diagnosis: `an env value` by default. */
+  envPlace?: string;
+  /**
+   * Up only when the command exits 0, says this on stdout and nothing on stderr: some clients
+   * (redis-cli) exit 0 on an error reply.
+   */
+  stdoutIncludes?: string;
+  /** What to say when the program is not installed, instead of the generic message. */
+  notFound?: Diagnosis;
+}
+
+export async function runCommand(
+  {
+    base,
+    command,
+    env: templates,
+    envPlace = "an env value",
+    stdoutIncludes,
+    notFound,
+  }: CommandRun,
+  context: CheckContext,
+): Promise<CheckResult> {
+  const started = performance.now();
+  let env: Record<string, string> = {};
+  let references: [string, string][] = [];
+  if (templates) {
+    const { variables } = context;
+    const resolved = resolveEnv(templates, variables?.lookup ?? (() => undefined));
+    // Nothing runs: a command without its credentials would only say it was refused.
+    const failed = (diagnosis: Diagnosis): CheckResult => ({
+      ...base,
+      ok: false,
+      latencyMs: 0,
+      ...diagnosis,
+    });
+    if ("unset" in resolved) return failed(diagnoseUnset(resolved.unset, variables ?? {}));
+    if ("unsendable" in resolved) {
+      return failed(diagnoseUnsendable(resolved.unsendable, variables?.environment, envPlace));
+    }
+    env = Object.fromEntries(resolved.entries);
+    references = resolved.references;
+  }
+  const outcome = await run(command, context, env, stdoutIncludes !== undefined);
+  const latencyMs = Math.round(performance.now() - started);
+  if (outcome.kind === "exit" && outcome.code === 0) {
+    const answered =
+      stdoutIncludes === undefined ||
+      (outcome.stdout.includes(stdoutIncludes) && outcome.stderr.trim() === "");
+    if (answered) return { ...base, ok: true, exitCode: 0, latencyMs };
+    return {
+      ...base,
+      ok: false,
+      exitCode: 0,
+      latencyMs,
+      ...missingAnswer(outcome, stdoutIncludes as string, references),
+    };
+  }
+  return {
+    ...base,
+    ok: false,
+    ...(outcome.kind === "exit" && outcome.code !== null ? { exitCode: outcome.code } : {}),
+    latencyMs,
+    ...failure(command, outcome, context.timeoutMs, references, notFound),
+  };
+}
+
 export const commandChecker: ServiceType = {
   type: "command",
   target: (service) => commandTarget(service.command as Command),
   copy: (service, env) => ({ command: copiedCommand(service), note: copiedNote(service, env) }),
   form: commandForm,
-  async check(name, service, context): Promise<CheckResult> {
+  check: (name, service, context) => {
     const command = service.command as Command;
-    const base = { name, type: "command", target: commandTarget(command) };
-    const started = performance.now();
-    let env: Record<string, string> = {};
-    let references: [string, string][] = [];
-    if (service.env) {
-      const { variables } = context;
-      const resolved = resolveEnv(service.env, variables?.lookup ?? (() => undefined));
-      // Nothing runs: a command without its credentials would only say it was refused.
-      const failed = (diagnosis: Diagnosis): CheckResult => ({
-        ...base,
-        ok: false,
-        latencyMs: 0,
-        ...diagnosis,
-      });
-      if ("unset" in resolved) return failed(diagnoseUnset(resolved.unset, variables ?? {}));
-      if ("unsendable" in resolved) {
-        return failed(
-          diagnoseUnsendable(resolved.unsendable, variables?.environment, "an env value"),
-        );
-      }
-      env = Object.fromEntries(resolved.entries);
-      references = resolved.references;
-    }
-    const outcome = await run(command, context, env);
-    const latencyMs = Math.round(performance.now() - started);
-    if (outcome.kind === "exit" && outcome.code === 0) {
-      return { ...base, ok: true, exitCode: 0, latencyMs };
-    }
-    return {
-      ...base,
-      ok: false,
-      ...(outcome.kind === "exit" && outcome.code !== null ? { exitCode: outcome.code } : {}),
-      latencyMs,
-      ...failure(command, outcome, context.timeoutMs, references),
-    };
+    return runCommand(
+      {
+        base: { name, type: "command", target: commandTarget(command) },
+        command,
+        env: service.env,
+      },
+      context,
+    );
   },
 };

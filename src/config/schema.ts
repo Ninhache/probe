@@ -38,8 +38,41 @@ export function urlProblem(value: string): string | undefined {
   return undefined;
 }
 
-export const SERVICE_TYPES = ["http", "command"] as const;
+/** The types that connect to a database with its own client; each is a `command` underneath. */
+export const DATABASE_TYPES = ["postgres", "mysql", "redis"] as const;
+export type DatabaseKind = (typeof DATABASE_TYPES)[number];
+
+export const SERVICE_TYPES = ["http", "command", ...DATABASE_TYPES] as const;
 export type ServiceKind = (typeof SERVICE_TYPES)[number];
+
+export const isDatabaseKind = (type: string | undefined): type is DatabaseKind =>
+  (DATABASE_TYPES as readonly (string | undefined)[]).includes(type);
+
+// The client takes these as the value of a flag: no leading `-`, no `=` (psql reads a `dbname`
+// holding one as a connection string), no space.
+const USER_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.@$-]*$/;
+const DATABASE_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.$-]*$/;
+const DATABASE_INDEX_PATTERN = /^\d+$/;
+const PASSWORD_REFERENCE = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
+
+export const USER_EXPECTED = "a user name of letters, digits and _ . @ $ -, e.g. postgres";
+export const DATABASE_NAME_EXPECTED = "a database name of letters, digits and _ . $ -, e.g. app";
+export const DATABASE_INDEX_EXPECTED = "a database number, e.g. 0";
+// Never the value itself: it may be the password, and config.yml is shared.
+export const PASSWORD_EXPECTED = `a reference to a variable, e.g. \${PG_PASSWORD}: config.yml is shared, so the value goes in local.yml (probe var PG_PASSWORD)`;
+
+export const userProblem = (user: string): string | undefined =>
+  USER_PATTERN.test(user) ? undefined : USER_EXPECTED;
+
+export function databaseProblem(type: DatabaseKind, database: string | number): string | undefined {
+  const text = String(database);
+  if (type === "redis")
+    return DATABASE_INDEX_PATTERN.test(text) ? undefined : DATABASE_INDEX_EXPECTED;
+  return DATABASE_NAME_PATTERN.test(text) ? undefined : DATABASE_NAME_EXPECTED;
+}
+
+export const passwordProblem = (password: string): string | undefined =>
+  PASSWORD_REFERENCE.test(password) ? undefined : PASSWORD_EXPECTED;
 
 export interface Service {
   /** Absent for an http service: the key is optional, and a writer never adds it. */
@@ -57,6 +90,12 @@ export interface Service {
   headers?: Record<string, string>;
   /** Only for a command: the variables its process is given. */
   env?: Record<string, string>;
+  /** Only for a database service. */
+  user?: string;
+  /** A name, or for redis the number of the database; only for a database service. */
+  database?: string | number;
+  /** Only for a database service: a `${NAME}` reference, never the password. */
+  password?: string;
   hint?: string;
   tags?: string[];
   contains?: string;
@@ -159,6 +198,9 @@ export const serviceObjectV1 = z.strictObject({
     .optional(),
   headers: headersSchema.optional(),
   env: envSchema.optional(),
+  user: z.string().min(1).optional(),
+  database: z.union([z.string().min(1), z.number().int().min(0)]).optional(),
+  password: z.string().optional(),
   hint: oneLine(HINT_EXPECTED).optional(),
   tags: z.array(z.string().regex(SERVICE_NAME_PATTERN, NAME_EXPECTED)).optional(),
   contains: oneLine(CONTAINS_EXPECTED).optional(),
@@ -193,7 +235,51 @@ const HTTP_ONLY_KEYS = [
   "contains",
 ] as const;
 
+const DATABASE_KEYS = ["user", "database", "password"] as const;
+
+const DATABASE_ONLY_MESSAGE =
+  "needs `type: postgres`, `type: mysql` or `type: redis`: only a database service has a user, a database and a password";
+
+// Said without the value: a password typed there must not come back on screen.
+function databaseService(service: z.infer<typeof serviceObjectV1>, ctx: z.core.$RefinementCtx) {
+  const type = service.type as DatabaseKind;
+  const refused = [...HTTP_ONLY_KEYS, "command", "env"].filter(
+    (key) => key !== "host" && key !== "port" && service[key as keyof typeof service] !== undefined,
+  );
+  const fail = (key: string, message: string) =>
+    ctx.issues.push({ code: "custom", message, input: undefined, path: [key] });
+  for (const key of refused) {
+    fail(
+      key,
+      `cannot be set with \`type: ${type}\`: it connects to a database, it sends no request`,
+    );
+  }
+  const user = service.user === undefined ? undefined : userProblem(service.user);
+  if (user) fail("user", `expected ${user}`);
+  const database =
+    service.database === undefined ? undefined : databaseProblem(type, service.database);
+  if (database) fail("database", `expected ${database}`);
+  const password = service.password === undefined ? undefined : passwordProblem(service.password);
+  if (password) fail("password", `expected ${password}`);
+  if (refused.length > 0 || user || database || password) return z.NEVER;
+  return service as Service;
+}
+
 export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service => {
+  if (isDatabaseKind(service.type)) return databaseService(service, ctx);
+  const misplaced = DATABASE_KEYS.filter((key) => service[key] !== undefined);
+  for (const key of misplaced) {
+    ctx.issues.push({
+      code: "custom",
+      message:
+        service.type === "command"
+          ? "cannot be set with `type: command`: only a database service has a user, a database and a password"
+          : DATABASE_ONLY_MESSAGE,
+      input: undefined,
+      path: [key],
+    });
+  }
+  if (misplaced.length > 0) return z.NEVER;
   if (service.type === "command") {
     const { command, ...others } = service;
     const extra = HTTP_ONLY_KEYS.filter((key) => service[key] !== undefined);

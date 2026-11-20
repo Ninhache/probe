@@ -37,6 +37,22 @@ describe("writeService", () => {
     expect((await loadConfig(paths)).config.services.db?.env).toBeUndefined();
   });
 
+  it("should write a database service, and take its user, database and password out when emptied", async () => {
+    const paths = await tempProject(CONFIG);
+    const database = { type: "postgres", host: undefined, port: 5433 } as const;
+    const kept = { user: "app", database: "wakfuli", password: "$" + "{PG_PASSWORD}" };
+
+    await writeService(paths, { kind: "add", name: "db", fields: { ...database, ...kept } });
+    expect((await loadConfig(paths)).config.services.db).toEqual({
+      type: "postgres",
+      port: 5433,
+      ...kept,
+    });
+
+    await writeService(paths, { kind: "edit", name: "db", fields: { ...database } });
+    expect((await loadConfig(paths)).config.services.db).toEqual({ type: "postgres", port: 5433 });
+  });
+
   it("should add a service with only the keys that are not at their default", async () => {
     const paths = await tempProject(CONFIG);
 

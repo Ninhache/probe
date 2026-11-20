@@ -19,6 +19,8 @@ const ESC = "\x1b";
 const ENTER = "\r";
 const DOWN = `${ESC}[B`;
 const RIGHT = `${ESC}[C`;
+// http, command, postgres, mysql, redis: the Type row wraps around after the last.
+const TYPES = 5;
 const SECRET = "s3cr3t-token-0123456789";
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -96,7 +98,7 @@ describe("adding a service of any type", () => {
   it("goes back to the rows of http when http is chosen again", async () => {
     const { press, draw } = open(empty);
 
-    await press(`a${DOWN}${RIGHT}${RIGHT}`);
+    await press(`a${DOWN}${RIGHT.repeat(TYPES)}`);
 
     expect(draw()).toContain("Address");
     expect(draw()).not.toContain("Command");
@@ -129,6 +131,46 @@ describe("adding a service of any type", () => {
     expect(kept).toEqual([{ DB_PGPASSWORD: SECRET }]);
     expect(JSON.stringify(written())).not.toContain(SECRET);
     expect(screens.join("\n")).not.toContain(SECRET);
+  });
+
+  it("adds a postgres service, its password kept in local.yml and a reference in the config", async () => {
+    const { press, draw, kept, screens, written } = open(empty);
+
+    await press(`adb${DOWN}${RIGHT}${RIGHT}${DOWN}${DOWN}${DOWN}app${DOWN}wakfuli${DOWN}${SECRET}`);
+    expect(screens.at(-1)).not.toContain(SECRET);
+    await press(ENTER);
+    expect(draw()).toContain("Password holds a secret");
+    await press(ENTER);
+
+    expect(written()).toMatchObject({
+      kind: "add",
+      name: "db",
+      fields: { type: "postgres", user: "app", database: "wakfuli" },
+    });
+    const { password } = written().fields;
+    expect(password).toMatch(/^\$\{[A-Z_]+\}$/);
+    expect(Object.values(kept[0] ?? {})).toEqual([SECRET]);
+    expect(JSON.stringify(written())).not.toContain(SECRET);
+    expect(screens.join("\n")).not.toContain(SECRET);
+  });
+
+  it("refuses a password that mixes text and a reference, and does not show it", async () => {
+    const { press, draw, writes, screens } = open(empty);
+    const mixed = `pw-${reference("X")}`;
+
+    await press(`adb${DOWN}${RIGHT}${RIGHT}${DOWN}${DOWN}${DOWN}${DOWN}${DOWN}${mixed}${ENTER}`);
+
+    expect(draw()).toContain("Expects a reference alone");
+    expect(writes).toEqual([]);
+    expect(screens.join("\n")).not.toContain("pw-");
+  });
+
+  it("refuses a redis database that is not a number", async () => {
+    const { press, draw } = open(empty);
+
+    await press(`adb${DOWN}${RIGHT.repeat(4)}${DOWN}${DOWN}${DOWN}${DOWN}main${ENTER}`);
+
+    expect(draw()).toContain("a database number");
   });
 
   it("shows no Type row when editing", async () => {

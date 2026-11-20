@@ -1,9 +1,10 @@
 export type HeaderTemplates = Readonly<Record<string, string>>;
 
-/** What a service holds that can name a variable: the headers of a request, the env of a command. */
+/** What a service holds that can name a variable: the headers of a request, the env of a command, the password of a database. */
 export interface VariableUsers {
   headers?: HeaderTemplates;
   env?: HeaderTemplates;
+  password?: string;
 }
 
 export type VariableLookup = (name: string) => string | undefined;
@@ -89,9 +90,15 @@ function templateVariables(templates: HeaderTemplates | undefined): string[] {
   return [...new Set(Object.values(templates ?? {}).flatMap(referencedVariables))];
 }
 
-/** Every variable a service needs, once each: those of its headers, then those of its env. */
-export function serviceVariables({ headers, env }: VariableUsers): string[] {
-  return [...new Set([...templateVariables(headers), ...templateVariables(env)])];
+/** Every variable a service needs, once each: those of its headers, of its env, then of its password. */
+export function serviceVariables({ headers, env, password }: VariableUsers): string[] {
+  return [
+    ...new Set([
+      ...templateVariables(headers),
+      ...templateVariables(env),
+      ...(password === undefined ? [] : referencedVariables(password)),
+    ]),
+  ];
 }
 
 export function headerNameProblem(name: string): string | undefined {

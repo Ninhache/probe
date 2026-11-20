@@ -124,7 +124,7 @@ export function requireVariables(
     const scope = variables.environment === undefined ? "" : ` --env ${variables.environment}`;
     throw new ProbeError(
       "VARIABLE_UNSET",
-      `${name} ${service.type === "command" ? "needs" : "sends"} ${unset}, which is not set. Set it for this machine: probe var ${unset}${scope} (or export it).`,
+      `${name} ${service.type === undefined || service.type === "http" ? "sends" : "needs"} ${unset}, which is not set. Set it for this machine: probe var ${unset}${scope} (or export it).`,
     );
   }
 }
