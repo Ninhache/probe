@@ -38,6 +38,9 @@ probe var API_TOKEN --env prod   # the value sent to the environment prod, and t
 The [dashboard](dashboard.md) does both: `e` edits the headers of a service, `Enter` then `Enter` on a variable
 sets its value.
 
+The same variables fill the [`env` of a command service](../config.md#env), with the same rules: a reference
+for a secret, a value that stays on your machine.
+
 ## Rules
 
 - A header whose name says secret (`Authorization`, `Cookie`, `X-Api-Key`, anything with `token`, `key`,

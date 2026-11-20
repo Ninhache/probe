@@ -46,24 +46,24 @@ probe runs on Windows from PowerShell or Windows Terminal, installed with npm li
 
 ## Commands
 
-| Command            | What it does                                       |
-| ------------------ | -------------------------------------------------- |
-| `probe`            | Open the [dashboard](docs/features/dashboard.md)   |
-| `probe init`       | Create `.probe/` in this directory                 |
-| `probe add <name>` | Add a service                                      |
-| `probe rm <name>`  | Remove a service                                   |
-| `probe ls`         | List services                                      |
-| `probe check`      | Check all services, or the named ones              |
-| `probe wait`       | Check again until every service is up              |
-| `probe doctor`     | Say why a service is down                          |
-| `probe open`       | Open the URL of a service in the browser           |
-| `probe curl`       | Print the curl command that requests a service     |
-| `probe var`        | Set a variable the headers use, on this machine    |
-| `probe env`        | List the environments, or create one               |
-| `probe status`     | Version, pending migration, Makefile block, update |
-| `probe sync`       | Add or regenerate the Makefile block               |
-| `probe migrate`    | Migrate `.probe/config.yml` to the current schema  |
-| `probe completion` | Print the shell completion script                  |
+| Command            | What it does                                           |
+| ------------------ | ------------------------------------------------------ |
+| `probe`            | Open the [dashboard](docs/features/dashboard.md)       |
+| `probe init`       | Create `.probe/` in this directory                     |
+| `probe add <name>` | Add a service                                          |
+| `probe rm <name>`  | Remove a service                                       |
+| `probe ls`         | List services                                          |
+| `probe check`      | Check all services, or the named ones                  |
+| `probe wait`       | Check again until every service is up                  |
+| `probe doctor`     | Say why a service is down                              |
+| `probe open`       | Open the URL of a service in the browser               |
+| `probe curl`       | Print the curl command that requests a service         |
+| `probe var`        | Set a variable the headers or env use, on this machine |
+| `probe env`        | List the environments, or create one                   |
+| `probe status`     | Version, pending migration, Makefile block, update     |
+| `probe sync`       | Add or regenerate the Makefile block                   |
+| `probe migrate`    | Migrate `.probe/config.yml` to the current schema      |
+| `probe completion` | Print the shell completion script                      |
 
 Every option of every command: [docs/commands.md](docs/commands.md), or `probe <command> --help`.
 
