@@ -109,6 +109,8 @@ hand.
 
 `a` and `e` open a form: name, address, expected status, method, then one line per
 [header](headers.md) as `Name: value`, with an empty one at the end to add another.
+Adding also offers every service type (`http`, `command`) in a `Type` row after the name; the rows below follow
+the type chosen, and a field both types have keeps its value.
 
 | Key in the form  | What it does                                                         |
 | ---------------- | -------------------------------------------------------------------- |

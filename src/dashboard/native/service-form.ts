@@ -42,6 +42,7 @@ const BULLET = "•";
 const LINE_IDS: Readonly<Record<LineKind, string>> = { headers: "header:", env: "env:" };
 const URL_ID = "url:";
 const NAME_ID = "name";
+const TYPE_ID = "type";
 const URL_PLACEHOLDER = "https://staging.example.com";
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
@@ -109,23 +110,33 @@ const formTitle = (editing: string | undefined, target: string | undefined) => {
 /** The form that adds a service, or edits `editing`. */
 export function serviceFormModal(context: ServiceFormContext, editing?: string): Panel {
   const { editing: edits, stack } = context;
-  const spec = edits.serviceForm(editing);
-  const url = spec.replacedByUrl?.size ? edits.urlParameter() : undefined;
+  const types = editing === undefined ? edits.serviceTypes() : [];
+  const first = edits.serviceForm(editing, types[0]);
+  // Adding: the Type row decides the rows below it; its value is empty while the first is chosen.
+  const formOf = (values: FormValues) =>
+    editing === undefined ? edits.serviceForm(undefined, values[TYPE_ID] || types[0]) : first;
   const fields = editing === undefined ? undefined : edits.serviceFields(editing);
   const initial = modalValues(
-    fields ? formValues(fields, spec) : emptyForm(spec),
+    fields ? formValues(fields, first) : emptyForm(first),
     editing === undefined ? {} : (edits.addresses()[editing] ?? {}),
   );
-  const firstReplaced = spec.fields.find(({ key }) => spec.replacedByUrl?.has(key))?.key;
   // A secret named before its header was retyped or removed is kept nowhere.
   let secrets: Secrets | undefined;
+  const urlOf = (spec: ServiceForm) =>
+    spec.replacedByUrl?.size ? edits.urlParameter() : undefined;
 
-  const overridden = (values: FormValues) =>
+  const overridden = (values: FormValues, url = urlOf(formOf(values))) =>
     (url?.values ?? []).filter((value) => (values[`${URL_ID}${value}`] ?? "").trim() !== "");
 
   const layout = (values: FormValues): FormLayout => {
+    const spec = formOf(values);
+    const url = urlOf(spec);
+    const firstReplaced = spec.fields.find(({ key }) => spec.replacedByUrl?.has(key))?.key;
     const lines: FormLine[] = [];
-    if (editing === undefined) lines.push({ id: NAME_ID, label: "Name", placeholder: "api" });
+    if (editing === undefined) {
+      lines.push({ id: NAME_ID, label: "Name", placeholder: "api" });
+      if (types.length > 1) lines.push({ id: TYPE_ID, label: "Type", choices: types });
+    }
     for (const field of spec.fields) {
       if (url && field.key === firstReplaced)
         for (const value of url.values)
@@ -140,7 +151,9 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
         placeholder: field.placeholder,
         choices: field.choices,
         muted:
-          url !== undefined && spec.replacedByUrl?.has(field.key) && overridden(values).length > 0,
+          url !== undefined &&
+          spec.replacedByUrl?.has(field.key) &&
+          overridden(values, url).length > 0,
       });
     }
     const headerLines = lineCount(values, "headers", spec.headers === true);
@@ -160,7 +173,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
         shown: (line) => hiddenEnvLine(line, BULLET),
       });
     const notes =
-      url && overridden(values).length > 0
+      url && overridden(values, url).length > 0
         ? [`An address under ${url.name} replaces the host, port and path.`]
         : [];
     return { lines, notes };
@@ -172,11 +185,13 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
   ) => rows[row]?.key ?? (line ? `${LINE_IDS[line.kind]}${line.index}` : NAME_ID);
 
   const submit = (values: FormValues, form: FormHandle) => {
+    const spec = formOf(values);
+    const url = urlOf(spec);
     const rows = formRows(editing === undefined, spec);
     const known = inkValues(values, spec);
     const taken = Object.keys(edits.config().services);
     // With an address on every URL line, the service needs none of its own.
-    const replaced = url && overridden(values).length === url.values.length;
+    const replaced = url && overridden(values, url).length === url.values.length;
     const relaxed: ServiceForm = replaced
       ? {
           ...spec,
@@ -204,7 +219,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
           id,
           `${secret.header} expects a reference, e.g. \${API_TOKEN}: ${fileOf(context.target)} is shared`,
         );
-      return keepSecret(form, values, secret, service, id);
+      return keepSecret(form, values, secret, service, id, spec);
     }
     const written = formFields(known, spec);
     const sent = serviceVariables(written);
@@ -232,6 +247,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
     secret: FormSecret,
     service: string,
     id: string,
+    spec: ServiceForm,
   ) => {
     form.busy(true);
     const used = formVariables(inkValues(values, spec));

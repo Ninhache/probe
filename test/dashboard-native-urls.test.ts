@@ -189,7 +189,7 @@ describe("an address by url", () => {
 
   it("adds a service by an https address without a port", async () => {
     const { press, services } = open(plain);
-    press(`aweb${TAB}https://api.example.com/health${ENTER}`);
+    press(`aweb${TAB}${TAB}https://api.example.com/health${ENTER}`);
     await tick();
 
     expect(services.at(-1)).toMatchObject({
@@ -200,7 +200,7 @@ describe("an address by url", () => {
 
   it("refuses an address with a password without repeating it in the problem", async () => {
     const { press, draw, services } = open(plain);
-    press(`aweb${TAB}https://admin:hunter2@api.example.com${ENTER}`);
+    press(`aweb${TAB}${TAB}https://admin:hunter2@api.example.com${ENTER}`);
     await tick();
 
     const problem = draw()

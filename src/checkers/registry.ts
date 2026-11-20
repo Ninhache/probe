@@ -27,6 +27,12 @@ export const typeName = (service: Service): string => service.type ?? DEFAULT_CH
 
 export const serviceType: ServiceTypes = (service) => getServiceType(typeName(service));
 
+/** The names of every registered type, the default one first: what the add form offers. */
+export const serviceTypeNames = (): readonly string[] => [
+  DEFAULT_CHECKER_TYPE,
+  ...[...types.keys()].filter((name) => name !== DEFAULT_CHECKER_TYPE),
+];
+
 /** The type `a` adds: the config has no key to name another one. */
 export const defaultType = (): ServiceType => getServiceType(DEFAULT_CHECKER_TYPE);
 
