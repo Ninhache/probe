@@ -184,7 +184,7 @@ describe("adding and editing a service", () => {
 
   it("adds the service typed in the form, defaults for what is left empty", async () => {
     const { press, draw, writes, tracker } = setup();
-    press(`aweb${TAB}8080${ENTER}`);
+    press(`aweb${TAB}${TAB}8080${ENTER}`);
     await tick();
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({ kind: "add", name: "web" });
@@ -194,7 +194,7 @@ describe("adding and editing a service", () => {
 
   it("refuses a name already used", async () => {
     const { press, draw, writes, view } = setup();
-    press(`adb${TAB}80${ENTER}`);
+    press(`adb${TAB}${TAB}80${ENTER}`);
     await tick();
     expect(draw()).toContain("db already exists");
     expect(writes).toEqual([]);
@@ -229,7 +229,7 @@ describe("adding and editing a service", () => {
 describe("headers and secrets", () => {
   const typeSecret = async (secret: string, options?: Options) => {
     const test = setup(options);
-    test.press(`aweb${TAB}8080`);
+    test.press(`aweb${TAB}${TAB}8080`);
     for (let i = 0; i < 20 && !test.draw().match(/› Header/); i += 1) test.press(TAB);
     test.press(`Authorization: Bearer ${secret}`);
     return test;
@@ -240,7 +240,7 @@ describe("headers and secrets", () => {
     const test = setup({
       edits: { variableSources: async () => ({}) },
     });
-    test.press(`aweb${TAB}8080`);
+    test.press(`aweb${TAB}${TAB}8080`);
     for (let i = 0; i < 20 && !test.draw().match(/› Header/); i += 1) test.press(TAB);
     test.press(`Authorization: Bearer ${secret}`);
     expect(test.draw()).not.toContain(secret);
@@ -1097,7 +1097,7 @@ describe("editing on an environment tab", () => {
     view.tab = 2;
     press("a");
     expect(draw()).toContain("add to prod");
-    press(`initech${TAB}8080${ENTER}`);
+    press(`initech${TAB}${TAB}8080${ENTER}`);
     await tick();
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({ kind: "add", name: "initech", env: "prod" });
@@ -1223,7 +1223,7 @@ describe("editing on an environment tab", () => {
     });
     test.editing.observe?.("prod", prodConfig);
     test.view.tab = 2;
-    test.press(`ainitech${TAB}8080`);
+    test.press(`ainitech${TAB}${TAB}8080`);
     for (let i = 0; i < 20 && !test.draw().match(/› Header/); i += 1) test.press(TAB);
     test.press(`Authorization: Bearer ${secret}`);
     test.press(ENTER);

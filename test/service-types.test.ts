@@ -153,7 +153,7 @@ describe("a service type", () => {
       const { press } = open(onServiceWrite);
       press("a");
 
-      press("cache\t6379\r");
+      press("cache\t\t6379\r");
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(onServiceWrite.mock.lastCall?.[0]).toEqual({

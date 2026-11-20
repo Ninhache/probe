@@ -202,7 +202,7 @@ describe("the secret of a header", () => {
   it("keeps the secret of a service that is added", async () => {
     const { press, draw, screens, kept, written } = open(withHeaders());
 
-    await press(`aweb${TAB}8080`);
+    await press(`aweb${TAB}${TAB}8080`);
     for (let i = 0; i < 20 && !draw().match(/› Header/); i += 1) await press(TAB);
     await press(`X-Api-Key: ${SECRET}${ENTER}`);
     expect(draw()).toContain("Variable");

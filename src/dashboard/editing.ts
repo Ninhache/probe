@@ -1,4 +1,4 @@
-import { defaultType, serviceType } from "../checkers/registry";
+import { defaultType, getServiceType, serviceType, serviceTypeNames } from "../checkers/registry";
 import type { ServiceForm } from "../checkers/types";
 import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
@@ -71,7 +71,10 @@ export interface Editing {
   observe?(env: string, config: Config): void;
   /** The same editing on the file of `env`; undefined while that file has not been read. */
   environment?(env: string): Editing | undefined;
-  serviceForm(name?: string): ServiceForm;
+  /** The form of service `name`; of the type named `type` when adding, the default one without. */
+  serviceForm(name?: string, type?: string): ServiceForm;
+  /** The types a new service can be of: the add form offers them as a closed list. */
+  serviceTypes(): readonly string[];
   serviceFields(name: string): ServiceFields | undefined;
   parameterFields(name: string): Parameter | undefined;
   addresses(): Addresses;
@@ -86,9 +89,10 @@ export interface Editing {
 }
 
 const reads = (config: () => Config) => ({
-  serviceForm(name?: string): ServiceForm {
+  serviceTypes: serviceTypeNames,
+  serviceForm(name?: string, type?: string): ServiceForm {
     const service = name === undefined ? undefined : config().services[name];
-    if (!service) return defaultType().form;
+    if (!service) return (type === undefined ? defaultType() : getServiceType(type)).form;
     const { form } = serviceType(service);
     return form.forService?.(service) ?? form;
   },
