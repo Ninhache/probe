@@ -1,6 +1,11 @@
 import type { ServiceForm } from "../../checkers/types";
 import type { ServiceWrite } from "../../commands/service-writes";
-import { hiddenEnvLine, hiddenHeaderLine, serviceVariables } from "../../config/headers";
+import {
+  hiddenEnvLine,
+  hiddenHeaderLine,
+  referencedVariables,
+  serviceVariables,
+} from "../../config/headers";
 import { urlProblem } from "../../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, LOCAL_FILE, PROBE_DIR } from "../../constants";
 import type { InputEvent } from "../../tui/input";
@@ -13,6 +18,7 @@ import {
   ENV_PLACEHOLDER,
   emptyForm,
   type FormSecret,
+  fieldText,
   formFields,
   formProblem,
   formRows,
@@ -91,6 +97,15 @@ function inkValues(values: FormValues, spec: ServiceForm): InkValues {
   };
 }
 
+const secretId = (secret: FormSecret) =>
+  secret.kind === "field" ? (secret.field as string) : `${LINE_IDS[secret.kind]}${secret.index}`;
+
+/** The text of the row a secret was typed in, once it is a reference. */
+const secretLine = (values: InkValues, secret: FormSecret) =>
+  secret.kind === "field"
+    ? fieldText(values, secret.field as string)
+    : ((values[secret.kind] ?? [])[secret.index] ?? "");
+
 /** The values of the modal for a service as it is written: the reverse of `inkValues`. */
 function modalValues(values: InkValues, urls: Readonly<Record<string, string>>): FormValues {
   const { headers, env = [], ...fields } = values;
@@ -101,6 +116,10 @@ function modalValues(values: InkValues, urls: Readonly<Record<string, string>>):
     ...Object.fromEntries(Object.entries(urls).map(([value, url]) => [`${URL_ID}${value}`, url])),
   };
 }
+
+/** A reference shows as typed; anything else is a secret on its way to local.yml, and shows as dots. */
+const hiddenSecret = (text: string, bullet: string) =>
+  referencedVariables(text).length > 0 ? text : bullet.repeat(text.length);
 
 const formTitle = (editing: string | undefined, target: string | undefined) => {
   if (editing === undefined) return target === undefined ? "add a service" : `add to ${target}`;
@@ -150,6 +169,9 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
         label: field.label,
         placeholder: field.placeholder,
         choices: field.choices,
+        ...(field.key === spec.secretField
+          ? { shown: (text: string) => hiddenSecret(text, BULLET) }
+          : {}),
         muted:
           url !== undefined &&
           spec.replacedByUrl?.has(field.key) &&
@@ -211,9 +233,9 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
       if (wrong) return form.problem(`${URL_ID}${value}`, `${urlLabel(value)} expects ${wrong}`);
     }
     const service = editing ?? known.name?.toString() ?? "";
-    const secret = formSecret(known);
+    const secret = formSecret(known, spec);
     if (secret) {
-      const id = `${LINE_IDS[secret.kind]}${secret.index}`;
+      const id = secretId(secret);
       if (!edits.variables)
         return form.problem(
           id,
@@ -257,7 +279,7 @@ export function serviceFormModal(context: ServiceFormContext, editing?: string):
         secretModal(secret, variable, used, service, edits, context, (chosen) => {
           secrets = { ...secrets, [chosen]: secret.secret };
           const next = withVariable(inkValues(values, spec), secret, chosen);
-          const line = (next[secret.kind] ?? [])[secret.index] ?? "";
+          const line = secretLine(next, secret);
           form.set({ [id]: line });
           stack.pop();
           submit({ ...values, [id]: line }, form);
