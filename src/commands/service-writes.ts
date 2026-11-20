@@ -7,7 +7,9 @@ import { rawServices, writeServices } from "./shared";
 
 /** No address at all: the service takes it from `urls:`, one per value of the `url` parameter. */
 export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers" | "env"> &
-  Partial<Pick<Service, "host" | "port" | "path" | "type" | "command">>;
+  Partial<
+    Pick<Service, "host" | "port" | "path" | "type" | "command" | "user" | "database" | "password">
+  >;
 
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */
 export type ServiceUrls = Readonly<Record<string, string>>;
@@ -30,8 +32,22 @@ const DEFAULTS: Partial<ServiceFields> = {
   method: DEFAULT_METHOD,
   headers: undefined,
   env: undefined,
+  user: undefined,
+  database: undefined,
+  password: undefined,
 };
-const FIELD_KEYS = ["host", "port", "path", "expect", "method", "headers", "env"] as const;
+const FIELD_KEYS = [
+  "host",
+  "port",
+  "path",
+  "expect",
+  "method",
+  "headers",
+  "env",
+  "user",
+  "database",
+  "password",
+] as const;
 
 /** `expect: [200]` and `expect: 200` say the same: a form cannot tell which one was written. */
 const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].flat());
@@ -40,8 +56,8 @@ const ADDRESS_KEYS: readonly string[] = ["host", "port", "path"];
 
 function withFields(service: RawConfig, fields: ServiceFields, current?: Service): RawConfig {
   const next = { ...service };
-  // `type: http` is the default: only a service that runs a command ever gets the key.
-  if (fields.type === "command") next.type = "command";
+  // `type: http` is the default: any other type is written.
+  if (fields.type !== undefined && fields.type !== "http") next.type = fields.type;
   if (fields.command !== undefined && !isDeepStrictEqual(fields.command, service.command)) {
     next.command = fields.command;
   }

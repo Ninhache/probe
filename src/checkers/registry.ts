@@ -1,12 +1,16 @@
-import type { Service } from "../config/schema";
+import { DATABASE_TYPES, type Service } from "../config/schema";
 import { DEFAULT_CHECKER_TYPE } from "../constants";
 import { ProbeError } from "../errors";
 import { commandChecker } from "./command";
+import { databaseType } from "./database";
 import { httpChecker } from "./http";
 import type { ParameterKind, ServiceType, ServiceTypes } from "./types";
 
 const types = new Map<string, ServiceType>(
-  [httpChecker, commandChecker].map((type) => [type.type, type]),
+  [httpChecker, commandChecker, ...DATABASE_TYPES.map(databaseType)].map((type) => [
+    type.type,
+    type,
+  ]),
 );
 
 /** Every way of sending a parameter that one type at least understands. */

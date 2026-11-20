@@ -84,6 +84,8 @@ export interface ServiceForm {
   headers?: boolean;
   /** One line per variable of the process, `NAME=value`, a secret kept in local.yml. */
   env?: boolean;
+  /** The key of a field that holds a reference to a secret: a value typed there is kept in local.yml. */
+  secretField?: string;
   /** What an address of the `url` parameter replaces: its lines come before the first of them. */
   replacedByUrl?: ReadonlySet<string>;
   read(fields: ServiceFields): FieldValues;

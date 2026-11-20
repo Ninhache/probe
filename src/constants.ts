@@ -22,6 +22,8 @@ export const DEFAULT_MAKEFILE = "Makefile";
 
 export const DEFAULT_CHECKER_TYPE = "http";
 /** What a command service keeps of its stderr: the end of it, where the reason is. */
+/** What a database service asks its client: any answer proves the login works. */
+export const COMMAND_PING_QUERY = "select 1";
 export const COMMAND_STDERR_BYTES = 4_096;
 /** The reason shown for a failed command is cut at this many characters. */
 export const COMMAND_STDERR_CHARACTERS = 200;
