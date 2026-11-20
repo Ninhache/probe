@@ -1,6 +1,6 @@
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { databaseCommand } from "../src/checkers/database";
 import { serviceType } from "../src/checkers/registry";
 import { reference, serviceVariables } from "../src/config/headers";
@@ -195,6 +195,8 @@ describe("the command a database service runs", () => {
 });
 
 // A `.cmd` cannot be spawned without a shell: the fake clients are scripts with a shebang.
+afterEach(() => vi.unstubAllEnvs());
+
 describe.skipIf(process.platform === "win32")("checking a database through its client", () => {
   const FAKE = `#!${process.execPath}
 const { writeFileSync } = require("node:fs");
