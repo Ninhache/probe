@@ -4,7 +4,7 @@ import { ProbeError } from "../errors";
 import { commandChecker } from "./command";
 import { databaseType } from "./database";
 import { httpChecker } from "./http";
-import type { ParameterKind, ServiceType, ServiceTypes } from "./types";
+import type { CheckResult, ParameterKind, ServiceType, ServiceTypes } from "./types";
 
 const types = new Map<string, ServiceType>(
   [httpChecker, commandChecker, ...DATABASE_TYPES.map(databaseType)].map((type) => [
@@ -41,3 +41,10 @@ export const serviceTypeNames = (): readonly string[] => [
 export const defaultType = (): ServiceType => getServiceType(DEFAULT_CHECKER_TYPE);
 
 export const targetOf = (service: Service): string => serviceType(service).target(service);
+
+/** What an up service answered, said by its type: `up` for a type that says nothing, or one not registered. */
+export const answer = (result: CheckResult): string =>
+  types.get(result.type)?.answer?.(result) ?? "up";
+
+/** Whether the services of a type keep the response they got. */
+export const keepsResponse = (type: string): boolean => types.get(type)?.response === true;

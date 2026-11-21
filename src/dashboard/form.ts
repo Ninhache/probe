@@ -1,6 +1,5 @@
 import { defaultType } from "../checkers/registry";
-import type { FormField, ServiceForm } from "../checkers/types";
-import type { ServiceFields } from "../commands/service-writes";
+import type { FormField, ServiceFields, ServiceForm } from "../checkers/types";
 import {
   envNameProblem,
   envValueProblem,

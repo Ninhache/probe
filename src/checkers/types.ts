@@ -1,4 +1,3 @@
-import type { ServiceFields } from "../commands/service-writes";
 import type { Variables } from "../config/local";
 import type { Parameter, Service } from "../config/schema";
 import type { ResponseDetail } from "./response";
@@ -35,10 +34,6 @@ export interface CheckResult {
   sent?: string[];
 }
 
-/** What an up service answered: its status, or `up` for a type that has none. */
-export const answer = ({ status }: CheckResult): string =>
-  status === undefined ? "up" : String(status);
-
 export interface Checker {
   type: string;
   check(name: string, service: Service, context: CheckContext): Promise<CheckResult>;
@@ -56,6 +51,10 @@ export type ParameterKind = Parameter["strategy"]["kind"];
 export interface ServiceType extends Checker {
   /** How messages say it uses an unset variable: a request sends it, a process needs it. */
   verb: "sends" | "needs";
+  /** What an up service of this type answered; absent, it says `up`. */
+  answer?(result: CheckResult): string | undefined;
+  /** It keeps the response it got: `r` shows it, and a trace can be saved. */
+  response?: true;
   /** The address lists and reports show. */
   target(service: Service): string;
   /** What `u` and `probe open` open: a type without one has nothing to open. */
@@ -68,6 +67,12 @@ export interface ServiceType extends Checker {
   /** The service as requested with one value of each parameter of a kind it understands. */
   withParameters?(service: Service, chosen: readonly (readonly [Parameter, string])[]): Service;
 }
+
+/** What the dashboard reads from a service and writes back: no address at all takes it from `urls:`. */
+export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers" | "env"> &
+  Partial<
+    Pick<Service, "host" | "port" | "path" | "type" | "command" | "user" | "database" | "password">
+  >;
 
 export interface FormField {
   key: string;
