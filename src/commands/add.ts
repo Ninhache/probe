@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { serviceType } from "../checkers/registry";
 import {
   envNameProblem,
   envValueProblem,
@@ -13,7 +14,7 @@ import {
 } from "../config/headers";
 import { loadVariables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
-import { DEFAULT_METHOD, METHODS, type Method, urlProblem } from "../config/schema";
+import { DEFAULT_METHOD, METHODS, type Method, type Service, urlProblem } from "../config/schema";
 import {
   commandValueProblem,
   containsProblem,
@@ -354,7 +355,7 @@ export default defineCommand({
     console.log(
       unset === undefined
         ? `Added ${args.name}. Try: probe check ${args.name}`
-        : `Added ${args.name}. It ${service.type === "command" ? "needs" : "sends"} ${unset}, not set yet: probe var ${unset}`,
+        : `Added ${args.name}. It ${serviceType(service as Service).verb} ${unset}, not set yet: probe var ${unset}`,
     );
   },
 });

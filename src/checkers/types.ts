@@ -54,6 +54,8 @@ export interface CopiedCommand {
 export type ParameterKind = Parameter["strategy"]["kind"];
 
 export interface ServiceType extends Checker {
+  /** How messages say it uses an unset variable: a request sends it, a process needs it. */
+  verb: "sends" | "needs";
   /** The address lists and reports show. */
   target(service: Service): string;
   /** What `u` and `probe open` open: a type without one has nothing to open. */
