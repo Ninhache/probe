@@ -23,6 +23,7 @@ import { formatCheckResults } from "../src/ui/report";
 // A type with no URL, no headers and no command: what the dashboard and `check` know must come from it.
 const socket: ServiceType = {
   type: "socket",
+  verb: "needs",
   target: (service: Service) => `socket ${service.host}:${service.port}`,
   form: {
     fields: [{ key: "port", label: "Port", placeholder: "5432" }],

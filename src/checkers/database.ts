@@ -32,6 +32,8 @@ interface DatabaseSpec {
   defaultUser?: string;
   /** Up only when the client says this: redis-cli exits 0 on an error reply. */
   answer?: string;
+  /** The database is an index, not a name: it is written as a number. */
+  numericDatabase?: true;
   /** The URL-like text lists and reports show; it never holds the password. */
   scheme: string;
   /** The arguments of the client, after its name. */
@@ -92,6 +94,7 @@ const SPECS: Readonly<Record<DatabaseKind, DatabaseSpec>> = {
     passwordEnv: "REDISCLI_AUTH",
     defaultPort: 6379,
     answer: "PONG",
+    numericDatabase: true,
     scheme: "redis",
     args: ({ host, port, user, database }) => [
       "-h",
@@ -137,23 +140,24 @@ const FIELDS = [
   { key: "port", label: "Port", placeholder: "" },
   { key: "user", label: "User", placeholder: "" },
   { key: "database", label: "Database", placeholder: "" },
-  { key: "password", label: "Password", placeholder: `\${PG_PASSWORD}` },
+  { key: "password", label: "Password", placeholder: "" },
 ] as const;
 
 const filled = (value: string) => (value.trim() === "" ? undefined : value.trim());
 
 function databaseForm(spec: DatabaseSpec): ServiceForm {
+  const example = reference(`${spec.type.toUpperCase()}_PASSWORD`);
   const placeholders: Record<string, string> = {
     port: String(spec.defaultPort),
     user: spec.defaultUser ?? "",
-    database: spec.type === "redis" ? "0" : "",
-    password: reference(`${spec.type.toUpperCase()}_PASSWORD`),
+    database: spec.numericDatabase ? "0" : "",
+    password: example,
   };
   const problems: Record<string, (value: string) => string | undefined> = {
     // A plain value is kept in local.yml by the dashboard; one that holds `${` must be a reference alone.
     password: (value) =>
       value.includes(OPEN_REFERENCE) && passwordProblem(value)
-        ? `Expects a reference alone, e.g. ${reference("PG_PASSWORD")}: a password that holds ${OPEN_REFERENCE} goes through probe var`
+        ? `Expects a reference alone, e.g. ${example}: a password that holds ${OPEN_REFERENCE} goes through probe var`
         : undefined,
     port: portProblem,
     user: userProblem,
@@ -182,7 +186,7 @@ function databaseForm(spec: DatabaseSpec): ServiceForm {
         host: filled(values.host ?? ""),
         port: filled(values.port ?? "") === undefined ? undefined : Number(values.port),
         user: filled(values.user ?? ""),
-        database: database !== undefined && spec.type === "redis" ? Number(database) : database,
+        database: database !== undefined && spec.numericDatabase ? Number(database) : database,
         password: filled(values.password ?? ""),
       };
     },
@@ -198,6 +202,7 @@ export function databaseType(type: DatabaseKind): ServiceType {
   });
   return {
     type,
+    verb: "needs",
     target: (service) => targetOf(spec, service),
     // The reference stays one, for the shell that runs it: the password is never in the copy.
     copy: (service, env) => ({
