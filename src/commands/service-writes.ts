@@ -1,15 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
+import type { ServiceFields } from "../checkers/types";
 import type { ProbePaths } from "../config/discovery";
 import { loadConfig } from "../config/loader";
 import type { RawConfig } from "../config/migrations";
 import { type Config, DEFAULT_METHOD, declaresAddress, type Service } from "../config/schema";
 import { rawServices, writeServices } from "./shared";
 
-/** No address at all: the service takes it from `urls:`, one per value of the `url` parameter. */
-export type ServiceFields = Pick<Service, "url" | "expect" | "method" | "headers" | "env"> &
-  Partial<
-    Pick<Service, "host" | "port" | "path" | "type" | "command" | "user" | "database" | "password">
-  >;
+export type { ServiceFields } from "../checkers/types";
 
 /** The address of a service for each value of the `url` parameter; an empty one is removed. */
 export type ServiceUrls = Readonly<Record<string, string>>;

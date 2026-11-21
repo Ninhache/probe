@@ -1,6 +1,7 @@
+import { keepsResponse } from "../checkers/registry";
 import type { CheckResult } from "../checkers/types";
 
-/** What `r` says for a service that is not checked over HTTP. */
+/** What `r` says for a service whose type keeps no response. */
 export const HTTP_ONLY = "The response view is HTTP-only";
 export const NO_RESPONSE = "No response to show yet";
 
@@ -55,7 +56,7 @@ export function traceText(result: CheckResult): string | undefined {
 /** Why the response cannot be shown, or nothing when it can. */
 export function responseProblem(result: CheckResult | undefined): string | undefined {
   if (!result) return NO_RESPONSE;
-  if (result.type !== "http") return HTTP_ONLY;
+  if (!keepsResponse(result.type)) return HTTP_ONLY;
   return responseText(result) === undefined ? NO_RESPONSE : undefined;
 }
 

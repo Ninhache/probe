@@ -1,3 +1,4 @@
+import { keepsResponse } from "../../checkers/registry";
 import type { Selection } from "../../config/parameters";
 import { effectiveSelection, type ParameterChoices } from "../../config/parameters";
 import {
@@ -449,7 +450,7 @@ function peekRows(
   view.peeked = at;
   const result = tracker.result(service, env);
   if (!result) return dim(NO_RESPONSE);
-  if (result.type !== "http") {
+  if (!keepsResponse(result.type)) {
     const history = (tracker.history(service, env)?.toArray() ?? []).map((s) => s.latencyMs);
     return [
       ...dim(HTTP_ONLY),

@@ -1,5 +1,5 @@
-import { targetOf } from "../checkers/registry";
-import { answer, type CheckResult } from "../checkers/types";
+import { answer, targetOf } from "../checkers/registry";
+import type { CheckResult } from "../checkers/types";
 import type { Config } from "../config/schema";
 import { CONTAINS_SHOWN_CHARACTERS } from "../constants";
 import { createColors } from "./colors";
