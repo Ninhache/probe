@@ -1,6 +1,7 @@
 import { runChecks } from "../../checkers/run";
 import type { EnvironmentOrigin } from "../../commands/env-create";
 import type { Variables } from "../../config/local";
+import { type ServiceOverrides, withOverrides } from "../../config/overrides";
 import {
   applySelection,
   mergedChoices,
@@ -40,6 +41,8 @@ export interface NativeDashboardOptions extends EditCallbacks {
   /** The project root, where the command services run. */
   cwd?: string;
   variables?: () => Promise<Variables>;
+  /** The values local.yml gives the services, read before each pass: checked, never edited. */
+  overrides?: () => Promise<ServiceOverrides>;
   /** Services of config.yml set aside by local.yml. */
   skipped?: ReadonlySet<string>;
   /** Each writes local.yml or config.yml and resolves to why it could not, if so. */
@@ -77,11 +80,11 @@ export function sourceCheck(
   return {
     name: source.name,
     run: async (signal) => {
-      const { config: declared, variables: loaded, skipped } = await source.load();
+      const { config: declared, variables: loaded, skipped, overrides } = await source.load();
       onLoaded(source.name, declared);
       const now = live();
       return runChecks(
-        declared,
+        withOverrides(declared, overrides),
         [],
         {
           timeoutMs: now.settings.timeoutMs,
@@ -122,15 +125,8 @@ export function environmentChecks(
           name: LOCAL_ENVIRONMENT,
           run: async (signal) => {
             const now = live();
-            const { config } = options;
-            const services = Object.fromEntries(
-              Object.entries(config.services).map(([name, service]) => [
-                name,
-                { ...service, timeout: now.timeouts[name] },
-              ]),
-            );
             return runChecks(
-              { ...config, services },
+              await localChecked(options.config, now.timeouts, options.overrides),
               [],
               {
                 timeoutMs: now.settings.timeoutMs,
@@ -150,6 +146,21 @@ export function environmentChecks(
     ...local,
     ...environments.map((source) => sourceCheck(source, live, onLoaded, options.cwd)),
   ];
+}
+
+/** The local services as checked: the timeouts of the screen, then the values of local.yml. */
+async function localChecked(
+  config: Config,
+  timeouts: Readonly<Record<string, number | undefined>>,
+  overrides: NativeDashboardOptions["overrides"],
+): Promise<Config> {
+  const services = Object.fromEntries(
+    Object.entries(config.services).map(([name, service]) => [
+      name,
+      { ...service, timeout: timeouts[name] },
+    ]),
+  );
+  return withOverrides({ ...config, services }, await overrides?.());
 }
 
 /** A window in focus shows the change itself: only one out of focus, or unknown, is notified. */
@@ -243,8 +254,13 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
   const tracker = new Tracker(checks.map((check) => check.name));
   const sources = new Map(options.environments.map((source) => [source.name, source]));
   const graceMs = NOTIFY_GRACE_SECONDS * 1000;
-  const configOf = async (env: string): Promise<Config | undefined> =>
-    env === LOCAL_ENVIRONMENT ? editing.config() : (await sources.get(env)?.load())?.config;
+  // What open and copy reach: the addresses of this machine, as the checks do.
+  const configOf = async (env: string): Promise<Config | undefined> => {
+    if (env === LOCAL_ENVIRONMENT)
+      return localChecked(editing.config(), view.timeouts, options.overrides);
+    const loaded = await sources.get(env)?.load();
+    return loaded && withOverrides(loaded.config, loaded.overrides);
+  };
   const focus = options.focus ?? watchFocus(process.stdin, process.stdout);
   const track = (saved: Saved | undefined) =>
     void saved?.then((why) => {
@@ -286,8 +302,11 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       },
     });
     const run = async (env: string, work: (cfg: Config) => Promise<string>) => {
-      const cfg = await configOf(env);
-      say(view, cfg ? await work(cfg) : `${env} cannot be read`);
+      const cfg = await configOf(env).catch((error: unknown) =>
+        error instanceof Error ? error.message : String(error),
+      );
+      if (typeof cfg === "string") say(view, cfg);
+      else say(view, cfg ? await work(cfg) : `${env} cannot be read`);
       app.requestRender();
     };
     const showEnvironment = (source: EnvironmentSource) => {
@@ -388,11 +407,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             void run(env, (cfg) => system(cfg).onOpen(service, view.selection)),
           copy: (service, env) =>
             void run(env, (cfg) =>
-              system(cfg).onCopy(
-                service,
-                env === LOCAL_ENVIRONMENT ? view.timeouts[service] : cfg.services[service]?.timeout,
-                view.selection,
-              ),
+              system(cfg).onCopy(service, cfg.services[service]?.timeout, view.selection),
             ),
           copyResponse: (text, cut, part, formatted) =>
             void system(editing.config())

@@ -18,8 +18,10 @@ import { loadConfig } from "./config/loader";
 import {
   initialDashboardSettings,
   loadVariables,
+  localConfig,
   readDashboardPreferences,
   readDashboardSelection,
+  readServiceOverrides,
   readSkippedServices,
 } from "./config/local";
 import {
@@ -175,7 +177,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
     const { environmentSource: source } = await import("./dashboard/sources");
     const settings = initialDashboardSettings(askedMs, await readDashboardPreferences(paths));
     const { text, down } = await oncePass({
-      config,
+      config: await localConfig(config, paths),
       variables: await loadVariables(paths),
       skipped: await readSkippedServices(paths),
       selection: await readDashboardSelection(paths),
@@ -205,6 +207,7 @@ async function openedDashboard(allArgs: string[]): Promise<boolean> {
     settings,
     selection: await readDashboardSelection(paths),
     skipped: await readSkippedServices(paths),
+    overrides: () => readServiceOverrides(paths),
     whatsNew: dashboardNews(),
     onEnvironmentCreate: async (name, from) => {
       const { variables } = await createEnvironment(paths, name, from);

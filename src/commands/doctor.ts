@@ -3,7 +3,7 @@ import { runChecks } from "../checkers/run";
 import { requireProbeDir } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { loadConfig, pendingMigration } from "../config/loader";
-import { loadVariables, readSkippedServices } from "../config/local";
+import { loadVariables, localConfig, readSkippedServices } from "../config/local";
 import { applySelection } from "../config/parameters";
 import { DEFAULT_TIMEOUT_SECONDS, EXIT_DOWN } from "../constants";
 import { diagnoseServices, type ServiceReport } from "../doctor/diagnose";
@@ -57,9 +57,10 @@ export default defineCommand({
     let services: ServiceReport[] | null = null;
 
     if (!pending) {
-      const { config } = await loadConfig(paths);
+      const { config: declared } = await loadConfig(paths);
       // The block lists the local services: another environment says nothing about it.
-      if (paths.environment === undefined) makefile = await blockState(paths, config);
+      if (paths.environment === undefined) makefile = await blockState(paths, declared);
+      const config = await localConfig(declared, paths);
       const selection = selectionFrom(config, rawArgs);
       const results = await runChecks(
         config,

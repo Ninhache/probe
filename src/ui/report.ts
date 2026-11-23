@@ -9,6 +9,7 @@ import { type Terminal, truncate } from "./terminal";
 
 const GAP = "  ";
 const SKIPPED = "skipped";
+const LOCAL = "local";
 
 function width(values: string[]): number {
   return Math.max(0, ...values.map((value) => value.length));
@@ -73,6 +74,8 @@ export function formatServices(
   config: Config,
   terminal: Terminal,
   skipped: ReadonlySet<string> = new Set(),
+  /** The keys whose value comes from local.yml, by service: named, their values are shown above. */
+  local: Readonly<Record<string, readonly string[]>> = {},
 ): string {
   const colors = createColors(terminal.color);
   const rows = Object.entries(config.services).map(([name, service]) => ({
@@ -89,6 +92,7 @@ export function formatServices(
       (service.headers ? `${GAP}sends ${Object.keys(service.headers).join(", ")}` : "") +
       (service.env ? `${GAP}sets ${Object.keys(service.env).join(", ")}` : "") +
       (service.tags?.length ? `${GAP}tags ${service.tags.join(", ")}` : "") +
+      (local[name]?.length ? `${GAP}${LOCAL} ${local[name].join(", ")}` : "") +
       (skipped.has(name) ? `${GAP}${SKIPPED}` : ""),
   }));
   const nameWidth = width(rows.map((row) => row.name));

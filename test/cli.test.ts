@@ -420,6 +420,82 @@ describe("a service with its own timeout", () => {
   });
 });
 
+describe("a value of a service set in local.yml", () => {
+  /** api is declared on a closed port in config.yml, and reached on the open one from local.yml. */
+  async function overridden(root?: string): Promise<string> {
+    const at = root ?? (await project());
+    await probe(
+      at,
+      "add",
+      "api",
+      "-p",
+      String(closedPort),
+      "--host",
+      "127.0.0.1",
+      "--path",
+      "/health",
+    );
+    await writeFile(join(at, ".probe", "local.yml"), `services:\n  api:\n    port: ${port}\n`);
+    return at;
+  }
+
+  it("replaces the one of config.yml when the service is checked", async () => {
+    const root = await overridden();
+
+    const result = await probe(root, "check", "--json");
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject([{ name: "api", ok: true, status: 200 }]);
+  });
+
+  it("is waited for at its local address", async () => {
+    const root = await overridden();
+
+    expect((await probe(root, "wait", "--timeout", "2")).code).toBe(0);
+  });
+
+  it("is shown by probe ls, which says it comes from local.yml", async () => {
+    const root = await overridden();
+
+    const result = await probe(root, "ls");
+
+    expect(result.stdout).toMatch(
+      new RegExp(`^api {2}http://127\\.0\\.0\\.1:${port}/health {2}local port$`, "m"),
+    );
+  });
+
+  it("reaches neither config.yml, the Makefile nor lock.yml", async () => {
+    const root = await makefileProject();
+    const before = await overridden(root);
+    expect((await probe(before, "sync")).code).toBe(0);
+    const files = ["Makefile", join(".probe", "config.yml"), join(".probe", "lock.yml")];
+    const read = () => Promise.all(files.map((file) => readFile(join(root, file), "utf8")));
+    const written = await read();
+
+    await probe(root, "check");
+    await probe(root, "ls");
+
+    expect(await read()).toEqual(written);
+    expect((await probe(root, "status")).stdout).toContain("makefile   in sync");
+    await probe(root, "add", "web", "-p", "3001");
+    expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).not.toContain(String(port));
+  });
+
+  it("exits 2 on a key local.yml cannot set, without its value", async () => {
+    const root = await overridden();
+    await writeFile(
+      join(root, ".probe", "local.yml"),
+      "services:\n  api:\n    headers: { X-Secret: hidden-value }\n",
+    );
+
+    const result = await probe(root, "check");
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("services.api.headers cannot be set there");
+    expect(result.stderr).not.toContain("hidden-value");
+  });
+});
+
 describe("a service skipped in local.yml", () => {
   async function skippedDown(): Promise<string> {
     const root = await project();

@@ -13,7 +13,9 @@ import {
 import type { DashboardSettings } from "../dashboard/settings";
 import type { ProbePaths } from "./discovery";
 import type { VariableLookup } from "./headers";
+import { NO_OVERRIDES, type ServiceOverrides, withOverrides } from "./overrides";
 import type { Selection } from "./parameters";
+import type { Config } from "./schema";
 
 export interface DashboardPreferences {
   interval?: number;
@@ -227,6 +229,37 @@ export async function readSkippedServices(paths: ProbePaths): Promise<Set<string
     .filter((pair) => isMap(pair.value) && pair.value.get(SKIP) === true)
     .map((pair) => String(isScalar(pair.key) ? pair.key.value : pair.key));
   return new Set(names);
+}
+
+/**
+ * The values local.yml gives the services of config.yml, `skip` aside: checked by `withOverrides`.
+ * A local.yml that is not valid YAML gives none, as for the other values it holds.
+ */
+export async function readServiceOverrides(paths: ProbePaths): Promise<ServiceOverrides> {
+  const at = [...scope(paths), SERVICES];
+  const none = { ...NO_OVERRIDES, at: at.join(".") };
+  const text = await readLocal(paths);
+  if (text === null) return none;
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0) return none;
+  const services = mapAt(doc, at);
+  if (!services) return none;
+  const found: Record<string, Record<string, unknown>> = {};
+  for (const { key, value } of services.items) {
+    if (!isMap(value)) continue;
+    const { [SKIP]: _skip, ...values } = value.toJSON() as Record<string, unknown>;
+    if (Object.keys(values).length === 0) continue;
+    found[String(isScalar(key) ? key.value : key)] = values;
+  }
+  return { at: none.at, services: found };
+}
+
+/**
+ * The services as this machine reaches them: those of config.yml with the values of local.yml.
+ * For checks and addresses only: what is written back to config.yml starts from `config`.
+ */
+export async function localConfig(config: Config, paths: ProbePaths): Promise<Config> {
+  return withOverrides(config, await readServiceOverrides(paths));
 }
 
 export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean): Promise<boolean> {

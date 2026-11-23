@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { serviceType } from "../checkers/registry";
+import { localConfig } from "../config/local";
 import { applySelection } from "../config/parameters";
 import { ProbeError } from "../errors";
 import { ENVIRONMENT_ARG, namedService, openProject, SET_ARG, selectionFrom } from "./shared";
@@ -12,7 +13,8 @@ export default defineCommand({
     set: SET_ARG,
   },
   async run({ args, rawArgs }) {
-    const { config } = await openProject(args.env);
+    const loaded = await openProject(args.env);
+    const config = await localConfig(loaded.config, loaded.paths);
     const selected = applySelection(config, selectionFrom(config, rawArgs));
     const service = namedService(selected, args.name);
     const { copy } = serviceType(service);

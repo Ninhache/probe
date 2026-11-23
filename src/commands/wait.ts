@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import { pollUntilUp } from "../checkers/poll";
 import { runChecks } from "../checkers/run";
 import type { CheckResult } from "../checkers/types";
-import { loadVariables, readSkippedServices } from "../config/local";
+import { loadVariables, localConfig, readSkippedServices } from "../config/local";
 import {
   DEFAULT_TIMEOUT_SECONDS,
   DEFAULT_WAIT_INTERVAL_SECONDS,
@@ -84,7 +84,8 @@ export default defineCommand({
         `--interval (${args.interval}s) cannot be longer than --max-interval (${args["max-interval"]}s).`,
       );
     }
-    const { config, paths } = await openProject(args.env);
+    const { config: declared, paths } = await openProject(args.env);
+    const config = await localConfig(declared, paths);
     const selection = selectionFrom(config, rawArgs);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);

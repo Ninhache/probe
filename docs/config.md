@@ -2,12 +2,12 @@
 
 Everything lives in `.probe/`, at the root of your project.
 
-| File         | What it holds                                                                               | Git            |
-| ------------ | ------------------------------------------------------------------------------------------- | -------------- |
-| `config.yml` | The services                                                                                | Commit it      |
-| `lock.yml`   | State of the Makefile block. Only there once `probe sync` has run                           | Commit it      |
-| `local.yml`  | Values of your machine: dashboard options and parameter values, skipped services, variables | Ignored by git |
-| `envs/*.yml` | The services of another [environment](features/environments.md)                             | Commit them    |
+| File         | What it holds                                                                                                                          | Git            |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `config.yml` | The services                                                                                                                           | Commit it      |
+| `lock.yml`   | State of the Makefile block. Only there once `probe sync` has run                                                                      | Commit it      |
+| `local.yml`  | Values of your machine: dashboard options and parameter values, [service values](#values-of-your-machine), skipped services, variables | Ignored by git |
+| `envs/*.yml` | The services of another [environment](features/environments.md)                                                                        | Commit them    |
 
 Never put secrets in `config.yml`, `lock.yml` or `envs/`: use a [variable](features/headers.md).
 
@@ -241,6 +241,30 @@ The certificate is checked. A local CA installed on the machine (`mkcert -instal
 browser, on the latest Node 22, 24 or later. A certificate that is expired, made for another host or not trusted
 makes the service down, with the reason. For a CA that is only in a file, set
 `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`.
+
+## Values of your machine
+
+A service of `config.yml` can be reached another way on your machine: another port, a local database user. Set
+those values in `.probe/local.yml`, which git ignores:
+
+```yaml
+# .probe/local.yml
+services:
+  api: { port: 4000 }
+  db: { user: me, database: scratch }
+envs:
+  staging:
+    services:
+      api: { timeout: 10 } # with --env staging only
+```
+
+- Only `url`, `host`, `port`, `path`, `timeout`, `command`, `user` and `database` can be set there, and only
+  those the type of the service reads. A password stays a [variable](features/headers.md).
+- A `host`, `port` or `path` changes the `url` of a service that has one, its scheme kept.
+- `probe check`, `probe wait`, `probe doctor`, `probe curl`, `probe open` and the dashboard use them.
+  `probe ls` marks them: `api  http://localhost:4000/  local port`.
+- `config.yml`, the Makefile block and `lock.yml` never get them: an edit in the dashboard or `probe add` writes
+  the shared values.
 
 ## Parameters
 

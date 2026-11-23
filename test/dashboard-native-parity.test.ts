@@ -256,6 +256,57 @@ describe("checks follow the screen", () => {
   });
 });
 
+describe("values of local.yml", () => {
+  it("are checked in every tab, while edits keep the declared services", async () => {
+    const server = createServer((_, res) => res.end("hello"));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    try {
+      const declared: Config = {
+        schemaVersion: 1,
+        services: { api: { host: "127.0.0.1", port: 1, path: "/" } },
+      };
+      const overrides = { at: "services", services: { api: { port } } };
+      const source = {
+        name: "staging",
+        file: "staging.yml",
+        load: async () => ({
+          config: declared,
+          variables: {},
+          skipped: new Set<string>(),
+          overrides: { at: "envs.staging.services", services: { api: { port } } },
+        }),
+      };
+      const live = {
+        settings: { intervalMs: 1000, timeoutMs: 3000 },
+        selection: {},
+        skipped: new Set<string>(),
+        timeouts: {},
+      };
+      const seen: Config[] = [];
+      const checks = environmentChecks(
+        {
+          config: declared,
+          environments: [source],
+          settings: live.settings,
+          overrides: async () => overrides,
+        } as never,
+        () => live,
+        (_, config) => seen.push(config),
+      );
+      const signal = new AbortController().signal;
+      for (const check of checks) {
+        const [api] = await check.run(signal);
+        expect(api?.ok).toBe(true);
+      }
+      expect(seen).toEqual([declared]);
+      expect(declared.services.api?.port).toBe(1);
+    } finally {
+      server.close();
+    }
+  });
+});
+
 describe("environment parameters", () => {
   it("reports what each environment's file declares on every pass", async () => {
     let declared: Config = {
