@@ -1,7 +1,7 @@
 # Completion
 
 Tab completes the commands, their options, the names of your services (`probe check a<Tab>`), your
-environments after `--env` and your [tags](tags.md) after `--tag`.
+environments after `--env`, your [tags](tags.md) after `--tag` and the service types after `probe add --type`.
 
 ```sh
 eval "$(probe completion zsh)"     # in ~/.zshrc, after compinit

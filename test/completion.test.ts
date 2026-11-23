@@ -132,6 +132,7 @@ describe("completionSpec", () => {
     const options = spec.find(({ name }) => name === "add")?.options;
 
     expect(options).toEqual([
+      "--type",
       "--command",
       "--port",
       "--host",
@@ -318,6 +319,19 @@ describe.skipIf(POSIX_ONLY)("bash completion", () => {
     expect(await bashCompletions(root, "probe", "wait", "--tag", "i")).toEqual(["infra"]);
   });
 
+  it("completes the service types after --type", async () => {
+    const root = await project();
+
+    expect((await bashCompletions(root, "probe", "add", "db", "--type", "")).sort()).toEqual([
+      "command",
+      "http",
+      "mysql",
+      "postgres",
+      "redis",
+    ]);
+    expect(await bashCompletions(root, "probe", "add", "db", "--type", "p")).toEqual(["postgres"]);
+  });
+
   it("completes the options of a command", async () => {
     const root = await project();
 
@@ -397,6 +411,18 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
     const root = await projectWithTags();
 
     expect(await zshCompletions(root, "probe", "check", "--tag", "")).toEqual(["back", "infra"]);
+  });
+
+  it("completes the service types after --type", async () => {
+    const root = await project();
+
+    expect((await zshCompletions(root, "probe", "add", "db", "--type", "")).sort()).toEqual([
+      "command",
+      "http",
+      "mysql",
+      "postgres",
+      "redis",
+    ]);
   });
 
   it("offers the options of a command, and the shells after completion", async () => {
@@ -485,6 +511,18 @@ describe.skipIf(!FISH)("fish completion", () => {
     const root = await projectWithTags();
 
     expect((await fishCompletions(root, "probe check --tag ")).sort()).toEqual(["back", "infra"]);
+  });
+
+  it("completes the service types after --type", async () => {
+    const root = await project();
+
+    expect((await fishCompletions(root, "probe add db --type ")).sort()).toEqual([
+      "command",
+      "http",
+      "mysql",
+      "postgres",
+      "redis",
+    ]);
   });
 
   it("offers the options of a command, and the shells after completion", async () => {
@@ -596,6 +634,18 @@ describe.skipIf(!PWSH)("powershell completion", () => {
     expect((await powershellCompletions(root, "probe check --tag ")).sort()).toEqual([
       "back",
       "infra",
+    ]);
+  });
+
+  it("completes the service types after --type", async () => {
+    const root = await project();
+
+    expect((await powershellCompletions(root, "probe add db --type ")).sort()).toEqual([
+      "command",
+      "http",
+      "mysql",
+      "postgres",
+      "redis",
     ]);
   });
 
