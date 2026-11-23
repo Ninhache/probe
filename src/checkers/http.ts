@@ -263,6 +263,8 @@ export function createHttpChecker(trust: SystemTrust = systemTrust): ServiceType
   return {
     type: "http",
     verb: "sends",
+    answer: ({ status }) => (status === undefined ? undefined : String(status)),
+    response: true,
     target: targetUrl,
     form: httpForm,
     parameterKinds: ["query", "path", "header", "url"],

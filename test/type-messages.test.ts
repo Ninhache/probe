@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { getServiceType, serviceType, serviceTypeNames } from "../src/checkers/registry";
+import {
+  answer,
+  getServiceType,
+  keepsResponse,
+  serviceType,
+  serviceTypeNames,
+} from "../src/checkers/registry";
 import { requireVariables } from "../src/commands/shared";
 import { reference, serviceVariables } from "../src/config/headers";
 import type { Config } from "../src/config/schema";
-import { DATABASE_TYPES } from "../src/config/schema";
+import { DATABASE_TYPES, SERVICE_TYPES } from "../src/config/schema";
 
 const unset = { lookup: () => undefined };
 
@@ -54,5 +60,26 @@ describe("the password field of a database form", () => {
     expect(database("redis")).toBe(2);
     expect(database("postgres")).toBe("2");
     expect(database("mysql")).toBe("2");
+  });
+});
+
+describe("the registry of service types", () => {
+  it("should register every type the config accepts, and no other", () => {
+    expect([...serviceTypeNames()].sort()).toEqual([...SERVICE_TYPES].sort());
+  });
+
+  it("should keep a response only for the types that say so", () => {
+    const keeping = serviceTypeNames().filter(keepsResponse);
+
+    expect(keeping).toEqual(["http"]);
+    expect(keepsResponse("socket")).toBe(false);
+  });
+
+  it("should let the type say what an up service answered", () => {
+    const up = { name: "svc", ok: true, target: "", latencyMs: 1 };
+
+    expect(answer({ ...up, type: "http", status: 204 })).toBe("204");
+    expect(answer({ ...up, type: "command", exitCode: 0 })).toBe("up");
+    expect(answer({ ...up, type: "socket" })).toBe("up");
   });
 });
