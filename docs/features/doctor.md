@@ -1,7 +1,7 @@
 # Doctor
 
-`probe doctor` prints what `probe status` prints, checks the services, then looks at this machine for each one
-that is down.
+`probe doctor` prints what `probe status` prints and whether `.probe/local.yml` matches the config, checks the
+services, then looks at this machine for each one that is down.
 
 ```
 migration  none pending

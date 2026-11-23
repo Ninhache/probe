@@ -25,7 +25,7 @@ import { type FocusWatch, watchFocus } from "../focus";
 import type { Saved } from "../saves";
 import type { DashboardSettings } from "../settings";
 import type { EnvironmentSource } from "../sources";
-import { createEditor } from "./editor";
+import { addedLocally, createEditor } from "./editor";
 import { LOCAL_ENVIRONMENT, Tracker } from "./history";
 import { type EnvironmentCheck, Monitor } from "./monitor";
 import { whatsNewModal } from "./news";
@@ -458,6 +458,11 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             monitor.refresh();
           },
           timeout: (service, seconds) => {
+            if (!Object.hasOwn(editing.config().services, service)) {
+              const { [service]: _stepped, ...timeouts } = view.timeouts;
+              view.timeouts = timeouts;
+              return say(view, addedLocally(service));
+            }
             track(options.onTimeoutChange?.(service, seconds));
             monitor.refresh();
           },

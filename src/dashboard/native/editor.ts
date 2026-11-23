@@ -14,11 +14,12 @@ import { say, type ViewState } from "./view";
 
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
-// Shown on the local tab but not in config.yml: local.yml adds it, and the dashboard writes config.yml.
+/** Shown on the local tab but not in config.yml: local.yml adds it, and the dashboard writes config.yml. */
+export const addedLocally = (service: string) =>
+  `${service} is in ${LOCAL}, under extraServices: change it there`;
+
 const notIn = (service: string, env: string | undefined) =>
-  env
-    ? `${service} is not in ${env}`
-    : `${service} is in ${LOCAL}, under extraServices: change it there`;
+  env ? `${service} is not in ${env}` : addedLocally(service);
 
 /** What the keys that edit the files do: each opens a modal or writes, then says what happened. */
 export interface Editor {
