@@ -1,7 +1,13 @@
 import { COMPLETE_COMMAND } from "../constants";
 import { CLI_VERSION } from "../version";
 import { completionMarker } from "./marker";
-import { type CommandSpec, ENVIRONMENT_OPTION, ROOT_OPTIONS, TAG_OPTION } from "./spec";
+import {
+  type CommandSpec,
+  ENVIRONMENT_OPTION,
+  OPTION_WORDS,
+  ROOT_OPTIONS,
+  TAG_OPTION,
+} from "./spec";
 
 // PowerShell reads the typographic quotes as quotes too.
 const QUOTES = /['‘’‚‛]/g;
@@ -45,6 +51,10 @@ export function powershellScript(commands: CommandSpec[], version: string = CLI_
     "    $candidates = Get-ProbeWords 'environments'",
     `  } elseif ($command -and $previous -eq ${quoted(TAG_OPTION)}) {`,
     "    $candidates = Get-ProbeWords 'tags'",
+    ...Object.entries(OPTION_WORDS).flatMap(([option, words]) => [
+      `  } elseif ($command -and $previous -eq ${quoted(option)}) {`,
+      `    $candidates = ${list([...words])}`,
+    ]),
     "  } elseif (-not $command) {",
     "    if ($wordToComplete.StartsWith('-')) { $candidates = $rootOptions }",
     "    else { $candidates = @($commands.Keys); $tips = $commands }",

@@ -4,6 +4,7 @@ import {
   type CommandSpec,
   ENVIRONMENT_OPTION,
   ENVIRONMENTS_QUERY,
+  OPTION_WORDS,
   ROOT_OPTIONS,
   SERVICES_QUERY,
   TAG_OPTION,
@@ -32,6 +33,10 @@ export function bashScript(commands: CommandSpec[], version: string = CLI_VERSIO
     `    words="$(${ENVIRONMENTS_QUERY})"`,
     `  elif [ -n "$cmd" ] && [ "\${COMP_WORDS[COMP_CWORD-1]}" = "${TAG_OPTION}" ]; then`,
     `    words="$(${TAGS_QUERY})"`,
+    ...Object.entries(OPTION_WORDS).flatMap(([option, words]) => [
+      `  elif [ -n "$cmd" ] && [ "\${COMP_WORDS[COMP_CWORD-1]}" = "${option}" ]; then`,
+      `    words="${words.join(" ")}"`,
+    ]),
     '  elif [ -z "$cmd" ]; then',
     '    case "$cur" in',
     `      -*) words="${ROOT_OPTIONS.join(" ")}" ;;`,

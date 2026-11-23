@@ -4,6 +4,7 @@ import {
   type CommandSpec,
   ENVIRONMENT_OPTION,
   ENVIRONMENTS_QUERY,
+  OPTION_WORDS,
   ROOT_OPTIONS,
   SERVICES_QUERY,
   TAG_OPTION,
@@ -12,11 +13,14 @@ import {
 
 const quoted = (text: string) => `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const VALUES: Record<string, string> = {
-  [ENVIRONMENT_OPTION]: "__probe_environments",
-  [TAG_OPTION]: "__probe_tags",
+  [ENVIRONMENT_OPTION]: "(__probe_environments)",
+  [TAG_OPTION]: "(__probe_tags)",
+  ...Object.fromEntries(
+    Object.entries(OPTION_WORDS).map(([option, words]) => [option, words.join(" ")]),
+  ),
 };
 const longOption = (option: string) =>
-  `-l ${option.replace(/^--/, "")}${Object.hasOwn(VALUES, option) ? ` -x -a '(${VALUES[option]})'` : ""}`;
+  `-l ${option.replace(/^--/, "")}${Object.hasOwn(VALUES, option) ? ` -x -a '${VALUES[option]}'` : ""}`;
 
 export function fishScript(commands: CommandSpec[], version: string = CLI_VERSION): string {
   const inCommand = (names: string[]) => `-n '__fish_seen_subcommand_from ${names.join(" ")}'`;

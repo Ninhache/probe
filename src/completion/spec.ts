@@ -1,3 +1,4 @@
+import { SERVICE_TYPES } from "../config/schema";
 import { COMPLETE_COMMAND } from "../constants";
 
 export interface CommandSpec {
@@ -28,6 +29,11 @@ export const TAG_OPTION = "--tag";
 export const SET_OPTION = "--set";
 
 export const TAGS_QUERY = `probe ${COMPLETE_COMMAND} tags 2>/dev/null`;
+
+/** The options whose values are known without a project: offered after the option. */
+export const OPTION_WORDS: Readonly<Record<string, readonly string[]>> = {
+  "--type": SERVICE_TYPES,
+};
 
 const HELP_OPTION = "--help";
 
