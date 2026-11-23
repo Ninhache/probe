@@ -3,7 +3,16 @@ import type { ServiceFields } from "../checkers/types";
 import type { ProbePaths } from "../config/discovery";
 import { loadConfig } from "../config/loader";
 import type { RawConfig } from "../config/migrations";
-import { type Config, DEFAULT_METHOD, declaresAddress, type Service } from "../config/schema";
+import {
+  ADDRESS_KEYS,
+  type Config,
+  declaresAddress,
+  type Service,
+  type ServiceKey,
+  type ServiceKind,
+  serviceKeys,
+  serviceRules,
+} from "../config/schema";
 import { rawServices, writeServices } from "./shared";
 
 export type { ServiceFields } from "../checkers/types";
@@ -22,17 +31,6 @@ export interface ServiceWritten {
   warning?: string;
 }
 
-const DEFAULTS: Partial<ServiceFields> = {
-  host: "localhost",
-  path: "/",
-  expect: undefined,
-  method: DEFAULT_METHOD,
-  headers: undefined,
-  env: undefined,
-  user: undefined,
-  database: undefined,
-  password: undefined,
-};
 const FIELD_KEYS = [
   "host",
   "port",
@@ -49,12 +47,16 @@ const FIELD_KEYS = [
 /** `expect: [200]` and `expect: 200` say the same: a form cannot tell which one was written. */
 const sameValue = (a: unknown, b: unknown) => isDeepStrictEqual([a].flat(), [b].flat());
 
-const ADDRESS_KEYS: readonly string[] = ["host", "port", "path"];
+const isAddressKey = (key: string) => (ADDRESS_KEYS as readonly string[]).includes(key);
 
 function withFields(service: RawConfig, fields: ServiceFields, current?: Service): RawConfig {
   const next = { ...service };
-  // `type: http` is the default: any other type is written.
-  if (fields.type !== undefined && fields.type !== "http") next.type = fields.type;
+  // `type: http` is the default: it is never written, and a service that becomes http loses it.
+  if (fields.type === "http") delete next.type;
+  else if (fields.type !== undefined) next.type = fields.type;
+  const type = next.type as ServiceKind | undefined;
+  const keys = serviceKeys(type);
+  const { defaults } = serviceRules(type);
   if (fields.command !== undefined && !isDeepStrictEqual(fields.command, service.command)) {
     next.command = fields.command;
   }
@@ -62,8 +64,11 @@ function withFields(service: RawConfig, fields: ServiceFields, current?: Service
   if (fields.url !== undefined) {
     if (fields.url !== service.url) next.url = fields.url;
   } else delete next.url;
+  // What the type does not read would make the file refused: a service that changes type drops it.
+  for (const key of Object.keys(next) as ServiceKey[]) if (!keys.has(key)) delete next[key];
   for (const key of FIELD_KEYS) {
-    const address = ADDRESS_KEYS.includes(key);
+    if (!keys.has(key)) continue;
+    const address = isAddressKey(key);
     if (address && fields.url !== undefined) {
       delete next[key];
       continue;
@@ -72,9 +77,9 @@ function withFields(service: RawConfig, fields: ServiceFields, current?: Service
     const own = service.url === undefined && current !== undefined && declaresAddress(current);
     const was = address && !own ? undefined : current;
     // An edit leaves alone what it did not change, even a default written out by hand.
-    const value = fields[key] ?? DEFAULTS[key];
-    if (was && sameValue(value, was[key] ?? DEFAULTS[key])) continue;
-    if (isDeepStrictEqual(value, DEFAULTS[key])) delete next[key];
+    const value = fields[key] ?? defaults[key];
+    if (was && sameValue(value, was[key] ?? defaults[key])) continue;
+    if (isDeepStrictEqual(value, defaults[key])) delete next[key];
     else next[key] = fields[key];
   }
   return next;
