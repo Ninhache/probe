@@ -321,6 +321,7 @@ export async function runCommand(
 
 export const commandChecker: ServiceType = {
   type: "command",
+  verb: "needs",
   target: (service) => commandTarget(service.command as Command),
   copy: (service, env) => ({ command: copiedCommand(service), note: copiedNote(service, env) }),
   form: commandForm,

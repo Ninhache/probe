@@ -1,3 +1,4 @@
+import { serviceType } from "../checkers/registry";
 import { selectServices } from "../checkers/select";
 import { SET_OPTION, TAG_OPTION } from "../completion/spec";
 import { type ProbePaths, requireProbeDir } from "../config/discovery";
@@ -124,7 +125,7 @@ export function requireVariables(
     const scope = variables.environment === undefined ? "" : ` --env ${variables.environment}`;
     throw new ProbeError(
       "VARIABLE_UNSET",
-      `${name} ${service.type === undefined || service.type === "http" ? "sends" : "needs"} ${unset}, which is not set. Set it for this machine: probe var ${unset}${scope} (or export it).`,
+      `${name} ${serviceType(service).verb} ${unset}, which is not set. Set it for this machine: probe var ${unset}${scope} (or export it).`,
     );
   }
 }
