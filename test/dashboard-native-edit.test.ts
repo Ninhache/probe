@@ -112,6 +112,22 @@ function setup({ edits = {}, config = initial, environments = [], create, remove
 
 const footer = (frame: string) => frame.split("\n").at(-1) ?? "";
 
+describe("a service local.yml adds", () => {
+  it.each(["e", "d"])("is not changed by %s, which says where it is", (key) => {
+    const { press, draw, tracker, view, writes } = setup({
+      config: { schemaVersion: 1, services: {} },
+    });
+    tracker.record("local", [answered("scratch")], 1);
+    draw();
+
+    press(key);
+
+    expect(view.modals.depth).toBe(0);
+    expect(writes).toEqual([]);
+    expect(draw()).toContain("scratch is in .probe/local.yml, under extraServices");
+  });
+});
+
 describe("removing a service", () => {
   it("asks before removing the selected service", () => {
     const { press, draw, writes } = setup();

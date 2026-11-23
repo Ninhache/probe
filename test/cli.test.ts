@@ -520,6 +520,149 @@ describe("a value of a service set in local.yml", () => {
   });
 });
 
+describe("a service only local.yml has", () => {
+  async function added(): Promise<string> {
+    const root = await makefileProject();
+    await addDown(root);
+    expect((await probe(root, "sync")).code).toBe(0);
+    await writeFile(
+      join(root, ".probe", "local.yml"),
+      `extraServices:\n  scratch: { host: 127.0.0.1, port: ${port}, path: /health }\n`,
+    );
+    return root;
+  }
+
+  it("is checked with the shared ones", async () => {
+    const root = await added();
+
+    const result = await probe(root, "check", "--json");
+
+    expect(JSON.parse(result.stdout)).toMatchObject([
+      { name: "down", ok: false },
+      { name: "scratch", ok: true, status: 200 },
+    ]);
+  });
+
+  it("is marked local by probe ls", async () => {
+    const root = await added();
+
+    const result = await probe(root, "ls");
+
+    expect(result.stdout).toMatch(/^scratch {2}http:\/\/127\.0\.0\.1:\d+\/health {2}local$/m);
+  });
+
+  it("reaches neither config.yml, the Makefile nor lock.yml", async () => {
+    const root = await added();
+    const files = ["Makefile", join(".probe", "config.yml"), join(".probe", "lock.yml")];
+    const read = () => Promise.all(files.map((file) => readFile(join(root, file), "utf8")));
+    const written = await read();
+
+    await probe(root, "check");
+    await probe(root, "sync");
+
+    expect(await read()).toEqual(written);
+    expect(written.join("\n")).not.toContain("scratch");
+  });
+
+  it("is not removed by probe rm, which says where it is", async () => {
+    const root = await added();
+
+    const result = await probe(root, "rm", "scratch", "--yes");
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("scratch is only in .probe/local.yml, under extraServices");
+  });
+
+  it("is told about once config.yml has one of the same name", async () => {
+    const root = await added();
+    await probe(root, "add", "scratch", "-p", String(closedPort));
+
+    const result = await probe(root, "check", "scratch");
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      "probe: local.yml: extraServices.scratch is now in config.yml too: the shared one is checked.",
+    );
+  });
+});
+
+describe("local.yml out of step with config.yml", () => {
+  async function removedByHand(): Promise<string> {
+    const root = await project();
+    await addApi(root);
+    await addDown(root);
+    await writeFile(
+      join(root, ".probe", "local.yml"),
+      "services:\n  down: { timeout: 3 }\n  gone: { port: 4000 }\n  old: { skip: true }\n",
+    );
+    return root;
+  }
+
+  it("says which values are unused, without changing the exit code", async () => {
+    const root = await removedByHand();
+
+    const result = await probe(root, "check", "api");
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(
+      "probe: local.yml: services.gone is no longer in config.yml: its values are unused. Remove them from .probe/local.yml.",
+    );
+    expect(result.stderr).toContain("services.old is no longer in config.yml");
+    expect(result.stderr).not.toContain("services.down");
+    expect(result.stderr).not.toContain("4000");
+  });
+
+  it("keeps the JSON output alone", async () => {
+    const root = await removedByHand();
+
+    const result = await probe(root, "check", "api", "--json");
+
+    expect(JSON.parse(result.stdout)).toMatchObject([{ name: "api", ok: true }]);
+    expect(result.stderr).toBe("");
+  });
+
+  it("is told by probe ls too", async () => {
+    const root = await removedByHand();
+
+    expect((await probe(root, "ls")).stderr).toContain("services.gone is no longer in config.yml");
+  });
+
+  it("is a line of probe doctor and a field of its JSON", async () => {
+    const root = await removedByHand();
+
+    const text = await probe(root, "doctor", "api");
+    const json = await probe(root, "doctor", "api", "--json");
+
+    expect(text.stdout).toMatch(
+      /^local\.yml {2}services\.gone no longer in config\.yml, services\.old no longer in config\.yml$/m,
+    );
+    expect(JSON.parse(json.stdout).project.local).toEqual({
+      unused: ["gone", "old"],
+      shadowed: [],
+    });
+  });
+
+  it("is said to be in step by probe doctor otherwise", async () => {
+    const root = await project();
+    await addApi(root);
+
+    const result = await probe(root, "doctor");
+
+    expect(result.stdout).toMatch(/^local\.yml {2}in step with config\.yml$/m);
+  });
+
+  it("is avoided by probe rm, which takes the values out of local.yml", async () => {
+    const root = await removedByHand();
+
+    const result = await probe(root, "rm", "down", "--yes");
+
+    expect(result.stdout).toContain("Removed down, and its values in .probe/local.yml.");
+    expect(await readFile(join(root, ".probe", "local.yml"), "utf8")).toBe(
+      "services:\n  gone: { port: 4000 }\n  old: { skip: true }\n",
+    );
+  });
+});
+
 describe("a service skipped in local.yml", () => {
   async function skippedDown(): Promise<string> {
     const root = await project();

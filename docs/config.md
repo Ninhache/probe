@@ -263,11 +263,40 @@ envs:
 - A `host`, `port` or `path` changes the `url` of a service that has one, its scheme kept.
 - They win over the `timeout` of the dashboard panel. A value chosen for a `urls:` [parameter](#parameters) wins
   over the address they give.
-- A service removed from `config.yml` leaves its values unused, as `skip`.
 - `probe check`, `probe wait`, `probe doctor`, `probe curl`, `probe open` and the dashboard use them.
   `probe ls` marks them: `api  http://localhost:4000/  local port`.
 - `config.yml`, the Makefile block and `lock.yml` never get them: an edit in the dashboard or `probe add` writes
   the shared values.
+
+A service only your machine has goes under `extraServices`, with every key a service of `config.yml` takes but
+`urls:`:
+
+```yaml
+# .probe/local.yml
+extraServices:
+  scratch: { port: 5173, path: /health }
+envs:
+  staging:
+    extraServices:
+      tunnel: { url: "https://localhost:8443/" } # with --env staging only
+```
+
+- It is checked, waited for and listed with the others; `probe ls` marks it `local`.
+- `config.yml`, the Makefile block and `lock.yml` never get it. The dashboard checks it, but changes it only in
+  `local.yml`: `e` and `d` say so. `probe rm` refuses it.
+
+When `config.yml` changes under `local.yml`, probe says so on stderr, without changing the exit code. Only the
+names are said, never a value:
+
+```
+probe: local.yml: services.gone is no longer in config.yml: its values are unused. Remove them from .probe/local.yml.
+probe: local.yml: extraServices.api is now in config.yml too: the shared one is checked. Move what differs to services.api, or remove it.
+```
+
+- `probe check`, `probe wait` and `probe ls` print it, but not with `--json`. `probe doctor` gives it a
+  `local.yml` line and a `project.local` field. The dashboard tells it once, as it opens.
+- A value or a `skip` of a removed service is unused until you remove it. `probe rm api` removes the values of
+  `api` from `local.yml` too.
 
 ## Parameters
 

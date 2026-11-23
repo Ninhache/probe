@@ -6,6 +6,7 @@ that is down.
 ```
 migration  none pending
 makefile   in sync
+local.yml  in step with config.yml
 update     up to date (0.19.0)
 
 ✓ web  http://localhost:5173/  200  4ms
@@ -46,6 +47,10 @@ line nor an environment.
 With `--env`, the Makefile block is left out of the report: it lists the local services.
 
 With `--json`, each down service carries its `checks`: `port`, `process`, `docker`.
+
+The `local.yml` line names the entries of `.probe/local.yml` that no longer match the config: values of a service
+it no longer has, or an [added service](../config.md#values-of-your-machine) it now has too. In JSON, it is
+`project.local: { unused, shadowed }`, names only. It does not change the exit code.
 
 ## Exit code
 

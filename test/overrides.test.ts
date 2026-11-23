@@ -2,7 +2,13 @@ import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/loader";
 import { readServiceOverrides } from "../src/config/local";
-import { overriddenKeys, type ServiceOverrides, withOverrides } from "../src/config/overrides";
+import {
+  localMismatches,
+  mismatchMessages,
+  overriddenKeys,
+  type ServiceOverrides,
+  withOverrides,
+} from "../src/config/overrides";
 import { applySelection } from "../src/config/parameters";
 import type { Config } from "../src/config/schema";
 import { tempProject } from "./helpers";
@@ -192,7 +198,138 @@ describe("withOverrides", () => {
   });
 });
 
+const adding = (
+  extra: NonNullable<ServiceOverrides["extra"]>,
+  at = "services",
+): ServiceOverrides => ({ at, services: {}, extra });
+
+describe("services added in local.yml", () => {
+  it("checks a service only this machine has", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    const reached = withOverrides(config, adding({ scratch: { port: 5173, path: "/up" } }));
+
+    expect(reached.services.scratch).toMatchObject({ host: "localhost", port: 5173, path: "/up" });
+    expect(config.services.scratch).toBeUndefined();
+  });
+
+  it("checks the shared service when config.yml has one of the same name", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    const reached = withOverrides(config, adding({ api: { port: 4000 } }));
+
+    expect(reached.services.api?.port).toBe(3000);
+  });
+
+  it("refuses a key the type of the added service does not read, without its value", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    const failing = () =>
+      withOverrides(config, adding({ scratch: { port: 5173, user: "marker-user" } }));
+
+    expect(failing).toThrow(/extraServices\.scratch\.user: needs `type: postgres`/);
+    expect(failing).not.toThrow(/marker-user/);
+  });
+
+  it("refuses a password written there instead of a reference", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    const failing = () =>
+      withOverrides(
+        config,
+        adding({ db: { type: "postgres", port: 5432, password: "marker-secret" } }),
+      );
+
+    expect(failing).toThrow(/extraServices\.db\.password/);
+    expect(failing).not.toThrow(/marker-secret/);
+  });
+
+  it("refuses urls, which follow a parameter of the shared config", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    expect(() =>
+      withOverrides(config, adding({ web: { urls: { dev: "http://localhost/" } } })),
+    ).toThrow(/extraServices\.web\.urls: cannot be set there/);
+  });
+
+  it("refuses a name config.yml could not have", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    expect(() => withOverrides(config, adding({ "-bad": { port: 1 } }))).toThrow(
+      /extraServices\.-bad: letters, digits/,
+    );
+  });
+
+  it("names the added services of an environment under envs", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    expect(() =>
+      withOverrides(config, adding({ scratch: { port: "x" } }, "envs.staging.services")),
+    ).toThrow(/envs\.staging\.extraServices\.scratch\.port/);
+  });
+});
+
+describe("localMismatches", () => {
+  it("tells the values and the skips of a service config.yml no longer has", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+    const overrides: ServiceOverrides = {
+      at: "services",
+      services: { api: { port: 4000 }, gone: { port: 1 } },
+      skipped: ["down"],
+    };
+
+    expect(localMismatches(config, overrides)).toEqual({ unused: ["down", "gone"], shadowed: [] });
+  });
+
+  it("tells an added service config.yml now has too", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+
+    expect(localMismatches(config, adding({ api: { port: 1 }, scratch: { port: 2 } }))).toEqual({
+      unused: [],
+      shadowed: ["api"],
+    });
+  });
+
+  it("finds none for the values of an added service", async () => {
+    const config = await configOf("  api: { port: 3000 }\n");
+    const overrides = {
+      ...adding({ scratch: { port: 2 } }),
+      services: { scratch: { timeout: 3 } },
+    };
+
+    expect(localMismatches(config, overrides)).toEqual({ unused: [], shadowed: [] });
+  });
+
+  it("says where each one is, with the prefix of the environment", () => {
+    const overrides = adding({}, "envs.staging.services");
+
+    expect(
+      mismatchMessages(
+        overrides,
+        { unused: ["gone"], shadowed: ["api"] },
+        ".probe/envs/staging.yml",
+      ),
+    ).toEqual([
+      "local.yml: envs.staging.services.gone is no longer in .probe/envs/staging.yml: its values are unused. Remove them from .probe/local.yml.",
+      "local.yml: envs.staging.extraServices.api is now in .probe/envs/staging.yml too: the shared one is checked. Move what differs to envs.staging.services.api, or remove it.",
+    ]);
+  });
+});
+
 describe("readServiceOverrides", () => {
+  it("reads the services local.yml adds, in its scope", async () => {
+    const root = await tempProject("schemaVersion: 1\nservices: {}\n");
+    await writeFile(
+      root.local,
+      "extraServices:\n  scratch: { port: 5173 }\nenvs:\n  staging:\n    extraServices:\n      tool: { port: 9 }\n",
+    );
+
+    expect((await readServiceOverrides(root)).extra).toEqual({ scratch: { port: 5173 } });
+    expect((await readServiceOverrides({ ...root, environment: "staging" })).extra).toEqual({
+      tool: { port: 9 },
+    });
+  });
+
   it("reads the values of each service, skip aside", async () => {
     const paths = await tempProject("schemaVersion: 1\nservices: {}\n");
     await writeFile(
@@ -203,6 +340,7 @@ describe("readServiceOverrides", () => {
     expect(await readServiceOverrides(paths)).toEqual({
       at: "services",
       services: { api: { port: 4000 } },
+      skipped: ["api", "down"],
     });
   });
 

@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import { pollUntilUp } from "../checkers/poll";
 import { runChecks } from "../checkers/run";
 import type { CheckResult } from "../checkers/types";
-import { loadVariables, localConfig, readSkippedServices } from "../config/local";
+import { loadVariables, readSkippedServices } from "../config/local";
 import {
   DEFAULT_TIMEOUT_SECONDS,
   DEFAULT_WAIT_INTERVAL_SECONDS,
@@ -17,6 +17,7 @@ import {
   ENVIRONMENT_ARG,
   noServices,
   openProject,
+  reachedServices,
   requireVariables,
   SET_ARG,
   secondsToMs,
@@ -85,7 +86,7 @@ export default defineCommand({
       );
     }
     const { config: declared, paths } = await openProject(args.env);
-    const config = await localConfig(declared, paths);
+    const { config } = await reachedServices(paths, declared, args.json);
     const selection = selectionFrom(config, rawArgs);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);

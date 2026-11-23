@@ -6,6 +6,8 @@ import {
   ADDRESS_KEYS,
   type Config,
   declaresAddress,
+  NAME_EXPECTED,
+  SERVICE_NAME_PATTERN,
   type Service,
   serviceSchemaV1,
   serviceShapeV1,
@@ -30,9 +32,28 @@ export interface ServiceOverrides {
   /** Where they sit in local.yml, `services` or `envs.<name>.services`: said in the problems. */
   at: string;
   services: Readonly<Record<string, Readonly<Partial<Record<OverrideKey, unknown>>>>>;
+  /** The services only this machine has, under `extraServices` next to `services`, as written. */
+  extra?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** The services local.yml skips: a name config.yml no longer has is told about too. */
+  skipped?: readonly string[];
 }
 
 export const NO_OVERRIDES: ServiceOverrides = { at: "services", services: {} };
+
+const SERVICES = "services";
+export const EXTRA_SERVICES = "extraServices";
+
+/** Where the added services sit in local.yml: `extraServices`, or under the environment. */
+export const extraAt = (overrides: ServiceOverrides): string =>
+  `${overrides.at.slice(0, -SERVICES.length)}${EXTRA_SERVICES}`;
+
+/** What local.yml says of services config.yml has changed since: names only, never a value. */
+export interface LocalMismatches {
+  /** Under `services`: config.yml no longer has them, their values are unused. */
+  unused: string[];
+  /** Under `extraServices`: config.yml has them now, and the shared one is checked. */
+  shadowed: string[];
+}
 
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
@@ -115,24 +136,77 @@ function valueProblems(override: Override): z.core.$ZodIssue[] {
   });
 }
 
-function problem(at: string, name: string, issues: readonly z.core.$ZodIssue[]): ProbeError {
+function problem(prefix: string, issues: readonly z.core.$ZodIssue[]): ProbeError {
   // The messages of the schema name the key, never the value: it stays on this machine.
   return new ProbeError(
     "CONFIG_INVALID",
-    `${LOCAL} is invalid:\n${formatIssues(new z.ZodError([...issues]), `${at}.${name}.`)}`,
+    `${LOCAL} is invalid:\n${formatIssues(new z.ZodError([...issues]), prefix)}`,
   );
 }
 
+const custom = (path: string[], message: string): z.core.$ZodIssue => ({
+  code: "custom",
+  path,
+  message,
+  input: undefined,
+});
+
+// `urls:` follows a parameter of the shared config: a service of this machine has its own address.
+const URLS_REFUSED = "cannot be set there: give a service of local.yml its own url or port";
+
+function added(at: string, name: string, written: Readonly<Record<string, unknown>>): Service {
+  if (!SERVICE_NAME_PATTERN.test(name)) throw problem(`${at}.`, [custom([name], NAME_EXPECTED)]);
+  if (Object.hasOwn(written, "urls"))
+    throw problem(`${at}.${name}.`, [custom(["urls"], URLS_REFUSED)]);
+  const parsed = serviceSchemaV1.safeParse(written);
+  if (!parsed.success) throw problem(`${at}.${name}.`, parsed.error.issues);
+  return parsed.data;
+}
+
+/** The entries of local.yml that no longer match config.yml. Pure: the caller says it where it fits. */
+export function localMismatches(config: Config, overrides: ServiceOverrides): LocalMismatches {
+  const shared = (name: string) => Object.hasOwn(config.services, name);
+  const extra = Object.keys(overrides.extra ?? {});
+  const tracked = new Set([...Object.keys(overrides.services), ...(overrides.skipped ?? [])]);
+  return {
+    unused: [...tracked].filter((name) => !shared(name) && !extra.includes(name)).sort(),
+    shadowed: extra.filter(shared).sort(),
+  };
+}
+
+/** One line for each mismatch, naming `file`, the shared config the services were read from. */
+export function mismatchMessages(
+  overrides: ServiceOverrides,
+  { unused, shadowed }: LocalMismatches,
+  file: string,
+): string[] {
+  return [
+    ...unused.map(
+      (name) =>
+        `${LOCAL_FILE}: ${overrides.at}.${name} is no longer in ${file}: its values are unused. Remove them from ${LOCAL}.`,
+    ),
+    ...shadowed.map(
+      (name) =>
+        `${LOCAL_FILE}: ${extraAt(overrides)}.${name} is now in ${file} too: the shared one is checked. Move what differs to ${overrides.at}.${name}, or remove it.`,
+    ),
+  ];
+}
+
 /**
- * The services as this machine reaches them: config.yml with the values of local.yml.
+ * The services as this machine reaches them: config.yml with the values and the services of local.yml.
  * The result is read, never written: config.yml, the Makefile and lock.yml do not see it.
- * A service config.yml no longer has is left out, as `skip` is.
+ * A service config.yml no longer has is left out, as `skip` is; one it has now beats the added one.
  * @throws ProbeError CONFIG_INVALID when local.yml sets a key it cannot, or a value the service cannot take.
  */
 export function withOverrides(config: Config, overrides: ServiceOverrides = NO_OVERRIDES): Config {
   const names = Object.keys(overrides.services);
-  if (names.length === 0) return config;
+  const extra = Object.entries(overrides.extra ?? {});
+  if (names.length === 0 && extra.length === 0) return config;
   const services = { ...config.services };
+  for (const [name, written] of extra) {
+    if (!Object.hasOwn(config.services, name))
+      services[name] = added(extraAt(overrides), name, written);
+  }
   for (const name of names) {
     const override = overrides.services[name] ?? {};
     const keys = Object.keys(override);
@@ -142,15 +216,12 @@ export function withOverrides(config: Config, overrides: ServiceOverrides = NO_O
     const service = Object.hasOwn(services, name) ? services[name] : undefined;
     if (!service) continue;
     const issues = valueProblems(override);
-    if (issues.length > 0) throw problem(overrides.at, name, issues);
+    const prefix = `${overrides.at}.${name}.`;
+    if (issues.length > 0) throw problem(prefix, issues);
     const next = merged(service, override);
-    if (next === undefined) {
-      throw problem(overrides.at, name, [
-        { code: "custom", path: ["host"], message: HOST_EXPECTED, input: undefined },
-      ]);
-    }
+    if (next === undefined) throw problem(prefix, [custom(["host"], HOST_EXPECTED)]);
     const parsed = serviceSchemaV1.safeParse(next);
-    if (!parsed.success) throw problem(overrides.at, name, parsed.error.issues);
+    if (!parsed.success) throw problem(prefix, parsed.error.issues);
     services[name] = parsed.data;
   }
   return { ...config, services };

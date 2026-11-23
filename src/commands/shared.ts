@@ -4,8 +4,14 @@ import { SET_OPTION, TAG_OPTION } from "../completion/spec";
 import { type ProbePaths, requireProbeDir } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { type LoadedConfig, loadConfig, saveConfig } from "../config/loader";
-import type { Variables } from "../config/local";
+import { readServiceOverrides, type Variables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
+import {
+  localMismatches,
+  mismatchMessages,
+  type ServiceOverrides,
+  withOverrides,
+} from "../config/overrides";
 import { type Selection, selectionFrom as selectionOf } from "../config/parameters";
 import {
   type Config,
@@ -70,6 +76,34 @@ export function configFile(paths: ProbePaths): string | undefined {
   return paths.environment === undefined
     ? undefined
     : `${PROBE_DIR}/${ENVIRONMENTS_DIR}/${paths.environment}.yml`;
+}
+
+/** The file the services of `paths` are read from, as the messages name it. */
+export const sharedFile = (paths: ProbePaths): string => configFile(paths) ?? CONFIG_FILE;
+
+/** Says on stderr what local.yml still sets for services the shared config has changed. */
+export function warnMismatches(paths: ProbePaths, declared: Config, overrides: ServiceOverrides) {
+  const lines = mismatchMessages(
+    overrides,
+    localMismatches(declared, overrides),
+    sharedFile(paths),
+  );
+  for (const line of lines) console.error(`probe: ${line}`);
+}
+
+/**
+ * The services as this machine reaches them, local.yml applied; its mismatches said on stderr
+ * unless `quiet`, so that a JSON output stays alone.
+ */
+export async function reachedServices(
+  paths: ProbePaths,
+  declared: Config,
+  quiet = false,
+): Promise<{ config: Config; overrides: ServiceOverrides }> {
+  const overrides = await readServiceOverrides(paths);
+  const config = withOverrides(declared, overrides);
+  if (!quiet) warnMismatches(paths, declared, overrides);
+  return { config, overrides };
 }
 
 export function noServices(paths: ProbePaths): string {

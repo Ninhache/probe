@@ -1,7 +1,12 @@
 import { runChecks } from "../../checkers/run";
 import type { EnvironmentOrigin } from "../../commands/env-create";
 import type { Variables } from "../../config/local";
-import { type ServiceOverrides, withOverrides } from "../../config/overrides";
+import {
+  localMismatches,
+  mismatchMessages,
+  type ServiceOverrides,
+  withOverrides,
+} from "../../config/overrides";
 import {
   applySelection,
   mergedChoices,
@@ -9,7 +14,7 @@ import {
   type Selection,
 } from "../../config/parameters";
 import type { Config } from "../../config/schema";
-import { NOTIFY_GRACE_SECONDS, RESPONSE_FULL_BODY_BYTES } from "../../constants";
+import { CONFIG_FILE, NOTIFY_GRACE_SECONDS, RESPONSE_FULL_BODY_BYTES } from "../../constants";
 import { App } from "../../tui/app";
 import { supportsUnicode } from "../../ui/terminal";
 import type { News } from "../../update/whats-new";
@@ -70,21 +75,30 @@ export interface NativeDashboardOptions extends EditCallbacks {
 /** What the next pass runs with: the screen changes it while it runs. */
 export type LiveState = Pick<ViewState, "settings" | "skipped" | "timeouts" | "selection">;
 
+/** Told the services local.yml adds to an environment, as a pass starts. */
+export type OnAdded = (env: string, names: ReadonlySet<string>) => void;
+
+const addedNames = (declared: Config, checked: Config): ReadonlySet<string> =>
+  new Set(Object.keys(checked.services).filter((name) => !Object.hasOwn(declared.services, name)));
+
 /** The check of an environment file, read again at each pass. */
 export function sourceCheck(
   source: EnvironmentSource,
   live: () => LiveState,
   onLoaded: (env: string, declared: Config) => void,
   cwd?: string,
+  onAdded: OnAdded = () => {},
 ): EnvironmentCheck {
   return {
     name: source.name,
     run: async (signal) => {
       const { config: declared, variables: loaded, skipped, overrides } = await source.load();
       onLoaded(source.name, declared);
+      const checked = withOverrides(declared, overrides);
+      onAdded(source.name, addedNames(declared, checked));
       const now = live();
       return runChecks(
-        withOverrides(declared, overrides),
+        checked,
         [],
         {
           timeoutMs: now.settings.timeoutMs,
@@ -111,6 +125,7 @@ export function environmentChecks(
     timeouts: {},
   }),
   onLoaded: (env: string, declared: Config) => void = () => {},
+  onAdded: OnAdded = () => {},
 ): EnvironmentCheck[] {
   const { environments, variables } = options;
   // A screen that can add services keeps its own tab, empty or not.
@@ -125,8 +140,10 @@ export function environmentChecks(
           name: LOCAL_ENVIRONMENT,
           run: async (signal) => {
             const now = live();
+            const checked = await localChecked(options.config, now.timeouts, options.overrides);
+            onAdded(LOCAL_ENVIRONMENT, addedNames(options.config, checked));
             return runChecks(
-              await localChecked(options.config, now.timeouts, options.overrides),
+              checked,
               [],
               {
                 timeoutMs: now.settings.timeoutMs,
@@ -144,7 +161,7 @@ export function environmentChecks(
       ];
   return [
     ...local,
-    ...environments.map((source) => sourceCheck(source, live, onLoaded, options.cwd)),
+    ...environments.map((source) => sourceCheck(source, live, onLoaded, options.cwd, onAdded)),
   ];
 }
 
@@ -240,6 +257,11 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     },
   };
   const loaded = new Map<string, Config>();
+  // The services local.yml adds: their rows stay, though no file the dashboard writes has them.
+  const added = new Map<string, ReadonlySet<string>>();
+  const onAdded: OnAdded = (env, names) => added.set(env, names);
+  const kept = (env: string, declared: Config) =>
+    new Set([...Object.keys(declared.services), ...(added.get(env) ?? [])]);
   // Parameters an environment's file declares join the local ones.
   const merge = () => mergedParameters(editing.config(), loaded.values());
   const checks = environmentChecks(
@@ -250,6 +272,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
       editing.observe?.(env, declared);
       view.choices = merge();
     },
+    onAdded,
   );
   const tracker = new Tracker(checks.map((check) => check.name));
   const sources = new Map(options.environments.map((source) => [source.name, source]));
@@ -289,7 +312,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
         const declared =
           env === LOCAL_ENVIRONMENT ? editing.config() : editing.environment?.(env)?.config();
         const current = declared
-          ? results.filter(({ name }) => Object.hasOwn(declared.services, name))
+          ? results.filter(({ name }) => kept(env, declared).has(name))
           : results;
         tracker.record(env, current);
         notify.observe(env, current);
@@ -321,6 +344,8 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
             editing.observe?.(env, declared);
             view.choices = merge();
           },
+          undefined,
+          onAdded,
         ),
       );
     };
@@ -361,7 +386,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
           ({ config: declared }) => {
             loaded.set(env, declared);
             editing.observe?.(env, declared);
-            tracker.retain(env, new Set(Object.keys(declared.services)));
+            tracker.retain(env, kept(env, declared));
             app.requestRender();
           },
           () => {},
@@ -384,7 +409,7 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
           notify.reset();
         }
         view.choices = merge();
-        tracker.retain(LOCAL_ENVIRONMENT, new Set(Object.keys(editing.config().services)));
+        tracker.retain(LOCAL_ENVIRONMENT, kept(LOCAL_ENVIRONMENT, editing.config()));
         retainEnvironments();
         monitor.invalidate();
         monitor.refresh();
@@ -464,5 +489,25 @@ export function openNativeDashboard(options: NativeDashboardOptions): Promise<vo
     });
     monitor.start();
     app.start();
+    void mismatchNotice(options).then((notice) => {
+      if (!notice || view.status) return;
+      say(view, notice);
+      app.requestRender();
+    });
   });
+}
+
+/** What local.yml still says of services config.yml has changed, told once as the dashboard opens. */
+export async function mismatchNotice(
+  options: Pick<NativeDashboardOptions, "config" | "overrides">,
+): Promise<string | undefined> {
+  const overrides = await options.overrides?.().catch(() => undefined);
+  if (!overrides) return undefined;
+  const [first, ...others] = mismatchMessages(
+    overrides,
+    localMismatches(options.config, overrides),
+    CONFIG_FILE,
+  );
+  if (first === undefined) return undefined;
+  return others.length === 0 ? first : `${first} (${others.length} more: probe doctor)`;
 }

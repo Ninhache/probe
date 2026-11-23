@@ -8,6 +8,7 @@ import {
   readDashboardSelection,
   readServiceOverrides,
   readSkippedServices,
+  removeServiceEntry,
   writeDashboardPreferences,
   writeDashboardSelection,
   writeServiceSkip,
@@ -318,5 +319,40 @@ describe("a skip beside the values of a service", () => {
 
     expect(await readSkippedServices(paths)).toEqual(new Set());
     expect((await readServiceOverrides(paths)).services).toEqual({ api: { port: 4000 } });
+  });
+});
+
+describe("the entry of a removed service in local.yml", () => {
+  it("goes, the other services and sections kept", async () => {
+    const paths = await tempProject(CONFIG);
+    await writeFile(
+      paths.local,
+      "# mine\nservices:\n  api: { port: 4000 }\n  db: { skip: true }\nvariables:\n  TOKEN: x\n",
+    );
+
+    expect(await removeServiceEntry(paths, "api")).toBe(true);
+
+    expect(await readFile(paths.local, "utf8")).toBe(
+      "# mine\nservices:\n  db: { skip: true }\nvariables:\n  TOKEN: x\n",
+    );
+  });
+
+  it("takes out services once it is the last one", async () => {
+    const paths = await tempProject(CONFIG);
+    await writeFile(paths.local, "services:\n  api: { port: 4000 }\nvariables:\n  TOKEN: x\n");
+
+    await removeServiceEntry(paths, "api");
+
+    expect(await readFile(paths.local, "utf8")).toBe("variables:\n  TOKEN: x\n");
+  });
+
+  it("leaves the file as it is when the service has no entry", async () => {
+    const paths = await tempProject(CONFIG);
+    const text = "services:\n  db: { skip: true }\n";
+    await writeFile(paths.local, text);
+
+    expect(await removeServiceEntry(paths, "api")).toBe(true);
+
+    expect(await readFile(paths.local, "utf8")).toBe(text);
   });
 });

@@ -70,11 +70,13 @@ export function formatCheckResults(
     .join("\n");
 }
 
+const localKeys = (keys: readonly string[]) => (keys.length > 0 ? ` ${keys.join(", ")}` : "");
+
 export function formatServices(
   config: Config,
   terminal: Terminal,
   skipped: ReadonlySet<string> = new Set(),
-  /** The keys whose value comes from local.yml, by service: named, their values are shown above. */
+  /** The keys whose value comes from local.yml, by service, none for one it adds: named, their values are shown above. */
   local: Readonly<Record<string, readonly string[]>> = {},
 ): string {
   const colors = createColors(terminal.color);
@@ -92,7 +94,7 @@ export function formatServices(
       (service.headers ? `${GAP}sends ${Object.keys(service.headers).join(", ")}` : "") +
       (service.env ? `${GAP}sets ${Object.keys(service.env).join(", ")}` : "") +
       (service.tags?.length ? `${GAP}tags ${service.tags.join(", ")}` : "") +
-      (local[name]?.length ? `${GAP}${LOCAL} ${local[name].join(", ")}` : "") +
+      (local[name] === undefined ? "" : `${GAP}${LOCAL}${localKeys(local[name])}`) +
       (skipped.has(name) ? `${GAP}${SKIPPED}` : ""),
   }));
   const nameWidth = width(rows.map((row) => row.name));
