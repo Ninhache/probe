@@ -15,6 +15,19 @@ export const IMPORTANT_KINDS: readonly NoteKind[] = ["schema", "completion", "br
  */
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: "1.8.0",
+    items: [
+      {
+        kind: "info",
+        text: ".probe/local.yml can change where a service is reached on this machine (url, host, port, path, timeout, command, user, database) and add services of its own under extraServices.",
+      },
+      {
+        kind: "info",
+        text: "probe check, ls, wait, doctor and the dashboard say when .probe/local.yml names a service config.yml no longer has, or one it now has too.",
+      },
+    ],
+  },
+  {
     version: "1.7.0",
     items: [
       {
