@@ -138,12 +138,38 @@ describe("withOverrides", () => {
     );
   });
 
-  it("refuses a service config.yml does not have", async () => {
+  it("leaves out a service config.yml does not have, as skip does", async () => {
     const config = await configOf("  api: { port: 3000 }\n");
 
-    expect(() => withOverrides(config, local({ apy: { port: 4000 } }))).toThrow(
-      "services.apy overrides a service the config does not have",
+    expect(withOverrides(config, local({ gone: { port: 4000 } })).services).toEqual(
+      config.services,
     );
+  });
+
+  it("refuses a host a url cannot take, without its value", async () => {
+    const config = await configOf("  api: { url: 'https://api.example.com/' }\n");
+
+    const failing = () => withOverrides(config, local({ api: { host: "marker-host:4000" } }));
+
+    expect(failing).toThrow(/services\.api\.host: expected a host name alone/);
+    expect(failing).not.toThrow(/marker-host/);
+  });
+
+  it.each([
+    ["url", "http://marker-user:marker-pass@localhost/"],
+    ["url", "ftp://marker.example.com/"],
+    ["command", ""],
+    ["port", "marker"],
+  ])("names %s without its value when it is wrong", async (key, value) => {
+    const config = await configOf(
+      "  api: { port: 3000 }\n  worker: { type: command, command: 'true' }\n",
+    );
+    const name = key === "command" ? "worker" : "api";
+
+    const failing = () => withOverrides(config, local({ [name]: { [key]: value } }));
+
+    expect(failing).toThrow(new RegExp(`services\\.${name}\\.${key}`));
+    expect(failing).not.toThrow(/marker/);
   });
 
   it("names the key of a wrong value, never the value", async () => {

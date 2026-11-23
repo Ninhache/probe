@@ -261,6 +261,9 @@ envs:
 - Only `url`, `host`, `port`, `path`, `timeout`, `command`, `user` and `database` can be set there, and only
   those the type of the service reads. A password stays a [variable](features/headers.md).
 - A `host`, `port` or `path` changes the `url` of a service that has one, its scheme kept.
+- They win over the `timeout` of the dashboard panel. A value chosen for a `urls:` [parameter](#parameters) wins
+  over the address they give.
+- A service removed from `config.yml` leaves its values unused, as `skip`.
 - `probe check`, `probe wait`, `probe doctor`, `probe curl`, `probe open` and the dashboard use them.
   `probe ls` marks them: `api  http://localhost:4000/  local port`.
 - `config.yml`, the Makefile block and `lock.yml` never get them: an edit in the dashboard or `probe add` writes

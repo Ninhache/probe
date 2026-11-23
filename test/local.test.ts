@@ -6,6 +6,7 @@ import {
   initialDashboardSettings,
   readDashboardPreferences,
   readDashboardSelection,
+  readServiceOverrides,
   readSkippedServices,
   writeDashboardPreferences,
   writeDashboardSelection,
@@ -298,5 +299,24 @@ describe("skipped services in local.yml", () => {
     expect(await writeServiceSkip(paths, "db", true)).toBe(false);
 
     expect(await readFile(paths.local, "utf8")).toBe(text);
+  });
+});
+
+describe("a skip beside the values of a service", () => {
+  it.each([undefined, "staging"])("leaves the values when the skip goes (env: %s)", async (env) => {
+    const root = await tempProject(CONFIG);
+    const values = "api:\n      port: 4000\n      skip: true\n";
+    await writeFile(
+      root.local,
+      env === undefined
+        ? `services:\n  ${values.replaceAll("    ", "  ")}`
+        : `envs:\n  ${env}:\n    services:\n      ${values.replaceAll("      ", "        ")}`,
+    );
+    const paths = { ...root, environment: env };
+
+    expect(await writeServiceSkip(paths, "api", false)).toBe(true);
+
+    expect(await readSkippedServices(paths)).toEqual(new Set());
+    expect((await readServiceOverrides(paths)).services).toEqual({ api: { port: 4000 } });
   });
 });

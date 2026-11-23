@@ -72,15 +72,22 @@ const pathAndSearch = (path: string): [string, string] => {
 };
 
 // A `url` in config.yml stays one: host, port or path from local.yml change it, its scheme kept.
-function withAddress(url: string, { host, port, path }: Override): string {
+function withAddress(url: string, { host, port, path }: Override): string | undefined {
   const next = new URL(url);
-  if (host !== undefined) next.hostname = String(host);
+  if (host !== undefined) {
+    next.hostname = String(host);
+    // The setter leaves the host as it was on one it cannot take, such as `localhost:4000`.
+    const wanted = String(host).toLowerCase();
+    if (next.hostname !== wanted && next.hostname !== `[${wanted}]`) return undefined;
+  }
   if (port !== undefined) next.port = String(port);
   if (path !== undefined) [next.pathname, next.search] = pathAndSearch(String(path));
   return next.href;
 }
 
-function merged(service: Service, override: Override): Record<string, unknown> {
+const HOST_EXPECTED = "expected a host name alone, e.g. localhost";
+
+function merged(service: Service, override: Override): Record<string, unknown> | undefined {
   const next = asWritten(service, override);
   const { url, ...others } = override;
   const address = ADDRESS_KEYS.filter((key) => override[key] !== undefined);
@@ -89,7 +96,9 @@ function merged(service: Service, override: Override): Record<string, unknown> {
     for (const key of ADDRESS_KEYS) delete next[key];
     next.url = url;
   } else if (address.length > 0 && typeof next.url === "string") {
-    next.url = withAddress(next.url, override);
+    const url = withAddress(next.url, override);
+    if (url === undefined) return undefined;
+    next.url = url;
     for (const key of address) delete others[key];
   }
   return { ...next, ...others };
@@ -117,8 +126,8 @@ function problem(at: string, name: string, issues: readonly z.core.$ZodIssue[]):
 /**
  * The services as this machine reaches them: config.yml with the values of local.yml.
  * The result is read, never written: config.yml, the Makefile and lock.yml do not see it.
- * @throws ProbeError CONFIG_INVALID when local.yml names a service the config does not have,
- *   or gives a value the service cannot take.
+ * A service config.yml no longer has is left out, as `skip` is.
+ * @throws ProbeError CONFIG_INVALID when local.yml sets a key it cannot, or a value the service cannot take.
  */
 export function withOverrides(config: Config, overrides: ServiceOverrides = NO_OVERRIDES): Config {
   const names = Object.keys(overrides.services);
@@ -129,16 +138,18 @@ export function withOverrides(config: Config, overrides: ServiceOverrides = NO_O
     const keys = Object.keys(override);
     const refused = keys.find((key) => !isOverrideKey(key));
     if (refused !== undefined) throw refusedOverrideKey(overrides.at, name, refused);
+    // As for `skip`: a service removed from config.yml leaves its values behind, unused.
     const service = Object.hasOwn(services, name) ? services[name] : undefined;
-    if (!service) {
-      throw new ProbeError(
-        "CONFIG_INVALID",
-        `${LOCAL}: ${overrides.at}.${name} overrides a service the config does not have: remove it, or add the service.`,
-      );
-    }
+    if (!service) continue;
     const issues = valueProblems(override);
     if (issues.length > 0) throw problem(overrides.at, name, issues);
-    const parsed = serviceSchemaV1.safeParse(merged(service, override));
+    const next = merged(service, override);
+    if (next === undefined) {
+      throw problem(overrides.at, name, [
+        { code: "custom", path: ["host"], message: HOST_EXPECTED, input: undefined },
+      ]);
+    }
+    const parsed = serviceSchemaV1.safeParse(next);
     if (!parsed.success) throw problem(overrides.at, name, parsed.error.issues);
     services[name] = parsed.data;
   }

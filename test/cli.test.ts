@@ -481,6 +481,30 @@ describe("a value of a service set in local.yml", () => {
     expect(await readFile(join(root, ".probe", "config.yml"), "utf8")).not.toContain(String(port));
   });
 
+  it("gives probe curl the local address", async () => {
+    const root = await overridden();
+
+    const result = await probe(root, "curl", "api");
+
+    expect(result.stdout).toContain(`127.0.0.1:${port}/health`);
+  });
+
+  it("is set for one environment under envs, and only there", async () => {
+    const root = await project();
+    await mkdir(join(root, ".probe", "envs"));
+    await writeFile(
+      join(root, ".probe", "envs", "staging.yml"),
+      `schemaVersion: 1\nservices:\n  api: { host: 127.0.0.1, port: ${closedPort}, path: /health }\n`,
+    );
+    await writeFile(
+      join(root, ".probe", "local.yml"),
+      `envs:\n  staging:\n    services:\n      api: { port: ${port} }\n`,
+    );
+
+    expect((await probe(root, "check", "--env", "staging")).code).toBe(0);
+    expect((await probe(root, "check")).stdout).not.toContain(String(port));
+  });
+
   it("exits 2 on a key local.yml cannot set, without its value", async () => {
     const root = await overridden();
     await writeFile(
