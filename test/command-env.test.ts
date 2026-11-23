@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { commandChecker } from "../src/checkers/command";
-import { isSensitiveEnv, serviceVariables } from "../src/config/headers";
-import { configSchemaV1, type Service } from "../src/config/schema";
+import { isSensitiveEnv } from "../src/config/headers";
+import { configSchemaV1, type Service, serviceVariables } from "../src/config/schema";
 import { COMMAND_STDERR_BYTES, COMMAND_STDERR_CHARACTERS } from "../src/constants";
 import { tempDir } from "./helpers";
 

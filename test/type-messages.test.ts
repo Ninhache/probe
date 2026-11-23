@@ -7,9 +7,9 @@ import {
   serviceTypeNames,
 } from "../src/checkers/registry";
 import { requireVariables } from "../src/commands/shared";
-import { reference, serviceVariables } from "../src/config/headers";
+import { reference } from "../src/config/headers";
 import type { Config } from "../src/config/schema";
-import { DATABASE_TYPES, SERVICE_TYPES } from "../src/config/schema";
+import { DATABASE_TYPES, SERVICE_TYPES, serviceVariables } from "../src/config/schema";
 
 const unset = { lookup: () => undefined };
 

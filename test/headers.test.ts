@@ -13,12 +13,11 @@ import {
   reference,
   referencedInJson,
   resolveHeaders,
-  serviceVariables,
   splitSecret,
 } from "../src/config/headers";
 import { loadVariables, readLocalVariables, writeVariable } from "../src/config/local";
 import { formatIssues } from "../src/config/migrations";
-import { type Service, serviceSchemaV1 } from "../src/config/schema";
+import { type Service, serviceSchemaV1, serviceVariables } from "../src/config/schema";
 import { Tracker } from "../src/dashboard/native/history";
 import { expectMode, tempProject } from "./helpers";
 

@@ -53,6 +53,42 @@ describe("writeService", () => {
     expect((await loadConfig(paths)).config.services.db).toEqual({ type: "postgres", port: 5433 });
   });
 
+  it("should drop what the new type does not read when a service changes type", async () => {
+    const paths = await tempProject(CONFIG);
+    const env = { TOKEN: "$" + "{API_TOKEN}" };
+    await writeService(paths, {
+      kind: "add",
+      name: "job",
+      fields: { type: "command", command: "make ping", env, expect: undefined },
+    });
+
+    await writeService(paths, { kind: "edit", name: "job", fields: fields({ type: "http" }) });
+
+    const text = await readFile(paths.config, "utf8");
+    expect(text).not.toMatch(/type:|command:|env:|TOKEN/);
+    expect((await loadConfig(paths)).config.services.job).toMatchObject({ port: 3000 });
+  });
+
+  it("should drop the address and the headers of an http service that becomes a database", async () => {
+    const config = CONFIG.replace(
+      "front: { port: 5173 }",
+      "front: { port: 5173, path: /up, headers: { X-Tenant: acme } }",
+    );
+    const paths = await tempProject(config);
+
+    await writeService(paths, {
+      kind: "edit",
+      name: "front",
+      fields: { type: "redis", port: 6379, expect: undefined, database: 1 },
+    });
+
+    expect((await loadConfig(paths)).config.services.front).toEqual({
+      type: "redis",
+      port: 6379,
+      database: 1,
+    });
+  });
+
   it("should add a service with only the keys that are not at their default", async () => {
     const paths = await tempProject(CONFIG);
 

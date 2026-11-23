@@ -1,13 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { stripVTControlCharacters } from "node:util";
-import {
-  referenced,
-  resolveEnv,
-  serviceVariables,
-  templateParts,
-  VARIABLE_NAME,
-} from "../config/headers";
+import { referenced, resolveEnv, templateParts, VARIABLE_NAME } from "../config/headers";
 import type { Service } from "../config/schema";
+import { serviceVariables } from "../config/schema";
 import { shellQuoted, wordsText } from "../config/shell-words";
 import { COMMAND_STDERR_BYTES, COMMAND_STDERR_CHARACTERS, EXIT_DRAIN_MS } from "../constants";
 import { currentPlatform, type Platform } from "../platform";

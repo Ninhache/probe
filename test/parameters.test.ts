@@ -4,11 +4,11 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 import { targetUrl } from "../src/checkers/http";
 import { selectionFrom as selectionFromArgs } from "../src/commands/shared";
 import { applySelection, selectionFrom } from "../src/config/parameters";
-import { type Config, configSchemaV1, type Service } from "../src/config/schema";
+import { type Config, configSchemaV1, declaresAddress, type Service } from "../src/config/schema";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -154,6 +154,17 @@ describe("the urls of a service", () => {
       const prod = applySelection(config, { env: "prod" }).services.api as Service;
 
       expect(targetUrl(prod)).toBe("https://api.example.com/health");
+    });
+
+    it("should stay without an address of its own in a copy, never in what is printed", () => {
+      const api = parsed({ env: ENV }, { api: { urls: both } }).services.api as Service;
+      const copy = { ...api, timeout: 5 };
+
+      expect(declaresAddress(api)).toBe(false);
+      expect(declaresAddress(copy)).toBe(false);
+      expect(declaresAddress(parsed({ env: ENV }).services.api as Service)).toBe(true);
+      expect(Object.keys(JSON.parse(JSON.stringify(copy)))).toEqual(Object.keys(copy));
+      expect(stringify(copy)).not.toContain("address");
     });
 
     it("should name the value left without an address", () => {

@@ -1,7 +1,7 @@
 import type { ServiceForm } from "../../checkers/types";
 import type { ServiceWrite } from "../../commands/service-writes";
-import { hiddenEnvLine, hiddenHeaderLine, reference, serviceVariables } from "../../config/headers";
-import { passwordProblem, urlProblem } from "../../config/schema";
+import { hiddenEnvLine, hiddenHeaderLine, reference } from "../../config/headers";
+import { passwordProblem, serviceVariables, urlProblem } from "../../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, LOCAL_FILE, PROBE_DIR } from "../../constants";
 import type { InputEvent } from "../../tui/input";
 import type { ModalStack } from "../../tui/modal";

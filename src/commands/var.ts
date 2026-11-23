@@ -1,13 +1,9 @@
 import { text } from "node:stream/consumers";
 import { defineCommand } from "citty";
-import {
-  reference,
-  serviceVariables,
-  VARIABLE_NAME,
-  variableValueProblem,
-} from "../config/headers";
+import { reference, VARIABLE_NAME, variableValueProblem } from "../config/headers";
 import { readLocalVariables, variableSource, writeVariable } from "../config/local";
 import type { Config } from "../config/schema";
+import { serviceVariables } from "../config/schema";
 import { LOCAL_FILE, PROBE_DIR } from "../constants";
 import { ProbeError } from "../errors";
 import { askSecret } from "../ui/prompt";

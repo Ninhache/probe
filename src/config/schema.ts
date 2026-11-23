@@ -6,6 +6,7 @@ import {
   headerNameProblem,
   headerValueProblem,
   isSensitiveHeader,
+  referencedVariables,
 } from "./headers";
 
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -45,9 +46,6 @@ export type DatabaseKind = (typeof DATABASE_TYPES)[number];
 export const SERVICE_TYPES = ["http", "command", ...DATABASE_TYPES] as const;
 export type ServiceKind = (typeof SERVICE_TYPES)[number];
 
-export const isDatabaseKind = (type: string | undefined): type is DatabaseKind =>
-  (DATABASE_TYPES as readonly (string | undefined)[]).includes(type);
-
 // The client takes these as the value of a flag: no leading `-`, no `=` (psql reads a `dbname`
 // holding one as a connection string), no space.
 const USER_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.@$-]*$/;
@@ -74,6 +72,10 @@ export function databaseProblem(type: DatabaseKind, database: string | number): 
 export const passwordProblem = (password: string): string | undefined =>
   PASSWORD_REFERENCE.test(password) ? undefined : PASSWORD_EXPECTED;
 
+// Set on a service whose address is read from `urls:`: a symbol, so it is never written or printed,
+// and an own key, so a copy made with `{ ...service }` keeps it.
+const ADDRESS_FROM_URLS = Symbol("address from urls");
+
 export interface Service {
   /** Absent for an http service: the key is optional, and a writer never adds it. */
   type?: ServiceKind;
@@ -99,6 +101,7 @@ export interface Service {
   hint?: string;
   tags?: string[];
   contains?: string;
+  [ADDRESS_FROM_URLS]?: true;
 }
 
 // What is wrong is said without the value: it may be a secret pasted where a reference is expected.
@@ -208,158 +211,77 @@ export const serviceObjectV1 = z.strictObject({
 
 export const serviceShapeV1 = serviceObjectV1.shape;
 
-const ADDRESS_KEYS = ["host", "port", "path"] as const;
+/** A key a service can have in config.yml. */
+export type ServiceKey = keyof typeof serviceShapeV1;
 
-// Services that take their address only from `urls:`: their host, port and path are read from it,
-// and the config checks that every value of the parameter has one.
-const addressless = new WeakSet<Service>();
+type ServiceInput = z.infer<typeof serviceObjectV1>;
+type Fail = (key: ServiceKey, message: string) => void;
+
+/** What a type accepts in config.yml and makes of it: the schema and the writers read it. */
+export interface ServiceRules {
+  /** The keys a service of the type reads, beyond `type`, `timeout`, `hint` and `tags`. */
+  keys: readonly ServiceKey[];
+  /** The keys whose values may name a `${NAME}` variable. */
+  variables: readonly ServiceKey[];
+  /** What a key left out of the file stands for: a writer leaves out a key set to it. */
+  defaults: Partial<Service>;
+  /** Why a key the type does not read is refused, said without the value. */
+  refused(key: ServiceKey): string;
+  /** The service as the checkers read it, once its keys are the type's; `undefined` after a `fail`. */
+  parse(service: ServiceInput, fail: Fail): Service | undefined;
+}
+
+const COMMON_KEYS: readonly ServiceKey[] = ["type", "timeout", "hint", "tags"];
+
+export const ADDRESS_KEYS = ["host", "port", "path"] as const;
 
 /** Whether the file gives the service an address of its own, `url` or `port`, beyond `urls:`. */
-export const declaresAddress = (service: Service) => !addressless.has(service);
+export const declaresAddress = (service: Service) => service[ADDRESS_FROM_URLS] !== true;
 
 const firstAddress = (urls: Record<string, string> | undefined) =>
   Object.values(urls ?? {})
     .map(parsedUrl)
     .find((parsed) => parsed !== undefined);
 
-// What a request is made of: a service that runs a command has none of it.
-const HTTP_ONLY_KEYS = [
-  "url",
-  "urls",
-  "host",
-  "port",
-  "path",
-  "method",
-  "headers",
-  "expect",
-  "contains",
-] as const;
-
-const DATABASE_KEYS = ["user", "database", "password"] as const;
+const DATABASE_KEYS: readonly ServiceKey[] = ["user", "database", "password"];
 
 const DATABASE_ONLY_MESSAGE =
   "needs `type: postgres`, `type: mysql` or `type: redis`: only a database service has a user, a database and a password";
 
-// Said without the value: a password typed there must not come back on screen.
-function databaseService(service: z.infer<typeof serviceObjectV1>, ctx: z.core.$RefinementCtx) {
-  const type = service.type as DatabaseKind;
-  const refused = [...HTTP_ONLY_KEYS, "command", "env"].filter(
-    (key) => key !== "host" && key !== "port" && service[key as keyof typeof service] !== undefined,
-  );
-  const fail = (key: string, message: string) =>
-    ctx.issues.push({ code: "custom", message, input: undefined, path: [key] });
-  for (const key of refused) {
-    fail(
-      key,
-      `cannot be set with \`type: ${type}\`: it connects to a database, it sends no request`,
-    );
-  }
-  const user = service.user === undefined ? undefined : userProblem(service.user);
-  if (user) fail("user", `expected ${user}`);
-  const database =
-    service.database === undefined ? undefined : databaseProblem(type, service.database);
-  if (database) fail("database", `expected ${database}`);
-  const password = service.password === undefined ? undefined : passwordProblem(service.password);
-  if (password) fail("password", `expected ${password}`);
-  if (refused.length > 0 || user || database || password) return z.NEVER;
-  return service as Service;
-}
+const HTTP_REFUSED: Partial<Record<ServiceKey, string>> = {
+  command: "needs `type: command`: an http service sends a request",
+  env: "needs `type: command`: only a command has an environment, a request has headers",
+  ...Object.fromEntries(DATABASE_KEYS.map((key) => [key, DATABASE_ONLY_MESSAGE])),
+};
 
-export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service => {
-  if (isDatabaseKind(service.type)) return databaseService(service, ctx);
-  const misplaced = DATABASE_KEYS.filter((key) => service[key] !== undefined);
-  for (const key of misplaced) {
-    ctx.issues.push({
-      code: "custom",
-      message:
-        service.type === "command"
-          ? "cannot be set with `type: command`: only a database service has a user, a database and a password"
-          : DATABASE_ONLY_MESSAGE,
-      input: undefined,
-      path: [key],
-    });
-  }
-  if (misplaced.length > 0) return z.NEVER;
-  if (service.type === "command") {
-    const { command, ...others } = service;
-    const extra = HTTP_ONLY_KEYS.filter((key) => service[key] !== undefined);
-    for (const key of extra) {
-      ctx.issues.push({
-        code: "custom",
-        message: "cannot be set with `type: command`: it runs a command, it sends no request",
-        input: service[key],
-        path: [key],
-      });
-    }
-    if (command === undefined) {
-      ctx.issues.push({
-        code: "custom",
-        message: `\`type: command\` needs a \`command\`: expected ${COMMAND_EXPECTED}`,
-        input: command,
-        path: ["command"],
-      });
-    }
-    if (extra.length > 0 || command === undefined) return z.NEVER;
-    return { ...others, command } as Service;
-  }
-  const needsCommand = (["command", "env"] as const).filter((key) => service[key] !== undefined);
-  for (const key of needsCommand) {
-    ctx.issues.push({
-      code: "custom",
-      message:
-        key === "env"
-          ? "needs `type: command`: only a command has an environment, a request has headers"
-          : "needs `type: command`: an http service sends a request",
-      input: service[key],
-      path: [key],
-    });
-  }
-  if (needsCommand.length > 0) return z.NEVER;
-  const { url, host, port, path, command: _, env: __, ...rest } = service;
+function httpService(service: ServiceInput, fail: Fail): Service | undefined {
+  const { url, host, port, path, ...rest } = service;
   if (service.method === "HEAD" && service.contains !== undefined) {
-    ctx.issues.push({
-      code: "custom",
-      message: "cannot be set with `method: HEAD`, whose response has no body",
-      input: service.contains,
-      path: ["contains"],
-    });
-    return z.NEVER;
+    fail("contains", "cannot be set with `method: HEAD`, whose response has no body");
+    return undefined;
   }
   if (url === undefined) {
     const fromUrls = port === undefined && host === undefined && path === undefined;
     const first = fromUrls ? firstAddress(service.urls) : undefined;
     if (first) {
-      const resolved: Service = {
+      return {
         host: first.hostname,
         port: Number(first.port) || DEFAULT_PORTS[first.protocol as keyof typeof DEFAULT_PORTS],
         path: first.pathname + first.search,
         ...rest,
+        [ADDRESS_FROM_URLS]: true,
       };
-      addressless.add(resolved);
-      return resolved;
     }
     if (port === undefined) {
-      ctx.issues.push({
-        code: "custom",
-        message: "Invalid input: expected number, received undefined",
-        input: port,
-        path: ["port"],
-      });
-      return z.NEVER;
+      fail("port", "Invalid input: expected number, received undefined");
+      return undefined;
     }
     return { host: host ?? DEFAULT_HOST, port, path: path ?? DEFAULT_PATH, ...rest };
   }
   const extra = ADDRESS_KEYS.filter((key) => service[key] !== undefined);
-  for (const key of extra) {
-    ctx.issues.push({
-      code: "custom",
-      message: "cannot be set together with `url`, which already says it",
-      input: service[key],
-      path: [key],
-    });
-  }
+  for (const key of extra) fail(key, "cannot be set together with `url`, which already says it");
   const parsed = parsedUrl(url);
-  if (extra.length > 0 || !parsed) return z.NEVER;
+  if (extra.length > 0 || !parsed) return undefined;
   return {
     url,
     host: parsed.hostname,
@@ -367,6 +289,98 @@ export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service
     path: parsed.pathname + parsed.search,
     ...rest,
   };
+}
+
+const httpRules: ServiceRules = {
+  keys: ["url", "urls", "host", "port", "path", "method", "headers", "expect", "contains"],
+  variables: ["headers"],
+  defaults: { host: DEFAULT_HOST, path: DEFAULT_PATH, method: DEFAULT_METHOD },
+  refused: (key) => HTTP_REFUSED[key] ?? "cannot be set on an http service, which sends a request",
+  parse: httpService,
+};
+
+const commandRules: ServiceRules = {
+  keys: ["command", "env"],
+  variables: ["env"],
+  defaults: {},
+  refused: (key) =>
+    DATABASE_KEYS.includes(key)
+      ? "cannot be set with `type: command`: only a database service has a user, a database and a password"
+      : "cannot be set with `type: command`: it runs a command, it sends no request",
+  parse: (service, fail) => {
+    if (service.command !== undefined) return service as Service;
+    fail("command", `\`type: command\` needs a \`command\`: expected ${COMMAND_EXPECTED}`);
+    return undefined;
+  },
+};
+
+// Said without the value: a password typed there must not come back on screen.
+const databaseRules = (type: DatabaseKind): ServiceRules => ({
+  keys: ["host", "port", ...DATABASE_KEYS],
+  variables: ["password"],
+  defaults: { host: DEFAULT_HOST },
+  refused: () =>
+    `cannot be set with \`type: ${type}\`: it connects to a database, it sends no request`,
+  parse: (service, fail) => {
+    const user = service.user === undefined ? undefined : userProblem(service.user);
+    if (user) fail("user", `expected ${user}`);
+    const database =
+      service.database === undefined ? undefined : databaseProblem(type, service.database);
+    if (database) fail("database", `expected ${database}`);
+    const password = service.password === undefined ? undefined : passwordProblem(service.password);
+    if (password) fail("password", `expected ${password}`);
+    return user || database || password ? undefined : (service as Service);
+  },
+});
+
+/** The rules of every type: a type added to `SERVICE_TYPES` gets its entry here. */
+export const SERVICE_RULES: Readonly<Record<ServiceKind, ServiceRules>> = {
+  http: httpRules,
+  command: commandRules,
+  ...(Object.fromEntries(DATABASE_TYPES.map((type) => [type, databaseRules(type)])) as Record<
+    DatabaseKind,
+    ServiceRules
+  >),
+};
+
+/** The rules of a service's type, http when it names none. */
+export const serviceRules = (type: ServiceKind | undefined): ServiceRules =>
+  SERVICE_RULES[type ?? "http"];
+
+/** Every key a service of the type can have in config.yml. */
+export const serviceKeys = (type: ServiceKind | undefined): ReadonlySet<ServiceKey> =>
+  new Set([...COMMON_KEYS, ...serviceRules(type).keys]);
+
+/** Every key whose values may name a variable, whatever the type. */
+const VARIABLE_KEYS = [
+  ...new Set(Object.values(SERVICE_RULES).flatMap((rules) => rules.variables)),
+];
+
+/** Every variable a service needs, once each, in the order of its keys. */
+export function serviceVariables(service: Partial<Record<ServiceKey, unknown>>): string[] {
+  const texts = VARIABLE_KEYS.flatMap((key) => {
+    const value = service[key];
+    if (typeof value === "string") return [value];
+    return value && typeof value === "object" ? Object.values(value).map(String) : [];
+  });
+  return [...new Set(texts.flatMap(referencedVariables))];
+}
+
+// A key the type does not read is refused first: the type the service needs is the fix, not its values.
+export const serviceSchemaV1 = serviceObjectV1.transform((service, ctx): Service => {
+  const rules = serviceRules(service.type);
+  let failed = false;
+  const fail: Fail = (key, message) => {
+    failed = true;
+    ctx.issues.push({ code: "custom", message, input: undefined, path: [key] });
+  };
+  const accepted = serviceKeys(service.type);
+  for (const key of Object.keys(serviceShapeV1) as ServiceKey[]) {
+    if (!accepted.has(key) && service[key] !== undefined) fail(key, rules.refused(key));
+  }
+  if (failed) return z.NEVER;
+  const parsed = rules.parse(service, fail);
+  return failed || !parsed ? z.NEVER : parsed;
 });
 
 function strategyHeaderProblem(name: string): string | undefined {
