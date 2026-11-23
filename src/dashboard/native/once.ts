@@ -1,6 +1,7 @@
 import { runChecks } from "../../checkers/run";
 import type { CheckResult } from "../../checkers/types";
 import type { Variables } from "../../config/local";
+import { withOverrides } from "../../config/overrides";
 import type { Selection } from "../../config/parameters";
 import type { Config } from "../../config/schema";
 import { createColors } from "../../ui/colors";
@@ -42,7 +43,7 @@ export async function oncePass(pass: OncePass): Promise<{ text: string; down: bo
     sections.push({
       name: source.name,
       results: await run(
-        loaded.config,
+        withOverrides(loaded.config, loaded.overrides),
         [],
         { ...options, variables: loaded.variables, configFile: source.file },
         loaded.skipped,

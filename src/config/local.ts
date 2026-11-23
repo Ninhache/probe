@@ -13,7 +13,9 @@ import {
 import type { DashboardSettings } from "../dashboard/settings";
 import type { ProbePaths } from "./discovery";
 import type { VariableLookup } from "./headers";
+import { EXTRA_SERVICES, NO_OVERRIDES, type ServiceOverrides, withOverrides } from "./overrides";
 import type { Selection } from "./parameters";
+import type { Config } from "./schema";
 
 export interface DashboardPreferences {
   interval?: number;
@@ -229,6 +231,52 @@ export async function readSkippedServices(paths: ProbePaths): Promise<Set<string
   return new Set(names);
 }
 
+const nameOf = (key: unknown) => String(isScalar(key) ? key.value : key);
+
+/** The maps under `path`, each as written: an entry that is not a map is left aside. */
+function entriesAt(doc: Document, path: readonly string[]): [string, Record<string, unknown>][] {
+  const section = mapAt(doc, path);
+  if (!section) return [];
+  return section.items.flatMap(({ key, value }) =>
+    isMap(value) ? [[nameOf(key), value.toJSON() as Record<string, unknown>]] : [],
+  );
+}
+
+/**
+ * What local.yml says of the services: the values it gives those of config.yml, `skip` aside,
+ * the names it skips and the services it adds under `extraServices`. Checked by `withOverrides`.
+ * A local.yml that is not valid YAML gives none, as for the other values it holds.
+ */
+export async function readServiceOverrides(paths: ProbePaths): Promise<ServiceOverrides> {
+  const at = [...scope(paths), SERVICES];
+  const none = { ...NO_OVERRIDES, at: at.join(".") };
+  const text = await readLocal(paths);
+  if (text === null) return none;
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0) return none;
+  const services: Record<string, Record<string, unknown>> = {};
+  const skipped: string[] = [];
+  for (const [name, { [SKIP]: skip, ...values }] of entriesAt(doc, at)) {
+    if (skip === true) skipped.push(name);
+    if (Object.keys(values).length > 0) services[name] = values;
+  }
+  const extra = Object.fromEntries(entriesAt(doc, [...scope(paths), EXTRA_SERVICES]));
+  return {
+    at: none.at,
+    services,
+    ...(skipped.length > 0 ? { skipped } : {}),
+    ...(Object.keys(extra).length > 0 ? { extra } : {}),
+  };
+}
+
+/**
+ * The services as this machine reaches them: those of config.yml with the values of local.yml.
+ * For checks and addresses only: what is written back to config.yml starts from `config`.
+ */
+export async function localConfig(config: Config, paths: ProbePaths): Promise<Config> {
+  return withOverrides(config, await readServiceOverrides(paths));
+}
+
 export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean): Promise<boolean> {
   return editLocal(paths, (doc) => {
     const path = [...scope(paths), SERVICES, name];
@@ -243,6 +291,20 @@ export function writeServiceSkip(paths: ProbePaths, name: string, skip: boolean)
     if (!entry?.has(SKIP)) return null;
     entry.delete(SKIP);
     pruneEmpty(doc, path);
+    return true;
+  });
+}
+
+/**
+ * Takes out what local.yml says of a service removed from config.yml, in the scope of `paths`.
+ * The rest of local.yml, comments included, is kept.
+ */
+export function removeServiceEntry(paths: ProbePaths, name: string): Promise<boolean> {
+  return editLocal(paths, (doc) => {
+    const path = [...scope(paths), SERVICES, name];
+    if (doc.getIn(path, true) === undefined) return null;
+    doc.deleteIn(path);
+    pruneEmpty(doc, path.slice(0, -1));
     return true;
   });
 }

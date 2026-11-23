@@ -3,7 +3,8 @@ import { runChecks } from "../checkers/run";
 import { requireProbeDir } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
 import { loadConfig, pendingMigration } from "../config/loader";
-import { loadVariables, readSkippedServices } from "../config/local";
+import { loadVariables, readServiceOverrides, readSkippedServices } from "../config/local";
+import { extraAt, type LocalMismatches, localMismatches, withOverrides } from "../config/overrides";
 import { applySelection } from "../config/parameters";
 import { DEFAULT_TIMEOUT_SECONDS, EXIT_DOWN } from "../constants";
 import { diagnoseServices, type ServiceReport } from "../doctor/diagnose";
@@ -22,6 +23,7 @@ import {
   SET_ARG,
   secondsToMs,
   selectionFrom,
+  sharedFile,
   stdoutColors,
   stdoutGlyphs,
   stdoutTerminal,
@@ -55,11 +57,17 @@ export default defineCommand({
     const hasMake = await isOnPath("make");
     let makefile: BlockState | null = null;
     let services: ServiceReport[] | null = null;
+    let local: LocalMismatches | null = null;
+    let at = { services: "services", extra: "extraServices" };
 
     if (!pending) {
-      const { config } = await loadConfig(paths);
+      const { config: declared } = await loadConfig(paths);
       // The block lists the local services: another environment says nothing about it.
-      if (paths.environment === undefined) makefile = await blockState(paths, config);
+      if (paths.environment === undefined) makefile = await blockState(paths, declared);
+      const overrides = await readServiceOverrides(paths);
+      const config = withOverrides(declared, overrides);
+      local = localMismatches(declared, overrides);
+      at = { services: overrides.at, extra: extraAt(overrides) };
       const selection = selectionFrom(config, rawArgs);
       const results = await runChecks(
         config,
@@ -93,6 +101,7 @@ export default defineCommand({
       const project = {
         migration: pending ? { from: pending.from, to: pending.to } : null,
         makefile,
+        local,
         version: CLI_VERSION,
         latest,
       };
@@ -108,6 +117,7 @@ export default defineCommand({
           colors.yellow(`pending (${change}) ${glyphs.arrow} run \`probe migrate\``),
         );
         line("makefile", colors.dim("checked after the migration"));
+        line("local.yml", colors.dim("checked after the migration"));
         line("services", colors.dim("checked after the migration"));
       } else {
         line("migration", colors.green("none pending"));
@@ -116,6 +126,18 @@ export default defineCommand({
           makefile
             ? describeBlock(makefile, colors, glyphs, hasMake)
             : colors.dim("not checked with --env"),
+        );
+      }
+      if (local) {
+        const off = [
+          ...local.unused.map((name) => `${at.services}.${name} no longer in ${sharedFile(paths)}`),
+          ...local.shadowed.map((name) => `${at.extra}.${name} now in ${sharedFile(paths)} too`),
+        ];
+        line(
+          "local.yml",
+          off.length === 0
+            ? colors.green(`in step with ${sharedFile(paths)}`)
+            : colors.yellow(off.join(", ")),
         );
       }
       line("update", describeUpdate(colors, glyphs));

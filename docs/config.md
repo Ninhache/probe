@@ -2,12 +2,12 @@
 
 Everything lives in `.probe/`, at the root of your project.
 
-| File         | What it holds                                                                               | Git            |
-| ------------ | ------------------------------------------------------------------------------------------- | -------------- |
-| `config.yml` | The services                                                                                | Commit it      |
-| `lock.yml`   | State of the Makefile block. Only there once `probe sync` has run                           | Commit it      |
-| `local.yml`  | Values of your machine: dashboard options and parameter values, skipped services, variables | Ignored by git |
-| `envs/*.yml` | The services of another [environment](features/environments.md)                             | Commit them    |
+| File         | What it holds                                                                                                                          | Git            |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `config.yml` | The services                                                                                                                           | Commit it      |
+| `lock.yml`   | State of the Makefile block. Only there once `probe sync` has run                                                                      | Commit it      |
+| `local.yml`  | Values of your machine: dashboard options and parameter values, [service values](#values-of-your-machine), skipped services, variables | Ignored by git |
+| `envs/*.yml` | The services of another [environment](features/environments.md)                                                                        | Commit them    |
 
 Never put secrets in `config.yml`, `lock.yml` or `envs/`: use a [variable](features/headers.md).
 
@@ -241,6 +241,62 @@ The certificate is checked. A local CA installed on the machine (`mkcert -instal
 browser, on the latest Node 22, 24 or later. A certificate that is expired, made for another host or not trusted
 makes the service down, with the reason. For a CA that is only in a file, set
 `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`.
+
+## Values of your machine
+
+A service of `config.yml` can be reached another way on your machine: another port, a local database user. Set
+those values in `.probe/local.yml`, which git ignores:
+
+```yaml
+# .probe/local.yml
+services:
+  api: { port: 4000 }
+  db: { user: me, database: scratch }
+envs:
+  staging:
+    services:
+      api: { timeout: 10 } # with --env staging only
+```
+
+- Only `url`, `host`, `port`, `path`, `timeout`, `command`, `user` and `database` can be set there, and only
+  those the type of the service reads. A password stays a [variable](features/headers.md).
+- A `host`, `port` or `path` changes the `url` of a service that has one, its scheme kept.
+- They win over the `timeout` of the dashboard panel. A value chosen for a `urls:` [parameter](#parameters) wins
+  over the address they give.
+- `probe check`, `probe wait`, `probe doctor`, `probe curl`, `probe open` and the dashboard use them.
+  `probe ls` marks them: `api  http://localhost:4000/  local port`.
+- `config.yml`, the Makefile block and `lock.yml` never get them: an edit in the dashboard or `probe add` writes
+  the shared values.
+
+A service only your machine has goes under `extraServices`, with every key a service of `config.yml` takes but
+`urls:`:
+
+```yaml
+# .probe/local.yml
+extraServices:
+  scratch: { port: 5173, path: /health }
+envs:
+  staging:
+    extraServices:
+      tunnel: { url: "https://localhost:8443/" } # with --env staging only
+```
+
+- It is checked, waited for and listed with the others; `probe ls` marks it `local`.
+- `config.yml`, the Makefile block and `lock.yml` never get it. The dashboard checks it, but changes it only in
+  `local.yml`: `e` and `d` say so. `probe rm` refuses it.
+
+When `config.yml` changes under `local.yml`, probe says so on stderr, without changing the exit code. Only the
+names are said, never a value:
+
+```
+probe: local.yml: services.gone is no longer in config.yml: its values are unused. Remove them from .probe/local.yml.
+probe: local.yml: extraServices.api is now in config.yml too: the shared one is checked. Move what differs to services.api, or remove it.
+```
+
+- `probe check`, `probe wait` and `probe ls` print it, but not with `--json`. `probe doctor` gives it a
+  `local.yml` line and a `project.local` field. The dashboard tells it once, as it opens.
+- A value or a `skip` of a removed service is unused until you remove it. `probe rm api` removes the values of
+  `api` from `local.yml` too.
 
 ## Parameters
 

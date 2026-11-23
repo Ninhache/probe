@@ -8,6 +8,7 @@ import {
   ENVIRONMENT_ARG,
   noServices,
   openProject,
+  reachedServices,
   SET_ARG,
   secondsToMs,
   selectionFrom,
@@ -34,7 +35,8 @@ export default defineCommand({
     const tags = tagsFrom(rawArgs);
     const forceTimeout = args.timeout !== undefined;
     const timeoutMs = secondsToMs("--timeout", args.timeout ?? String(DEFAULT_TIMEOUT_SECONDS));
-    const { config, paths } = await openProject(args.env);
+    const { config: declared, paths } = await openProject(args.env);
+    const { config } = await reachedServices(paths, declared, args.json);
     const selection = selectionFrom(config, rawArgs);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);

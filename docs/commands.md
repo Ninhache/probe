@@ -71,8 +71,8 @@ probe add pg --type postgres -p 5433 --user app --database shop --password '${PG
 
 ## probe rm
 
-`probe rm api` removes a service. On a terminal it asks first, with "No" selected. Off a terminal it removes at
-once.
+`probe rm api` removes a service, and its values in `.probe/local.yml`. On a terminal it asks first, with "No"
+selected. Off a terminal it removes at once.
 
 | Option        | Meaning               |
 | ------------- | --------------------- |

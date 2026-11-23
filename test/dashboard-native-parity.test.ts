@@ -4,7 +4,12 @@ import type { CheckResult } from "../src/checkers/types";
 import type { Config } from "../src/config/schema";
 import { helpBarItems, helpColumns } from "../src/dashboard/keymap";
 import { Tracker } from "../src/dashboard/native/history";
-import { environmentChecks, mergedParameters, shouldNotify } from "../src/dashboard/native/open";
+import {
+  environmentChecks,
+  mergedParameters,
+  mismatchNotice,
+  shouldNotify,
+} from "../src/dashboard/native/open";
 import {
   handleInput,
   initialView,
@@ -253,6 +258,142 @@ describe("checks follow the screen", () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe("values of local.yml", () => {
+  it("are checked in every tab, while edits keep the declared services", async () => {
+    const server = createServer((_, res) => res.end("hello"));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    try {
+      const declared: Config = {
+        schemaVersion: 1,
+        services: { api: { host: "127.0.0.1", port: 1, path: "/" } },
+      };
+      const overrides = { at: "services", services: { api: { port } } };
+      const source = {
+        name: "staging",
+        file: "staging.yml",
+        load: async () => ({
+          config: declared,
+          variables: {},
+          skipped: new Set<string>(),
+          overrides: { at: "envs.staging.services", services: { api: { port } } },
+        }),
+      };
+      const live = {
+        settings: { intervalMs: 1000, timeoutMs: 3000 },
+        selection: {},
+        skipped: new Set<string>(),
+        timeouts: {},
+      };
+      const seen: Config[] = [];
+      const checks = environmentChecks(
+        {
+          config: declared,
+          environments: [source],
+          settings: live.settings,
+          overrides: async () => overrides,
+        } as never,
+        () => live,
+        (_, config) => seen.push(config),
+      );
+      const signal = new AbortController().signal;
+      for (const check of checks) {
+        const [api] = await check.run(signal);
+        expect(api?.ok).toBe(true);
+      }
+      expect(seen).toEqual([declared]);
+      expect(declared.services.api?.port).toBe(1);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe("services local.yml adds", () => {
+  it("are checked in every tab and told apart from the declared ones", async () => {
+    const server = createServer((_, res) => res.end("hello"));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    try {
+      const declared: Config = { schemaVersion: 1, services: {} };
+      const scratch = { host: "127.0.0.1", port, path: "/" };
+      const source = {
+        name: "staging",
+        file: "staging.yml",
+        load: async () => ({
+          config: declared,
+          variables: {},
+          skipped: new Set<string>(),
+          overrides: { at: "envs.staging.services", services: {}, extra: { scratch } },
+        }),
+      };
+      const live = {
+        settings: { intervalMs: 1000, timeoutMs: 3000 },
+        selection: {},
+        skipped: new Set<string>(),
+        timeouts: {},
+      };
+      const added: [string, string[]][] = [];
+      const checks = environmentChecks(
+        {
+          config: declared,
+          environments: [source],
+          settings: live.settings,
+          overrides: async () => ({ at: "services", services: {}, extra: { scratch } }),
+          // The dashboard of a project can add services: its local tab is there, empty or not.
+          onServiceWrite: async () => ({}),
+        } as never,
+        () => live,
+        () => {},
+        (env, names) => added.push([env, [...names]]),
+      );
+      const signal = new AbortController().signal;
+      for (const check of checks) {
+        const [result] = await check.run(signal);
+        expect(result).toMatchObject({ name: "scratch", ok: true });
+      }
+      expect(added).toEqual([
+        ["local", ["scratch"]],
+        ["staging", ["scratch"]],
+      ]);
+      expect(declared.services).toEqual({});
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe("the notice of local.yml out of step", () => {
+  const config: Config = {
+    schemaVersion: 1,
+    services: { api: { host: "localhost", port: 1, path: "/" } },
+  };
+
+  it("says the first mismatch, and how many others doctor lists", async () => {
+    const notice = await mismatchNotice({
+      config,
+      overrides: async () => ({
+        at: "services",
+        services: { gone: { port: 2 }, old: { timeout: 1 } },
+        extra: { api: { port: 3 } },
+      }),
+    });
+
+    expect(notice).toBe(
+      "local.yml: services.gone is no longer in config.yml: its values are unused. Remove them from .probe/local.yml. (2 more: probe doctor)",
+    );
+  });
+
+  it("says nothing when local.yml is in step", async () => {
+    const notice = await mismatchNotice({
+      config,
+      overrides: async () => ({ at: "services", services: { api: { port: 2 } } }),
+    });
+
+    expect(notice).toBeUndefined();
   });
 });
 

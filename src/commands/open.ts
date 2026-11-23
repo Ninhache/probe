@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { serviceType } from "../checkers/registry";
+import { localConfig } from "../config/local";
 import { applySelection } from "../config/parameters";
 import { EXIT_DOWN } from "../constants";
 import { ProbeError } from "../errors";
@@ -14,7 +15,8 @@ export default defineCommand({
     set: SET_ARG,
   },
   async run({ args, rawArgs }) {
-    const { config } = await openProject();
+    const loaded = await openProject();
+    const config = await localConfig(loaded.config, loaded.paths);
     const service = namedService(applySelection(config, selectionFrom(config, rawArgs)), args.name);
     const { open } = serviceType(service);
     if (!open) throw new ProbeError("USAGE", `${args.name} has no address to open.`);

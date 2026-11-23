@@ -17,6 +17,7 @@ import {
   ENVIRONMENT_ARG,
   noServices,
   openProject,
+  reachedServices,
   requireVariables,
   SET_ARG,
   secondsToMs,
@@ -84,7 +85,8 @@ export default defineCommand({
         `--interval (${args.interval}s) cannot be longer than --max-interval (${args["max-interval"]}s).`,
       );
     }
-    const { config, paths } = await openProject(args.env);
+    const { config: declared, paths } = await openProject(args.env);
+    const { config } = await reachedServices(paths, declared, args.json);
     const selection = selectionFrom(config, rawArgs);
     const skipped = await readSkippedServices(paths);
     const variables = await loadVariables(paths);

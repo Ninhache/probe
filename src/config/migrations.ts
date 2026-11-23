@@ -23,9 +23,10 @@ export interface MigrationOptions {
   target?: number;
 }
 
-export function formatIssues(error: z.ZodError): string {
+/** One line per issue, each path after `prefix`, such as `services.api.`. */
+export function formatIssues(error: z.ZodError, prefix = ""): string {
   return error.issues
-    .map((issue) => `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`)
+    .map((issue) => `  - ${prefix}${issue.path.join(".") || "(root)"}: ${issue.message}`)
     .join("\n");
 }
 

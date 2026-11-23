@@ -14,6 +14,13 @@ import { say, type ViewState } from "./view";
 
 const LOCAL = `${PROBE_DIR}/${LOCAL_FILE}`;
 
+/** Shown on the local tab but not in config.yml: local.yml adds it, and the dashboard writes config.yml. */
+export const addedLocally = (service: string) =>
+  `${service} is in ${LOCAL}, under extraServices: change it there`;
+
+const notIn = (service: string, env: string | undefined) =>
+  env ? `${service} is not in ${env}` : addedLocally(service);
+
 /** What the keys that edit the files do: each opens a modal or writes, then says what happened. */
 export interface Editor {
   /** `env` is the environment whose file is written; absent or local, it is config.yml. */
@@ -165,19 +172,13 @@ export function createEditor({
     edit(service, env) {
       const found = writeService && target(env);
       if (!found) return;
-      if (!found.edits.serviceFields(service)) {
-        if (found.env) say(view, `${service} is not in ${found.env}`);
-        return;
-      }
+      if (!found.edits.serviceFields(service)) return say(view, notIn(service, found.env));
       view.modals.push(serviceFormModal(contextOf(found.edits, found.env), service));
     },
     remove(service, env) {
       const found = writeService && target(env);
       if (!found) return;
-      if (!found.edits.config().services[service]) {
-        if (found.env) say(view, `${service} is not in ${found.env}`);
-        return;
-      }
+      if (!found.edits.config().services[service]) return say(view, notIn(service, found.env));
       const where = found.env === undefined ? "the config" : found.env;
       view.modals.push(
         confirmModal(
