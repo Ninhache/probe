@@ -4,11 +4,13 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import add from "../src/commands/add";
+import { ADD_OPTION_KEYS } from "../src/commands/add-flags";
 import check from "../src/commands/check";
 import { fishScript } from "../src/completion/fish";
 import { powershellScript } from "../src/completion/powershell";
-import { completionSpec, SERVICE_COMMANDS, SHELLS } from "../src/completion/spec";
+import { type CommandSpec, completionSpec, SERVICE_COMMANDS, SHELLS } from "../src/completion/spec";
 import { zshScript } from "../src/completion/zsh";
+import { reference } from "../src/config/headers";
 import { tempDir } from "./helpers";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -125,11 +127,130 @@ async function zshCompletions(cwd: string, ...words: string[]): Promise<string[]
   return run.stdout.split("\n").filter(Boolean);
 }
 
+/** What zsh offers, without the descriptions `_describe` shows beside the options. */
+async function zshOptions(cwd: string, ...words: string[]): Promise<string[]> {
+  return (await zshCompletions(cwd, ...words)).map((line) => line.split(":")[0] as string);
+}
+
+const BARE: CommandSpec = {
+  name: "",
+  description: "",
+  options: [],
+  words: [],
+  services: false,
+  argument: false,
+  byType: {},
+};
+
+const ADD_OPTIONS = [
+  "--type",
+  "--command",
+  "--port",
+  "--host",
+  "--path",
+  "--url",
+  "--expect",
+  "--contains",
+  "--timeout",
+  "--method",
+  "--user",
+  "--database",
+  "--password",
+  "--setenv",
+  "--header",
+  "--hint",
+  "--tag",
+  "--help",
+];
+const POSTGRES_OPTIONS = [
+  "--type",
+  "--port",
+  "--host",
+  "--timeout",
+  "--user",
+  "--database",
+  "--password",
+  "--hint",
+  "--tag",
+  "--help",
+];
+const COMMAND_OPTIONS = [
+  "--type",
+  "--command",
+  "--timeout",
+  "--setenv",
+  "--hint",
+  "--tag",
+  "--help",
+];
+const sorted = (items: readonly string[]) => [...items].sort();
+
+/** The cases every shell must complete the same way, given its own way to complete a command line. */
+function completesLikeAdd(complete: (root: string, ...words: string[]) => Promise<string[]>) {
+  it("offers the options once the name of add is typed, not before", async () => {
+    const root = await project();
+
+    expect(sorted(await complete(root, "probe", "add", "api", ""))).toEqual(sorted(ADD_OPTIONS));
+    expect(await complete(root, "probe", "add", "")).not.toContain("--port");
+  });
+
+  it("offers only the options the type reads, without those given", async () => {
+    const root = await project();
+    const postgres = POSTGRES_OPTIONS.filter((option) => option !== "--type");
+    const command = COMMAND_OPTIONS.filter((option) => option !== "--command");
+
+    expect(sorted(await complete(root, "probe", "add", "db", "--type", "postgres", "--"))).toEqual(
+      sorted(postgres),
+    );
+    expect(sorted(await complete(root, "probe", "add", "db", "--type=postgres", "--"))).toEqual(
+      sorted(postgres),
+    );
+    expect(sorted(await complete(root, "probe", "add", "db", "--command", "x", "--"))).toEqual(
+      sorted(command),
+    );
+  });
+
+  it("offers a repeatable option again, not the others", async () => {
+    const offered = await complete(
+      await project(),
+      "probe",
+      "add",
+      "api",
+      "--port",
+      "1",
+      "--header",
+      "a",
+      "--",
+    );
+
+    expect(offered).toContain("--header");
+    expect(offered).not.toContain("--port");
+  });
+
+  it("completes the methods after --method, and nothing after another value", async () => {
+    const root = await project();
+
+    expect(sorted(await complete(root, "probe", "add", "api", "--method", ""))).toEqual(
+      sorted(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]),
+    );
+    expect(await complete(root, "probe", "add", "api", "--port", "")).not.toContain("--host");
+    expect(await complete(root, "probe", "add", "db", "--", "pg", "")).not.toContain("--port");
+  });
+
+  it("offers the options of a command without arguments", async () => {
+    expect(sorted(await complete(await project(), "probe", "ls", ""))).toEqual([
+      "--env",
+      "--help",
+      "--set",
+    ]);
+  });
+}
+
 describe("completionSpec", () => {
   const spec = completionSpec({ add, check });
 
   it("lists the long options of a command, not its positional arguments", () => {
-    const options = spec.find(({ name }) => name === "add")?.options;
+    const options = spec.find(({ name }) => name === "add")?.options.map(({ name }) => name);
 
     expect(options).toEqual([
       "--type",
@@ -153,6 +274,40 @@ describe("completionSpec", () => {
     ]);
   });
 
+  it("describes each option, and says which take a value", () => {
+    const options = spec.find(({ name }) => name === "check")?.options;
+
+    expect(options).toContainEqual({
+      name: "--json",
+      description: expect.stringContaining("JSON"),
+      value: false,
+    });
+    expect(options?.find(({ name }) => name === "--timeout")?.value).toBe(true);
+    expect(options?.at(-1)).toEqual({ name: "--help", description: "Show help", value: false });
+  });
+
+  it("gives add the options each service type accepts", () => {
+    const { byType } = spec.find(({ name }) => name === "add") as CommandSpec;
+
+    expect(byType.postgres).toEqual(POSTGRES_OPTIONS);
+    expect(byType.command).toEqual(COMMAND_OPTIONS);
+    expect(byType.http).not.toContain("--setenv");
+    expect(spec.find(({ name }) => name === "check")?.byType).toEqual({});
+  });
+
+  it("knows the key behind every option of add", () => {
+    const options = Object.keys(add.args ?? {}).filter((name) => name !== "name");
+
+    expect(options.filter((name) => !Object.hasOwn(ADD_OPTION_KEYS, name))).toEqual([]);
+  });
+
+  it("marks the commands whose options come after a free argument", () => {
+    expect(spec.map(({ name, argument }) => [name, argument])).toEqual([
+      ["add", true],
+      ["check", false],
+    ]);
+  });
+
   it("marks the commands that take service names", () => {
     expect(spec.map(({ name, services }) => [name, services])).toEqual([
       ["add", false],
@@ -161,11 +316,37 @@ describe("completionSpec", () => {
   });
 });
 
+// A value add accepts for each option the completion offers to a postgres or a command service.
+const SAMPLES: Record<string, string> = {
+  "--port": "5432",
+  "--host": "localhost",
+  "--timeout": "3",
+  "--user": "app",
+  "--database": "app",
+  "--password": reference("PG_PASSWORD"),
+  "--command": "true",
+  "--setenv": "A=1",
+  "--hint": "run it",
+  "--tag": "back",
+};
+
+describe("probe add", () => {
+  it.each([
+    ["postgres", POSTGRES_OPTIONS],
+    ["command", COMMAND_OPTIONS],
+  ])("accepts every option the completion offers to a %s service", async (type, options) => {
+    const root = await project();
+    const args = options
+      .filter((option) => option !== "--help")
+      .flatMap((option) => [option, option === "--type" ? type : (SAMPLES[option] as string)]);
+
+    expect(await probe(root, "add", "svc", ...args)).toMatchObject({ code: 0, stderr: "" });
+  });
+});
+
 describe("zshScript", () => {
   it("escapes what would end a description early", () => {
-    const script = zshScript([
-      { name: "x", description: "it's a: b", options: [], words: [], services: false },
-    ]);
+    const script = zshScript([{ ...BARE, name: "x", description: "it's a: b" }]);
 
     expect(script).toContain("'x:it'\\''s a\\: b'");
   });
@@ -173,9 +354,7 @@ describe("zshScript", () => {
 
 describe("fishScript", () => {
   it("escapes a quote in a description", () => {
-    const script = fishScript([
-      { name: "x", description: "it's", options: [], words: [], services: false },
-    ]);
+    const script = fishScript([{ ...BARE, name: "x", description: "it's" }]);
 
     expect(script).toContain("-a x -d 'it\\'s'");
   });
@@ -184,9 +363,10 @@ describe("fishScript", () => {
 describe("powershellScript", () => {
   const script = powershellScript([
     {
+      ...BARE,
       name: "x",
       description: "it's \u2018odd\u2019",
-      options: ["--a"],
+      options: [{ name: "--a", description: "the a", value: false }],
       words: ["w"],
       services: true,
     },
@@ -201,7 +381,7 @@ describe("powershellScript", () => {
   });
 
   it("lists the options, the words and the commands with services from the spec", () => {
-    expect(script).toContain("'x' = @('--a')");
+    expect(script).toContain("'x' = [ordered]@{ '--a' = 'the a' }");
     expect(script).toContain("'x' = @('w')");
     expect(script).toContain("$withServices = @('x')");
   });
@@ -281,12 +461,16 @@ describe("probe completion", () => {
   it("completes service names only for commands that exist", async () => {
     const { stdout } = await probe(await tempDir(), "completion", "bash");
 
-    expect(stdout).toContain(`      ${SERVICE_COMMANDS.join("|")}) words=`);
+    expect(stdout).toContain(
+      `        ${SERVICE_COMMANDS.join("|")}) [ -z "$offer" ] || offer="services"`,
+    );
     for (const command of SERVICE_COMMANDS) expect(stdout).toContain(`      ${command}) words="`);
   });
 });
 
 describe.skipIf(POSIX_ONLY)("bash completion", () => {
+  completesLikeAdd(bashCompletions);
+
   it("is valid for the system bash", async () => {
     const root = await tempDir();
     await writeFile(join(root, "probe.bash"), (await probe(root, "completion", "bash")).stdout);
@@ -349,7 +533,7 @@ describe.skipIf(POSIX_ONLY)("bash completion", () => {
     expect(await bashCompletions(root, "probe", "check", "api", "--j")).toEqual(["--json"]);
   });
 
-  it("completes the shells after completion, and nothing after a command without arguments", async () => {
+  it("completes the shells after completion", async () => {
     const root = await project();
 
     expect(await bashCompletions(root, "probe", "completion", "")).toEqual([
@@ -358,7 +542,6 @@ describe.skipIf(POSIX_ONLY)("bash completion", () => {
       "fish",
       "powershell",
     ]);
-    expect(await bashCompletions(root, "probe", "ls", "")).toEqual([]);
   });
 
   it("offers no service outside a project", async () => {
@@ -367,6 +550,14 @@ describe.skipIf(POSIX_ONLY)("bash completion", () => {
 });
 
 describe.skipIf(withoutZsh)("zsh completion", () => {
+  completesLikeAdd(zshOptions);
+
+  it("describes the options", async () => {
+    expect(await zshCompletions(await project(), "probe", "add", "api", "--p")).toContain(
+      "--port:Port",
+    );
+  });
+
   it("is valid zsh", async () => {
     const root = await tempDir();
     await writeFile(join(root, "_probe"), (await probe(root, "completion", "zsh")).stdout);
@@ -431,7 +622,7 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
   it("offers the options of a command, and the shells after completion", async () => {
     const root = await project();
 
-    expect(await zshCompletions(root, "probe", "check", "--")).toEqual([
+    expect(await zshOptions(root, "probe", "check", "--")).toEqual([
       "--json",
       "--env",
       "--tag",
@@ -445,7 +636,6 @@ describe.skipIf(withoutZsh)("zsh completion", () => {
       "fish",
       "powershell",
     ]);
-    expect(await zshCompletions(root, "probe", "ls", "")).toEqual([]);
   });
 });
 
@@ -463,6 +653,20 @@ async function fishCompletions(cwd: string, line: string): Promise<string[]> {
 
 // fish ships with no system: these run where it is installed (the Linux jobs of the CI install it).
 describe.skipIf(!FISH)("fish completion", () => {
+  completesLikeAdd((root, ...words) => fishCompletions(root, words.join(" ")));
+
+  it("describes the options", async () => {
+    const root = await project();
+    const run = await exec(
+      FISH as string,
+      ["--no-config", "-c", "probe completion fish | source; complete -C 'probe add api --po'"],
+      root,
+      { PATH: await pathWithProbe() },
+    );
+
+    expect(run.stdout).toBe("--port\tPort\n");
+  });
+
   it("is valid fish", async () => {
     const root = await tempDir();
     await writeFile(join(root, "probe.fish"), (await probe(root, "completion", "fish")).stdout);
@@ -545,7 +749,6 @@ describe.skipIf(!FISH)("fish completion", () => {
       "powershell",
       "zsh",
     ]);
-    expect(await fishCompletions(root, "probe ls ")).toEqual([]);
   });
 
   it("offers no service outside a project", async () => {
@@ -599,6 +802,8 @@ async function powershellCompletions(cwd: string, line: string): Promise<string[
 }
 
 describe.skipIf(!PWSH)("powershell completion", () => {
+  completesLikeAdd((root, ...words) => powershellCompletions(root, words.join(" ")));
+
   it("completes a command", async () => {
     expect(await powershellCompletions(await project(), "probe ch")).toEqual(["check"]);
     expect(await powershellCompletions(await project(), "probe ")).toContain("completion");

@@ -20,7 +20,6 @@ import {
   passwordProblem,
   SERVICE_TYPES,
   type Service,
-  type ServiceKey,
   type ServiceKind,
   serviceKeys,
   serviceVariables,
@@ -39,6 +38,7 @@ import {
 import { DEFAULT_TIMEOUT_SECONDS } from "../constants";
 import { ProbeError } from "../errors";
 import { ask } from "../ui/prompt";
+import { FLAG_KEYS, type Flag } from "./add-flags";
 import { offerDetected } from "./detected";
 import { openProject, rawServices, saveServices, secondsToMs, tagsFrom } from "./shared";
 
@@ -131,23 +131,6 @@ function typeFrom(type: unknown, command: boolean): ServiceKind {
   }
   return named;
 }
-
-// The key each flag writes: a type that does not read the key refuses the flag.
-const FLAG_KEYS = {
-  url: "url",
-  port: "port",
-  host: "host",
-  path: "path",
-  expect: "expect",
-  contains: "contains",
-  method: "method",
-  header: "headers",
-  setenv: "env",
-  user: "user",
-  database: "database",
-  password: "password",
-} as const satisfies Readonly<Record<string, ServiceKey>>;
-type Flag = keyof typeof FLAG_KEYS;
 
 // The flags of a database: an http service or a command refuses them here, the others in typedService.
 const FORM_FLAGS: readonly Flag[] = ["user", "database", "password"];
