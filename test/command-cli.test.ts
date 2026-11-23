@@ -115,6 +115,66 @@ describe("probe add with a command", () => {
   });
 });
 
+describe("probe add --type", () => {
+  it("should write a database service with the address given, or none for its default port", async () => {
+    const root = await project();
+
+    expect((await probe(root, "add", "db", "--type", "postgres", "-p", "5433")).code).toBe(0);
+    expect((await probe(root, "add", "cache", "--type", "redis")).code).toBe(0);
+
+    expect(await services(root)).toEqual({
+      db: { type: "postgres", port: 5433 },
+      cache: { type: "redis" },
+    });
+  });
+
+  it("should write no type for http and the command for command", async () => {
+    const root = await project();
+
+    expect((await probe(root, "add", "api", "--type", "http", "-p", "3000")).code).toBe(0);
+    expect((await probe(root, "add", "job", "--type", "command", "--", "true")).code).toBe(0);
+
+    expect(await services(root)).toEqual({
+      api: { port: 3000 },
+      job: { type: "command", command: ["true"] },
+    });
+  });
+
+  it("should refuse what the type does not read, naming the flags, and write nothing", async () => {
+    const root = await project();
+
+    const refused = [
+      [
+        ["--type", "mysql", "--path", "/up", "--expect", "200"],
+        "--type mysql does not read --path, --expect: remove them.",
+      ],
+      [
+        ["--type", "redis", "-H", "X-Tenant: acme"],
+        "--type redis does not read --header: remove it.",
+      ],
+      [
+        ["--type", "postgres", "--setenv", "A=1"],
+        "--type postgres does not read --setenv: remove it.",
+      ],
+      [
+        ["--type", "postgres", "--command", "pg_isready"],
+        "--command makes a command service: remove --type postgres.",
+      ],
+      [["--type", "command"], "--type command needs the command"],
+      [
+        ["--type", "tcp", "-p", "1"],
+        "--type expects one of http, command, postgres, mysql, redis.",
+      ],
+    ] as const;
+    for (const [args, message] of refused) {
+      const run = await probe(root, "add", "x", ...args);
+      expect(run.code).toBe(2);
+      expect(run.stderr).toContain(message);
+    }
+    expect(await services(root)).toEqual({});
+  });
+});
+
 describe("probe check with a command service", () => {
   const config = (up: string, down: string) =>
     [

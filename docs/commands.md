@@ -36,27 +36,31 @@ probe add api -p 3000 --path /health
 probe add secure --url https://localhost:8443/health
 probe add cache --command "redis-cli ping"
 probe add db -- pg_isready -q
+probe add pg --type postgres -p 5433
 ```
 
-| Option                    | Default     | Meaning                                                                                     |
-| ------------------------- | ----------- | ------------------------------------------------------------------------------------------- |
-| `--command <string>`      | none        | Check by [running a command](config.md#command-services), by the shell                      |
-| `-p`, `--port <port>`     | required    | Port, unless a command is given                                                             |
-| `--host <host>`           | `localhost` | Host name or IP                                                                             |
-| `--path <path>`           | `/`         | Path to request                                                                             |
-| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above                                     |
-| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                                                        |
-| `--contains <text>`       | none        | Text the body must [contain](config.md#contains): `--contains '"status":"ok"'`              |
-| `--timeout <seconds>`     | 3           | Seconds given to this service                                                               |
-| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                                                  |
-| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`                                    |
-| `--setenv <NAME=value>`   | none        | Variable for a [command](config.md#env), repeatable: `--setenv 'PGPASSWORD=${PG_PASSWORD}'` |
-| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`                                        |
-| `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra`                              |
+| Option                    | Default     | Meaning                                                                                      |
+| ------------------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| `--type <type>`           | `http`      | `http`, `command`, `postgres`, `mysql` or `redis`: see [Config](config.md#database-services) |
+| `--command <string>`      | none        | Check by [running a command](config.md#command-services), by the shell                       |
+| `-p`, `--port <port>`     | required    | Port, unless a command or a database type is given                                           |
+| `--host <host>`           | `localhost` | Host name or IP                                                                              |
+| `--path <path>`           | `/`         | Path to request                                                                              |
+| `--url <url>`             | none        | Full URL, `http` or `https`, instead of the three above                                      |
+| `--expect <status>`       | any 2xx     | Expected status: `200`, or `200,204`                                                         |
+| `--contains <text>`       | none        | Text the body must [contain](config.md#contains): `--contains '"status":"ok"'`               |
+| `--timeout <seconds>`     | 3           | Seconds given to this service                                                                |
+| `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                                                   |
+| `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`                                     |
+| `--setenv <NAME=value>`   | none        | Variable for a [command](config.md#env), repeatable: `--setenv 'PGPASSWORD=${PG_PASSWORD}'`  |
+| `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`                                         |
+| `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra`                               |
 
 - After `--`, everything is the command, as a list run without a shell: `probe add db -- pg_isready -q`.
   `--command` and `--` cannot be given together, nor with `--port`, `--url`, `--host`, `--path`, `--expect`,
   `--contains`, `--method` or `--header`. `--setenv` needs a command.
+- `--type postgres`, `mysql` or `redis` takes `--host` and `--port` (default: the port of the database), and refuses
+  the other address and request flags. Its `user`, `database` and `password` are written in `config.yml`.
 - `probe add` alone, on a terminal, asks for each value: see [Discover](features/discover.md).
 - What each value means: [Config](config.md). Headers and their secrets: [Headers](features/headers.md).
 

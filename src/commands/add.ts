@@ -17,7 +17,11 @@ import {
   DEFAULT_METHOD,
   METHODS,
   type Method,
+  SERVICE_TYPES,
   type Service,
+  type ServiceKey,
+  type ServiceKind,
+  serviceKeys,
   serviceVariables,
   urlProblem,
 } from "../config/schema";
@@ -98,11 +102,63 @@ const afterDashes = (rawArgs: string[]): string[] => {
   return at === -1 ? [] : rawArgs.slice(at + 1);
 };
 
-type AddArgs = Partial<Record<(typeof HTTP_FLAGS)[number] | "command", unknown>>;
+type AddArgs = Partial<Record<(typeof HTTP_FLAGS)[number] | "command" | "setenv", unknown>>;
+
+const givesCommand = (args: AddArgs, rawArgs: string[]) =>
+  args.command !== undefined || afterDashes(rawArgs).length > 0;
+
+/** The type named by `--type`, or the one the other flags imply: command with a command, else http. */
+function typeFrom(type: unknown, command: boolean): ServiceKind {
+  if (type === undefined) return command ? "command" : "http";
+  if (!(SERVICE_TYPES as readonly unknown[]).includes(type)) {
+    throw new ProbeError("USAGE", `--type expects one of ${SERVICE_TYPES.join(", ")}.`);
+  }
+  const named = type as ServiceKind;
+  if (command && named !== "command") {
+    throw new ProbeError("USAGE", `--command makes a command service: remove --type ${named}.`);
+  }
+  if (!command && named === "command") {
+    throw new ProbeError(
+      "USAGE",
+      "--type command needs the command: --command '<string>', or after --.",
+    );
+  }
+  return named;
+}
+
+// The key each flag writes: a type that does not read the key refuses the flag.
+const FLAG_KEYS: Readonly<Record<(typeof HTTP_FLAGS)[number] | "setenv", ServiceKey>> = {
+  url: "url",
+  port: "port",
+  host: "host",
+  path: "path",
+  expect: "expect",
+  contains: "contains",
+  method: "method",
+  header: "headers",
+  setenv: "env",
+};
+
+/** A service of a type with no flags of its own, such as a database: its address, if given. */
+function typedService(type: ServiceKind, args: AddArgs): RawConfig {
+  const keys = serviceKeys(type);
+  const flags = (Object.keys(FLAG_KEYS) as (keyof typeof FLAG_KEYS)[]).filter(
+    (flag) => args[flag] !== undefined && !keys.has(FLAG_KEYS[flag]),
+  );
+  if (flags.length > 0) {
+    const named = flags.map((flag) => `--${flag}`).join(", ");
+    const them = flags.length > 1 ? "them" : "it";
+    throw new ProbeError("USAGE", `--type ${type} does not read ${named}: remove ${them}.`);
+  }
+  const service: RawConfig = { type };
+  if (args.host !== undefined) service.host = String(args.host);
+  if (args.port !== undefined) service.port = parseInteger(String(args.port), "--port");
+  return service;
+}
 
 function commandService(args: AddArgs, rawArgs: string[]): RawConfig | undefined {
   const list = afterDashes(rawArgs);
-  if (args.command === undefined && list.length === 0) return undefined;
+  if (!givesCommand(args, rawArgs)) return undefined;
   if (args.command !== undefined && list.length > 0) {
     throw new ProbeError("USAGE", "give the command once: --command '<string>', or after --.");
   }
@@ -252,6 +308,11 @@ export default defineCommand({
   meta: { name: "add", description: "Add a service" },
   args: {
     name: { type: "positional", description: "Service name", required: true },
+    type: {
+      type: "string",
+      valueHint: "type",
+      description: `Type of service: ${SERVICE_TYPES.join(", ")} (default: http, or command with a command), e.g. --type postgres`,
+    },
     command: {
       type: "string",
       valueHint: "string",
@@ -311,8 +372,11 @@ export default defineCommand({
         `service "${args.name}" already exists. Remove it first: probe rm ${args.name}`,
       );
     }
+    const type = typeFrom(args.type, givesCommand(args, rawArgs));
     // The command flags are checked first: a request option beside them is refused there.
-    const service = commandService(args, rawArgs) ?? addressFrom(args);
+    const service =
+      commandService(args, rawArgs) ??
+      (type === "http" ? addressFrom(args) : typedService(type, args));
     if (args.expect) service.expect = parseExpect(String(args.expect));
     if (args.contains !== undefined) {
       const problem = containsProblem(String(args.contains));
@@ -343,7 +407,7 @@ export default defineCommand({
     }
     if (headers) service.headers = headers;
     const env = envFrom(envLines(rawArgs));
-    if (env && service.type !== "command") {
+    if (env && !serviceKeys(type).has("env")) {
       throw new ProbeError("USAGE", "--setenv sets the environment of a command: add --command.");
     }
     if (env) service.env = env;
