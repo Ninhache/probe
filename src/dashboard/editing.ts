@@ -2,8 +2,13 @@ import { defaultType, getServiceType, serviceType, serviceTypeNames } from "../c
 import type { ServiceForm } from "../checkers/types";
 import type { ParameterProblem, ParameterWrite } from "../commands/parameter-writes";
 import type { ServiceFields, ServiceWrite } from "../commands/service-writes";
-import { serviceVariables } from "../config/headers";
-import { type Config, declaresAddress, type Parameter, type Service } from "../config/schema";
+import {
+  type Config,
+  declaresAddress,
+  type Parameter,
+  type Service,
+  serviceVariables,
+} from "../config/schema";
 import type { UrlParameter } from "./form";
 import type { Addresses } from "./parameter-form";
 import type { Saved } from "./saves";

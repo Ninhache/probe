@@ -3,10 +3,9 @@ import {
   referenced,
   referencedInJson,
   resolveHeaders,
-  serviceVariables,
   templateParts,
 } from "../config/headers";
-import { DEFAULT_METHOD, type Service } from "../config/schema";
+import { DEFAULT_METHOD, type Service, serviceVariables } from "../config/schema";
 import { CONTAINS_BODY_BYTES, DEFAULT_TIMEOUT_SECONDS, MAX_REDIRECTS } from "../constants";
 import {
   type BodyGap,

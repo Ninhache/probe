@@ -1,6 +1,7 @@
-import { reference, serviceVariables, VARIABLE_NAME } from "../config/headers";
+import { reference, VARIABLE_NAME } from "../config/headers";
 import type { VariableSource } from "../config/local";
 import type { Config } from "../config/schema";
+import { serviceVariables } from "../config/schema";
 
 export interface VariableRow {
   name: string;

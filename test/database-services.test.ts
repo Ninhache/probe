@@ -3,8 +3,8 @@ import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { databaseCommand } from "../src/checkers/database";
 import { serviceType } from "../src/checkers/registry";
-import { reference, serviceVariables } from "../src/config/headers";
-import { configSchemaV1, type Service } from "../src/config/schema";
+import { reference } from "../src/config/headers";
+import { configSchemaV1, type Service, serviceVariables } from "../src/config/schema";
 import { tempDir } from "./helpers";
 
 const SECRET = "Zq9-mk4p-sample";

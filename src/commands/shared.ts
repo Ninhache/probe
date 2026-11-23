@@ -3,12 +3,16 @@ import { selectServices } from "../checkers/select";
 import { SET_OPTION, TAG_OPTION } from "../completion/spec";
 import { type ProbePaths, requireProbeDir } from "../config/discovery";
 import { environmentPaths } from "../config/environments";
-import { serviceVariables } from "../config/headers";
 import { type LoadedConfig, loadConfig, saveConfig } from "../config/loader";
 import type { Variables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
 import { type Selection, selectionFrom as selectionOf } from "../config/parameters";
-import { type Config, SERVICE_NAME_PATTERN, type Service } from "../config/schema";
+import {
+  type Config,
+  SERVICE_NAME_PATTERN,
+  type Service,
+  serviceVariables,
+} from "../config/schema";
 import { CONFIG_FILE, ENVIRONMENTS_DIR, MAX_TIMEOUT_SECONDS, PROBE_DIR } from "../constants";
 import { ProbeError } from "../errors";
 import { blockState, syncMakefile } from "../makefile/sync";

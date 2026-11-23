@@ -10,11 +10,17 @@ import {
   parseEnvLine,
   parseHeaderLine,
   reference,
-  serviceVariables,
 } from "../config/headers";
 import { loadVariables } from "../config/local";
 import type { RawConfig } from "../config/migrations";
-import { DEFAULT_METHOD, METHODS, type Method, type Service, urlProblem } from "../config/schema";
+import {
+  DEFAULT_METHOD,
+  METHODS,
+  type Method,
+  type Service,
+  serviceVariables,
+  urlProblem,
+} from "../config/schema";
 import {
   commandValueProblem,
   containsProblem,

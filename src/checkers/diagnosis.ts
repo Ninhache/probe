@@ -1,5 +1,4 @@
-import { serviceVariables } from "../config/headers";
-import { DEFAULT_METHOD, type Service } from "../config/schema";
+import { DEFAULT_METHOD, type Service, serviceVariables } from "../config/schema";
 import {
   CONFIG_FILE,
   CONTAINS_BODY_BYTES,
