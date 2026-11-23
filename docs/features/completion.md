@@ -1,7 +1,14 @@
 # Completion
 
 Tab completes the commands, their options, the names of your services (`probe check a<Tab>`), your
-environments after `--env`, your [tags](tags.md) after `--tag` and the service types after `probe add --type`.
+environments after `--env`, your [tags](tags.md) after `--tag`, the service types after `probe add --type` and
+the methods after `--method`.
+
+Options come with their description (zsh, fish, PowerShell), and an option already given is not offered again,
+except the ones you can repeat (`--header`, `--setenv`, `--tag`, `--set`). Once its name is typed,
+`probe add api <Tab>` offers the options without a `-`. After `--type postgres` (or `--command`), it offers only
+the options that type reads: `--user` and `--database`, not `--path` or `--method`. Nothing is completed after
+`--`. Short aliases such as `-p` are not tracked: `-p 3000` still lets `--port` be offered.
 
 ```sh
 eval "$(probe completion zsh)"     # in ~/.zshrc, after compinit
