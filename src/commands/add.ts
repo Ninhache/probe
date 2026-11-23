@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { serviceType } from "../checkers/registry";
+import { getServiceType, serviceType } from "../checkers/registry";
 import {
   envNameProblem,
   envValueProblem,
@@ -17,6 +17,7 @@ import {
   DEFAULT_METHOD,
   METHODS,
   type Method,
+  passwordProblem,
   SERVICE_TYPES,
   type Service,
   type ServiceKey,
@@ -102,7 +103,12 @@ const afterDashes = (rawArgs: string[]): string[] => {
   return at === -1 ? [] : rawArgs.slice(at + 1);
 };
 
-type AddArgs = Partial<Record<(typeof HTTP_FLAGS)[number] | "command" | "setenv", unknown>>;
+type AddArgs = Partial<
+  Record<
+    (typeof HTTP_FLAGS)[number] | "command" | "setenv" | "user" | "database" | "password",
+    unknown
+  >
+>;
 
 const givesCommand = (args: AddArgs, rawArgs: string[]) =>
   args.command !== undefined || afterDashes(rawArgs).length > 0;
@@ -127,7 +133,7 @@ function typeFrom(type: unknown, command: boolean): ServiceKind {
 }
 
 // The key each flag writes: a type that does not read the key refuses the flag.
-const FLAG_KEYS: Readonly<Record<(typeof HTTP_FLAGS)[number] | "setenv", ServiceKey>> = {
+const FLAG_KEYS = {
   url: "url",
   port: "port",
   host: "host",
@@ -137,23 +143,47 @@ const FLAG_KEYS: Readonly<Record<(typeof HTTP_FLAGS)[number] | "setenv", Service
   method: "method",
   header: "headers",
   setenv: "env",
-};
+  user: "user",
+  database: "database",
+  password: "password",
+} as const satisfies Readonly<Record<string, ServiceKey>>;
+type Flag = keyof typeof FLAG_KEYS;
 
-/** A service of a type with no flags of its own, such as a database: its address, if given. */
-function typedService(type: ServiceKind, args: AddArgs): RawConfig {
+// The flags of a database: an http service or a command refuses them here, the others in typedService.
+const FORM_FLAGS: readonly Flag[] = ["user", "database", "password"];
+
+function refuseUnread(type: ServiceKind, args: AddArgs, flags: readonly Flag[]): void {
   const keys = serviceKeys(type);
-  const flags = (Object.keys(FLAG_KEYS) as (keyof typeof FLAG_KEYS)[]).filter(
-    (flag) => args[flag] !== undefined && !keys.has(FLAG_KEYS[flag]),
-  );
-  if (flags.length > 0) {
-    const named = flags.map((flag) => `--${flag}`).join(", ");
-    const them = flags.length > 1 ? "them" : "it";
-    throw new ProbeError("USAGE", `--type ${type} does not read ${named}: remove ${them}.`);
+  const unread = flags.filter((flag) => args[flag] !== undefined && !keys.has(FLAG_KEYS[flag]));
+  if (unread.length === 0) return;
+  const named = unread.map((flag) => `--${flag}`).join(", ");
+  const them = unread.length > 1 ? "them" : "it";
+  throw new ProbeError("USAGE", `${type} services do not read ${named}: remove ${them}.`);
+}
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+/** A service of a type with no flags of its own, such as a database: written by its form, as the dashboard does. */
+function typedService(type: ServiceKind, args: AddArgs): RawConfig {
+  refuseUnread(type, args, Object.keys(FLAG_KEYS) as Flag[]);
+  const { form } = getServiceType(type);
+  const values: Record<string, string> = {};
+  for (const { key } of form.fields) {
+    const value = args[key as Flag];
+    if (value === undefined) continue;
+    // Said without the value: a password typed there must not come back on screen. config.yml is
+    // shared, and only the dashboard moves a plain secret to local.yml: here it must be a reference.
+    const problem =
+      (key === form.secretField ? passwordProblem(String(value)) : undefined) ??
+      form.problem(key, String(value));
+    if (problem) {
+      const quotes = key === form.secretField ? " Keep the single quotes around it." : "";
+      throw new ProbeError("USAGE", `--${key} expects ${lowerFirst(problem)}.${quotes}`);
+    }
+    values[key] = String(value);
   }
-  const service: RawConfig = { type };
-  if (args.host !== undefined) service.host = String(args.host);
-  if (args.port !== undefined) service.port = parseInteger(String(args.port), "--port");
-  return service;
+  const written = Object.entries(form.written(values)).filter(([, value]) => value !== undefined);
+  return { ...Object.fromEntries(written), type };
 }
 
 function commandService(args: AddArgs, rawArgs: string[]): RawConfig | undefined {
@@ -341,6 +371,19 @@ export default defineCommand({
       alias: "X",
       description: "Method of the request, sent without a body, e.g. POST (default: GET)",
     },
+    user: {
+      type: "string",
+      description: "User of a database service, e.g. --type postgres --user app",
+    },
+    database: {
+      type: "string",
+      description: "Database of a database service: its name, or its number for redis",
+    },
+    password: {
+      type: "string",
+      valueHint: "reference",
+      description: `Password of a database service, as a reference: '${reference("PG_PASSWORD")}', set with probe var`,
+    },
     setenv: {
       type: "string",
       valueHint: "NAME=value",
@@ -377,6 +420,7 @@ export default defineCommand({
     const service =
       commandService(args, rawArgs) ??
       (type === "http" ? addressFrom(args) : typedService(type, args));
+    refuseUnread(type, args, FORM_FLAGS);
     if (args.expect) service.expect = parseExpect(String(args.expect));
     if (args.contains !== undefined) {
       const problem = containsProblem(String(args.contains));
@@ -421,7 +465,7 @@ export default defineCommand({
 
     await saveServices(loaded, { ...services, [args.name]: service });
     const { lookup } = await loadVariables(loaded.paths);
-    const [unset] = serviceVariables({ headers, env }).filter((name) => !lookup(name));
+    const [unset] = serviceVariables(service).filter((name) => !lookup(name));
     console.log(
       unset === undefined
         ? `Added ${args.name}. Try: probe check ${args.name}`

@@ -140,27 +140,76 @@ describe("probe add --type", () => {
     });
   });
 
+  it("should write the user, the database and the password reference, and name the variable to set", async () => {
+    const root = await project();
+    const variable = "PROBE_ADDTYPE_PASSWORD";
+
+    const added = await probe(
+      root,
+      "add",
+      "pg",
+      "--type",
+      "postgres",
+      "--user",
+      "app",
+      "--database",
+      "shop",
+      "--password",
+      `\${${variable}}`,
+    );
+    const cache = await probe(root, "add", "cache", "--type", "redis", "--database", "1");
+
+    expect(added).toMatchObject({
+      code: 0,
+      stdout: `Added pg. It needs ${variable}, not set yet: probe var ${variable}\n`,
+    });
+    expect(cache.code).toBe(0);
+    expect(await services(root)).toEqual({
+      pg: { type: "postgres", user: "app", database: "shop", password: `\${${variable}}` },
+      cache: { type: "redis", database: 1 },
+    });
+  });
+
+  it("should refuse a password written as is, without repeating it or writing anything", async () => {
+    const root = await project();
+    const secret = "Zq9-mk4p-sample";
+
+    const run = await probe(root, "add", "pg", "--type", "postgres", "--password", secret);
+
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain("--password expects a reference to a variable");
+    expect(run.stdout + run.stderr).not.toContain(secret);
+    expect(await services(root)).toEqual({});
+  });
+
   it("should refuse what the type does not read, naming the flags, and write nothing", async () => {
     const root = await project();
 
     const refused = [
       [
         ["--type", "mysql", "--path", "/up", "--expect", "200"],
-        "--type mysql does not read --path, --expect: remove them.",
+        "mysql services do not read --path, --expect: remove them.",
       ],
       [
         ["--type", "redis", "-H", "X-Tenant: acme"],
-        "--type redis does not read --header: remove it.",
+        "redis services do not read --header: remove it.",
       ],
       [
         ["--type", "postgres", "--setenv", "A=1"],
-        "--type postgres does not read --setenv: remove it.",
+        "postgres services do not read --setenv: remove it.",
       ],
       [
         ["--type", "postgres", "--command", "pg_isready"],
         "--command makes a command service: remove --type postgres.",
       ],
       [["--type", "command"], "--type command needs the command"],
+      [["--type", "redis", "--database", "shop"], "--database expects a database number, e.g. 0."],
+      [["--type", "mysql", "--user", "-x"], "--user expects a user name"],
+      [["-p", "3000", "--user", "app"], "http services do not read --user: remove it."],
+      [
+        ["--command", "true", "--database", "app", "--password", "${X}"],
+        "command services do not read --database, --password: remove them.",
+      ],
       [
         ["--type", "tcp", "-p", "1"],
         "--type expects one of http, command, postgres, mysql, redis.",

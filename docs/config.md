@@ -205,8 +205,8 @@ services:
     password: ${REDIS_PASSWORD}
 ```
 
-Add one with `probe add pg --type postgres -p 5433`, then write its `user`, `database` and `password` in `config.yml`,
-or in the dashboard.
+Add one with `probe add pg --type postgres --user app --database shop --password '${PG_PASSWORD}'`, then set the
+password with `probe var PG_PASSWORD`. The dashboard adds one too.
 
 Each one runs the client of the database, which must be installed and on the `PATH`, as a [command service](#command-services) does:
 

@@ -36,7 +36,7 @@ probe add api -p 3000 --path /health
 probe add secure --url https://localhost:8443/health
 probe add cache --command "redis-cli ping"
 probe add db -- pg_isready -q
-probe add pg --type postgres -p 5433
+probe add pg --type postgres -p 5433 --user app --database shop --password '${PG_PASSWORD}'
 ```
 
 | Option                    | Default     | Meaning                                                                                      |
@@ -52,6 +52,9 @@ probe add pg --type postgres -p 5433
 | `--timeout <seconds>`     | 3           | Seconds given to this service                                                                |
 | `-X`, `--method <method>` | `GET`       | Method of the request, sent without a body                                                   |
 | `-H`, `--header <h>`      | none        | Header to send, repeatable: `-H 'X-Api-Key: ${API_KEY}'`                                     |
+| `--user <user>`           | none        | User of a database service                                                                   |
+| `--database <name>`       | none        | Database of a database service: its name, or its number for `redis`                          |
+| `--password <ref>`        | none        | Password of a database service, a reference only: `--password '${PG_PASSWORD}'`              |
 | `--setenv <NAME=value>`   | none        | Variable for a [command](config.md#env), repeatable: `--setenv 'PGPASSWORD=${PG_PASSWORD}'`  |
 | `--hint <text>`           | none        | What to do when it is down: `--hint 'run: make api'`                                         |
 | `--tag <a,b>`             | none        | [Tags](features/tags.md) to select it with: `--tag back,infra`                               |
@@ -59,8 +62,10 @@ probe add pg --type postgres -p 5433
 - After `--`, everything is the command, as a list run without a shell: `probe add db -- pg_isready -q`.
   `--command` and `--` cannot be given together, nor with `--port`, `--url`, `--host`, `--path`, `--expect`,
   `--contains`, `--method` or `--header`. `--setenv` needs a command.
-- `--type postgres`, `mysql` or `redis` takes `--host` and `--port` (default: the port of the database), and refuses
-  the other address and request flags. Its `user`, `database` and `password` are written in `config.yml`.
+- `--type postgres`, `mysql` or `redis` takes `--host`, `--port` (default: the port of the database), `--user`,
+  `--database` and `--password`, and refuses the other address and request flags. `--password` takes a reference
+  in single quotes, never the password itself: set its value with `probe var`. The other types refuse `--user`,
+  `--database` and `--password`.
 - `probe add` alone, on a terminal, asks for each value: see [Discover](features/discover.md).
 - What each value means: [Config](config.md). Headers and their secrets: [Headers](features/headers.md).
 
