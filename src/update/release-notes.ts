@@ -15,6 +15,19 @@ export const IMPORTANT_KINDS: readonly NoteKind[] = ["schema", "completion", "br
  */
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: "1.9.0",
+    items: [
+      {
+        kind: "info",
+        text: "Tab after probe add <name> offers its options, described, and only those the --type reads; --method offers its values.",
+      },
+      {
+        kind: "completion",
+        text: "The shell completion changed: regenerate your saved completion.",
+      },
+    ],
+  },
+  {
     version: "1.8.0",
     items: [
       {
