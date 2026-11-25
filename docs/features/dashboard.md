@@ -199,8 +199,9 @@ shown, not even a part of it.
 ## Parameters
 
 With [parameters](parameters.md) in the config, `p` opens the parameters panel: one row per parameter, with
-its chosen value as `‹ value ›`. `↑` `↓` (`j` `k`) change parameter, `←` `→` (`h` `l`) choose its value. `p` or
-`Esc` closes it.
+its chosen value as `‹ value ›`. `↑` `↓` (`j` `k`) change parameter, `←` `→` (`h` `l`) choose its value. After
+the last value comes `(none)`: nothing is sent for that parameter, as with `--set tenant=` (since 1.10.0). `p`
+or `Esc` closes it.
 
 ```
 ┌─ parameters ───────────────┐
