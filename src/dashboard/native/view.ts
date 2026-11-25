@@ -1,6 +1,11 @@
 import { keepsResponse } from "../../checkers/registry";
 import type { Selection } from "../../config/parameters";
-import { effectiveSelection, type ParameterChoices } from "../../config/parameters";
+import {
+  effectiveSelection,
+  NO_VALUE,
+  NO_VALUE_LABEL,
+  type ParameterChoices,
+} from "../../config/parameters";
 import {
   CONFIG_FILE,
   DASHBOARD_INTERVAL_SECONDS,
@@ -272,7 +277,10 @@ export function renderDashboard(
   const picked = effectiveSelection(view.choices, view.selection);
   for (const [name, value] of Object.entries(picked)) {
     x += screen.text(x, header.y, `${name}:`, { fg: t.muted }) + 1;
-    x += screen.text(x, header.y, value, { fg: t.accent, bold: true }) + 2;
+    x +=
+      value === NO_VALUE
+        ? screen.text(x, header.y, NO_VALUE_LABEL, { fg: t.muted }) + 2
+        : screen.text(x, header.y, value, { fg: t.accent, bold: true }) + 2;
   }
   const status = `${spinner(view.frame)} ${clock(now)}`;
   screen.text(area.w - status.length - 1, header.y, status, { fg: t.muted });

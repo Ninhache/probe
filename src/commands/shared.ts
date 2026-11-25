@@ -42,7 +42,7 @@ export const SET_ARG = {
   type: "string",
   valueHint: "name=value",
   description:
-    "Value of a parameter of the config, e.g. --set tenant=globex (default: its first value)",
+    "Value of a parameter of the config, e.g. --set tenant=globex; tenant= sends none (default: its first value)",
 } as const;
 
 /** Every value given to `option`: the argument parser keeps the last one only. */

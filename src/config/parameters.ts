@@ -7,15 +7,31 @@ export type Selection = Readonly<Record<string, string>>;
 
 const SET_EXAMPLE = "--set tenant=globex";
 
+/** What a selection holds for a parameter sent with no value: `--set tenant=`. */
+export const NO_VALUE = "";
+
+/** How a parameter set to no value reads in the dashboard. */
+export const NO_VALUE_LABEL = "(none)";
+
+/** The values one can choose for a parameter: its own, then none, unless the config lists an empty one. */
+export const choosable = (values: readonly string[]): readonly string[] =>
+  values.includes(NO_VALUE) ? values : [...values, NO_VALUE];
+
+// A listed empty value is sent as such: configs written before none existed keep their request.
+function chosenValue(values: readonly string[], asked: string | undefined): string | undefined {
+  if (asked !== undefined && values.includes(asked)) return asked;
+  return asked === NO_VALUE ? undefined : values[0];
+}
+
 const listed = (names: readonly string[]) => names.join(", ") || "(none)";
 
-/** The values asked for as `name=value`: each must be one the config lists. */
+/** The values asked for as `name=value`: each must be one the config lists, or none (`name=`). */
 export function selectionFrom(config: Config, pairs: readonly string[]): Selection {
   const parameters = config.parameters ?? {};
   const selection: Record<string, string> = {};
   for (const pair of pairs) {
     const at = pair.indexOf("=");
-    if (at <= 0 || at === pair.length - 1) {
+    if (at <= 0) {
       throw new ProbeError("USAGE", `--set expects name=value, e.g. ${SET_EXAMPLE}.`);
     }
     const name = pair.slice(0, at);
@@ -27,10 +43,10 @@ export function selectionFrom(config: Config, pairs: readonly string[]): Selecti
         `unknown parameter: ${name}. Known: ${listed(Object.keys(parameters))}.`,
       );
     }
-    if (!parameter.values.includes(value)) {
+    if (!choosable(parameter.values).includes(value)) {
       throw new ProbeError(
         "USAGE",
-        `unknown value for ${name}: ${value}. Known: ${listed(parameter.values)}.`,
+        `unknown value for ${name}: ${value}. Known: ${listed(parameter.values)}, or ${name}= to send none.`,
       );
     }
     selection[name] = value;
@@ -58,7 +74,7 @@ export function mergedChoices(all: readonly ParameterChoices[]): ParameterChoice
   return merged;
 }
 
-/** The value each parameter takes: the one asked for when it is listed, else the first. */
+/** The value each parameter takes: the one asked for when it is listed or none, else the first. */
 export function effectiveSelection(
   choices: ParameterChoices,
   selection: Selection = {},
@@ -66,32 +82,25 @@ export function effectiveSelection(
   return Object.fromEntries(
     Object.entries(choices).flatMap(([name, values]) => {
       const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
-      const value = asked !== undefined && values.includes(asked) ? asked : values[0];
-      return value === undefined ? [] : [[name, value]];
+      if (values.length === 0) return [];
+      return [[name, chosenValue(values, asked) ?? NO_VALUE]];
     }),
   );
 }
 
-function chosenValue(name: string, parameter: Parameter, selection: Selection): string {
-  const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
-  return asked !== undefined && parameter.values.includes(asked)
-    ? asked
-    : (parameter.values[0] as string);
-}
-
-/** The services as they are requested for one value of each parameter of the config. */
+/** The services as they are requested for one value of each parameter of the config; one set to none adds nothing. */
 export function applySelection(
   config: Config,
   selection: Selection = {},
   types: ServiceTypes = serviceType,
 ): Config {
-  const chosen = Object.entries(config.parameters ?? {}).map(
-    ([name, parameter]): [Parameter, string] => [
-      parameter,
-      chosenValue(name, parameter, selection),
-    ],
-  );
-  if (chosen.length === 0) return config;
+  const declared = Object.entries(config.parameters ?? {});
+  if (declared.length === 0) return config;
+  const chosen = declared.flatMap(([name, parameter]): [Parameter, string][] => {
+    const asked = Object.hasOwn(selection, name) ? selection[name] : undefined;
+    const value = chosenValue(parameter.values, asked);
+    return value === undefined ? [] : [[parameter, value]];
+  });
   const services = Object.fromEntries(
     Object.entries(config.services).map(([name, service]) => {
       const { parameterKinds = [], withParameters } = types(service);

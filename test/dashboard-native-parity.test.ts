@@ -207,12 +207,22 @@ describe("parameters", () => {
     expect(draw().split("\n")[0]).toContain("region: us");
     press("p");
     expect(draw()).toContain("┤parameters├");
-    press("right", "right");
+    press("right");
     expect(view.selection).toEqual({ region: "us", env: "prod" });
     press("down", "left");
     expect(calls).toEqual(["parameter env=prod", "parameter region=eu"]);
     press("escape");
     expect(draw().split("\n")[0]).toContain("env: prod");
+  });
+
+  it("offers no value after the last one, and shows it in the header", () => {
+    const { press, calls, view, draw } = setup({ choices });
+    press("p", "right", "right", "right");
+    expect(view.selection).toEqual({ env: "" });
+    expect(calls).toEqual(["parameter env=prod", "parameter env="]);
+    expect(draw()).toContain("(none)");
+    press("escape");
+    expect(draw().split("\n")[0]).toContain("env: (none)");
   });
 
   it("says so when the config declares none", () => {

@@ -84,10 +84,10 @@ describe("the parameters panel", () => {
     expect(line(draw(), "env")).toMatch(/ {2}dev ›/);
     press("right");
     expect(line(draw(), "env")).toContain("‹ stage ›");
-    press("right");
+    press("right", "right");
     const last = line(draw(), "env");
-    expect(last).toContain("‹ prod");
-    expect(last).not.toContain("prod ›");
+    expect(last).toContain("‹ (none)");
+    expect(last).not.toContain("(none) ›");
   });
 });
 

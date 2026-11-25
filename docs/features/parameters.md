@@ -97,6 +97,9 @@ probe curl api --set tenant=globex
 ```
 
 - Without `--set`, a parameter takes its first value. That is what `make check` uses.
+- `--set tenant=`, with no value, sends nothing for that parameter: no `X-Tenant` header, no query, no path
+  segment, and a `url` parameter keeps the address of the service (since 1.10.0). A value the config lists
+  as empty (`values: ["", eu]`) is still sent as such.
 - In the [dashboard](dashboard.md#parameters), `p` chooses the values, saved for the next start, and adds,
   edits or removes the parameters of `config.yml` (since 0.21.0).
 - The other commands refuse `--set`.

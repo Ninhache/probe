@@ -1,5 +1,11 @@
 import type { CheckResult } from "../../checkers/types";
-import { effectiveSelection, type ParameterChoices } from "../../config/parameters";
+import {
+  choosable,
+  effectiveSelection,
+  NO_VALUE,
+  NO_VALUE_LABEL,
+  type ParameterChoices,
+} from "../../config/parameters";
 import { JSON_FORMAT_MAX_BYTES, LOCAL_FILE } from "../../constants";
 import type { RGB } from "../../tui/color";
 import type { InputEvent } from "../../tui/input";
@@ -446,9 +452,11 @@ export function parametersPanel(view: ViewState, actions: ViewActions): Panel {
         screen.text(inner.x + 1, inner.y, "None yet: a adds one", { fg: t.muted });
       const now = selected(view);
       for (const [i, name] of names(view.choices).entries()) {
-        const values = view.choices[name] ?? [];
-        const reach = reachAt(values.indexOf(now[name] as string), values.length);
-        stepRow(screen, inner, i, name, now[name] ?? "", reach, i === at, i - at);
+        const values = choosable(view.choices[name] ?? []);
+        const value = now[name] ?? NO_VALUE;
+        const reach = reachAt(values.indexOf(value), values.length);
+        const label = value === NO_VALUE ? NO_VALUE_LABEL : value;
+        stepRow(screen, inner, i, name, label, reach, i === at, i - at);
       }
     },
     onEvent(event: InputEvent) {
@@ -463,8 +471,9 @@ export function parametersPanel(view: ViewState, actions: ViewActions): Panel {
       else if (event.name === "down" || event.name === "j") at = Math.min(all.length - 1, at + 1);
       else if (["left", "right", "h", "l"].includes(event.name)) {
         const name = all[at];
-        const values = name === undefined ? undefined : view.choices[name];
-        if (name === undefined || !values) return true;
+        const listed = name === undefined ? undefined : view.choices[name];
+        if (name === undefined || !listed) return true;
+        const values = choosable(listed);
         const current = selected(view)[name] as string;
         const step = event.name === "right" || event.name === "l" ? 1 : -1;
         const value =

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
 import { targetUrl } from "../src/checkers/http";
 import { selectionFrom as selectionFromArgs } from "../src/commands/shared";
-import { applySelection, selectionFrom } from "../src/config/parameters";
+import { applySelection, effectiveSelection, selectionFrom } from "../src/config/parameters";
 import { type Config, configSchemaV1, declaresAddress, type Service } from "../src/config/schema";
 import { tempDir } from "./helpers";
 
@@ -211,16 +211,22 @@ describe("selectionFrom", () => {
     });
   });
 
+  it("keeps no value for a parameter given name=", () => {
+    expect(selectionFrom(config, ["tenant=", "version=v2"])).toEqual({ tenant: "", version: "v2" });
+  });
+
   it("keeps the last value given to a parameter", () => {
     expect(selectionFrom(config, ["tenant=globex", "tenant=acme"])).toEqual({ tenant: "acme" });
   });
 
   it.each([
     [["tenant"], /--set expects name=value/],
-    [["tenant="], /--set expects name=value/],
     [["=globex"], /--set expects name=value/],
     [["region=eu"], /unknown parameter: region\. Known: tenant, version\./],
-    [["tenant=nope"], /unknown value for tenant: nope\. Known: acme, globex\./],
+    [
+      ["tenant=nope"],
+      /unknown value for tenant: nope\. Known: acme, globex, or tenant= to send none\./,
+    ],
   ])("refuses %j", (pairs, message) => {
     expect(() => selectionFrom(config, pairs)).toThrow(message);
   });
@@ -235,6 +241,17 @@ describe("selectionFrom", () => {
     const rawArgs = ["api", "--set", "tenant=globex", "--json", "--set=version=v2"];
 
     expect(selectionFromArgs(config, rawArgs)).toEqual({ tenant: "globex", version: "v2" });
+  });
+});
+
+describe("effectiveSelection", () => {
+  const choices = { tenant: ["acme", "globex"], version: ["v1", "v2"] };
+
+  it("takes the value asked for, none, or else the first", () => {
+    expect(effectiveSelection(choices, { tenant: "", version: "nope" })).toEqual({
+      tenant: "",
+      version: "v1",
+    });
   });
 });
 
@@ -375,6 +392,42 @@ describe("applySelection", () => {
     expect(api?.headers).toEqual({ "X-Tenant": "acme" });
   });
 
+  it("sends nothing for a parameter set to no value, whatever its kind", () => {
+    const { api, web } = rewritten(
+      { tenant: TENANT, version: VERSION, region: REGION },
+      { tenant: "", version: "", region: "" },
+    );
+
+    expect(api).toMatchObject({ port: 3000, path: "/health" });
+    expect(api?.headers).toBeUndefined();
+    expect(web?.url).toBe("https://example.com/status?full=1");
+  });
+
+  it("keeps the other parameters when one is set to no value", () => {
+    const { api } = rewritten({ tenant: TENANT, version: VERSION }, { tenant: "" });
+
+    expect(api).toMatchObject({ path: "/v1/health" });
+    expect(api?.headers).toBeUndefined();
+  });
+
+  it("keeps the address of the service for a url parameter set to no value", () => {
+    const config = parsed(
+      { env: ENV },
+      { api: { port: 3000, path: "/health", urls: { prod: "https://api.example.com/live" } } },
+    );
+
+    const { api } = applySelection(config, { env: "" }).services;
+
+    expect(targetUrl(api as Service)).toBe("http://localhost:3000/health");
+  });
+
+  it("still sends an empty value the config lists", () => {
+    const blank = { ...REGION, values: ["", "eu"] };
+
+    expect(rewritten({ region: blank }).api?.path).toBe("/health?region=");
+    expect(rewritten({ region: blank }, { region: "" }).api?.path).toBe("/health?region=");
+  });
+
   it("does not change the config it is given", () => {
     const config = parsed({ tenant: TENANT, version: VERSION }, services);
     const before = structuredClone(config);
@@ -482,13 +535,24 @@ describe("probe check with parameters", () => {
     expect(received).toEqual([{ url: "/v2/health?region=us", tenant: "globex" }]);
   });
 
+  it("requests nothing for a parameter set to no value", async () => {
+    const root = await project();
+
+    const run = await probe(root, ["check", "--set", "tenant=", "--set", "version="]);
+
+    expect(run.code).toBe(0);
+    expect(received).toEqual([{ url: "/health?region=eu", tenant: undefined }]);
+  });
+
   it("refuses a value the config does not list, requesting nothing", async () => {
     const root = await project();
 
     const run = await probe(root, ["check", "--set", "tenant=nope"]);
 
     expect(run.code).toBe(2);
-    expect(run.stderr).toContain("unknown value for tenant: nope. Known: acme, globex.");
+    expect(run.stderr).toContain(
+      "unknown value for tenant: nope. Known: acme, globex, or tenant= to send none.",
+    );
     expect(received).toEqual([]);
   });
 
@@ -561,7 +625,9 @@ describe("the other commands with parameters", () => {
     expect(run.code).toBe(0);
     expect(received).toEqual([{ url: "/live", tenant: "initech" }]);
     expect(other.code).toBe(2);
-    expect(other.stderr).toContain("unknown value for tenant: globex. Known: initech.");
+    expect(other.stderr).toContain(
+      "unknown value for tenant: globex. Known: initech, or tenant= to send none.",
+    );
   });
 
   it.each([

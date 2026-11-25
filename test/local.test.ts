@@ -107,6 +107,15 @@ describe("dashboard preferences in local.yml", () => {
 });
 
 describe("parameter values chosen in the dashboard, in local.yml", () => {
+  it("should keep a parameter set to no value for the next start", async () => {
+    const paths = await tempProject(CONFIG);
+
+    expect(await writeDashboardSelection(paths, "tenant", "")).toBe(true);
+
+    expect(await readDashboardSelection(paths)).toEqual({ tenant: "" });
+    expect(await readFile(paths.local, "utf8")).toBe('dashboard:\n  parameters:\n    tenant: ""\n');
+  });
+
   it("should read back each value saved, beside the other options", async () => {
     const paths = await tempProject(CONFIG);
     await writeFile(paths.local, "dashboard:\n  interval: 5 # slow\n");
