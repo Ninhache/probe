@@ -15,6 +15,15 @@ export const IMPORTANT_KINDS: readonly NoteKind[] = ["schema", "completion", "br
  */
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: "1.10.0",
+    items: [
+      {
+        kind: "info",
+        text: "A parameter can send nothing: --set tenant= on the command line, or (none) after its last value in the dashboard.",
+      },
+    ],
+  },
+  {
     version: "1.9.0",
     items: [
       {
